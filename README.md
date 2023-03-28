@@ -5,10 +5,15 @@
 </p>
 
 <p align="center">
-    <a href="LICENSE" alt="License">
+  <a href="LICENSE" alt="License">
         <img src="https://img.shields.io/badge/License-APGL-5B2D5B.svg" /></a>
   <a href="https://www.python.org/downloads/" alt="Python">
         <img src="https://img.shields.io/badge/python-3.10-blue.svg" /></a>
+  <a href='https://eir-auto-gp.readthedocs.io'>
+    <img src='https://readthedocs.org/projects/eir-auto-gp/badge/?version=latest' alt='Documentation Status' />
+</a>
+      
+  
 </p>
 
 `EIR-auto-GP`: Automated genomic prediction (GP) using deep learning models with EIR.
@@ -21,6 +26,7 @@ EIR-auto-GP is a comprehensive framework for genomic prediction (GP) tasks, buil
 
 - Support for `.bed/.bim/.fam` PLINK files as input data.
 - Automated data processing and train/test splitting.
+- Takes care of launching a configurable number of deep learning training runs.
 - SNP-based feature selection based on GWAS, deep learning-based attributions, and a combination of both.
 - Ensemble prediction from multiple training runs.
 - Analysis and visualization of results.
@@ -35,7 +41,7 @@ Then, install `EIR-auto-GP` using `pip`:
 
 ## Usage
 
-Please refer to the Documentation for examples and information.
+Please refer to the [Documentation](https://eir-auto-gp.readthedocs.io/en/latest/) for examples and information.
 
 ## Workflow
 
