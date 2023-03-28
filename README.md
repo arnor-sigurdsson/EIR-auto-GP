@@ -26,6 +26,7 @@ EIR-auto-GP is a comprehensive framework for genomic prediction (GP) tasks, buil
 
 - Support for `.bed/.bim/.fam` PLINK files as input data.
 - Automated data processing and train/test splitting.
+- Takes care of launching a configurable number of deep learning training runs.
 - SNP-based feature selection based on GWAS, deep learning-based attributions, and a combination of both.
 - Ensemble prediction from multiple training runs.
 - Analysis and visualization of results.
