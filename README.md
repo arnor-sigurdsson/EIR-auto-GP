@@ -40,7 +40,7 @@ Then, install `EIR-auto-GP` using `pip`:
 
 ## Usage
 
-Please refer to the Documentation for examples and information.
+Please refer to the [Documentation](https://eir-auto-gp.readthedocs.io/en/latest/) for examples and information.
 
 ## Workflow
 
