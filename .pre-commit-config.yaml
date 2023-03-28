@@ -1,0 +1,34 @@
+default_language_version:
+  python: python3
+repos:
+  - repo: https://github.com/ambv/black
+    rev: 23.1.0
+    hooks:
+      - id: black
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=1024']
+
+  - repo: local
+    hooks:
+      - id: flake8
+        name: Run flake8
+        entry: flake8
+        language: system
+        types: [ python ]
+        stages: [ commit ]
+
+      - id: test
+        name: Run tests
+        entry: tox
+        language: system
+        types: [ python ]
+        stages: [ push ]
+
+      - id: update-reqs
+        name: Update requirements.txt
+        entry: ./misc/update_reqs.sh
+        language: system
+        stages: [ commit ]

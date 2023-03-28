@@ -1,0 +1,21 @@
+eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial/
+├── analysis
+│   ├── CAD_feature_selection.pdf
+│   ├── CAD_test_predictions.csv
+│   ├── CAD_test_results.csv
+│   └── CAD_validation_results.csv
+├── data
+│   ├── genotype
+│   ├── ids
+│   └── tabular
+├── feature_selection
+│   ├── dl_importance
+│   ├── gwas_label_file.csv
+│   └── gwas_output
+└── modelling
+    ├── fold_0
+    ├── fold_1
+    ├── fold_2
+    ├── fold_3
+    ├── fold_4
+    └── fold_5

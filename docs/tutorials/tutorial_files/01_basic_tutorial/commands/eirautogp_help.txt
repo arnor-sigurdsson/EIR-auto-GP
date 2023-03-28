@@ -1,0 +1,78 @@
+usage: eirautogp [-h] --genotype_data_path GENOTYPE_DATA_PATH
+                 --label_file_path LABEL_FILE_PATH
+                 [--global_output_folder GLOBAL_OUTPUT_FOLDER]
+                 [--data_output_folder DATA_OUTPUT_FOLDER]
+                 [--feature_selection_output_folder FEATURE_SELECTION_OUTPUT_FOLDER]
+                 [--modelling_output_folder MODELLING_OUTPUT_FOLDER]
+                 [--analysis_output_folder ANALYSIS_OUTPUT_FOLDER]
+                 [--output_name OUTPUT_NAME]
+                 [--pre_split_folder PRE_SPLIT_FOLDER]
+                 [--feature_selection {dl,gwas,gwas->dl,None}]
+                 [--n_dl_feature_selection_folds N_DL_FEATURE_SELECTION_FOLDS]
+                 [--gwas_p_value_threshold GWAS_P_VALUE_THRESHOLD]
+                 [--folds FOLDS] [--input_cat_columns [INPUT_CAT_COLUMNS ...]]
+                 [--input_con_columns [INPUT_CON_COLUMNS ...]]
+                 [--output_cat_columns [OUTPUT_CAT_COLUMNS ...]]
+                 [--output_con_columns [OUTPUT_CON_COLUMNS ...]] [--do_test]
+
+options:
+  -h, --help            show this help message and exit
+  --genotype_data_path GENOTYPE_DATA_PATH
+                        Root path to raw genotype data to be processed
+                        (e.g., containing my_data.bed, my_data.fam, my_data.bim).
+                        For this example, this parameter should be
+                        '/path/to/raw/genotype/data/'.
+                        Note that the file names are not included in this path,
+                        only the root folder. The file names are inferred, and
+                        *only one* set of files is expected.
+  --label_file_path LABEL_FILE_PATH
+                        File path to label file with tabular inputs and labels to predict.
+  --global_output_folder GLOBAL_OUTPUT_FOLDER
+                        Common root folder to save data, feature selection and modelling results in.
+  --data_output_folder DATA_OUTPUT_FOLDER
+                        Folder to save the processed data in.
+  --feature_selection_output_folder FEATURE_SELECTION_OUTPUT_FOLDER
+                        Folder to save feature selection results in.
+  --modelling_output_folder MODELLING_OUTPUT_FOLDER
+                        Folder to save modelling results in.
+  --analysis_output_folder ANALYSIS_OUTPUT_FOLDER
+                        Folder to save analysis results in.
+  --output_name OUTPUT_NAME
+                        Name used for dataset.
+  --pre_split_folder PRE_SPLIT_FOLDER
+                        If there is a pre-split folder, this will be used to
+                        split the data into train/val and test sets. If not,
+                        the data will be split randomly.The folder should contain the following files:
+                          - train.txt: List of sample IDs to use for training.
+                          - test.txt: List of sample IDs to use for testing.
+                        If this option is not specified, the data will be split randomlyinto 90/10 train/test sets.
+  --feature_selection {dl,gwas,gwas->dl,None}
+                            What kind of feature selection strategy to use for SNP selection:
+                              - If None, no feature selection is performed.
+                              - If 'dl', feature selection is performed using DL feature importance,
+                                and the top SNPs are selected iteratively using Bayesian optimization.
+                              - If 'gwas', feature selection is performed using GWAS p-values,
+                                as specified by the --gwas_p_value_threshold parameter.
+                              - If 'gwas->dl', feature selection is first performed using GWAS p-values,
+                                and then the top SNPs are selected iteratively using the DL importance method,
+                                but only on the SNPs under the GWAS threshold.
+                            
+  --n_dl_feature_selection_folds N_DL_FEATURE_SELECTION_FOLDS
+                        How many folds to run DL attribution calculation on genotype data
+                        before using results from attributions for feature selection.
+                        Applicable only if using 'dl' or 'gwas->dl' feature_selection options.
+  --gwas_p_value_threshold GWAS_P_VALUE_THRESHOLD
+                        GWAS p-value threshold for filtering if using 'gwas' or 'gwas->dl'
+                        feature_selection options.
+  --folds FOLDS         Training runs / folds to run, can be a single fold (e.g. 0),
+                        a range of folds (e.g. 0-5), or a comma-separated list of 
+                        folds (e.g. 0,1,2,3,4,5).
+  --input_cat_columns [INPUT_CAT_COLUMNS ...]
+                        List of categorical columns to use as input.
+  --input_con_columns [INPUT_CON_COLUMNS ...]
+                        List of continuous columns to use as input.
+  --output_cat_columns [OUTPUT_CAT_COLUMNS ...]
+                        List of categorical columns to use as output.
+  --output_con_columns [OUTPUT_CON_COLUMNS ...]
+                        List of continuous columns to use as output.
+  --do_test             Whether to run test set prediction.
