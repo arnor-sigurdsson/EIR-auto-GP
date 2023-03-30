@@ -1,15 +1,17 @@
 from itertools import chain
 from typing import Iterable
 
-from docs.a_using_eir_auto_gp import a_basic_tutorial
+from docs.a_using_eir_auto_gp import a_basic_tutorial, b_multiple_phenotypes
 from docs.doc_modules.experiments import make_tutorial_data, AutoDocExperimentInfo
 
 
 def _get_a_using_eir_experiments() -> Iterable[AutoDocExperimentInfo]:
     a_experiments = a_basic_tutorial.get_experiments()
+    b_experiments = b_multiple_phenotypes.get_experiments()
 
     return chain(
         a_experiments,
+        b_experiments,
     )
 
 

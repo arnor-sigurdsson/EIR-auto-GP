@@ -1,11 +1,11 @@
 from pathlib import Path
-from typing import Sequence, List
+from typing import Sequence
 
 from docs.doc_modules.experiments import AutoDocExperimentInfo, run_capture_and_save
-from docs.doc_modules.utils import get_saved_model_path, post_process_csv_files
+from docs.doc_modules.utils import post_process_csv_files
 
 
-def get_tutorial_01_run_1_gln_info() -> AutoDocExperimentInfo:
+def get_tutorial_01_run_1_info() -> AutoDocExperimentInfo:
     base_path = "docs/tutorials/tutorial_files/01_basic_tutorial"
 
     command = [
@@ -15,7 +15,7 @@ def get_tutorial_01_run_1_gln_info() -> AutoDocExperimentInfo:
         "--label_file_path",
         "eir_auto_gp_tutorials/01_basic_tutorial/data/penncath/penncath.csv",
         "--global_output_folder",
-        "eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial",
+        "eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial_1",
         "--output_cat_columns",
         "CAD",
         "--input_con_columns",
@@ -26,10 +26,10 @@ def get_tutorial_01_run_1_gln_info() -> AutoDocExperimentInfo:
         "--input_cat_columns",
         "sex",
         "--folds",
-        "0-5",
+        "5",
         "--feature_selection",
         "gwas->dl",
-        "--n_dl_feature_selection_folds",
+        "--n_dl_feature_selection_setup_folds",
         "2",
         "--do_test",
     ]
@@ -68,7 +68,7 @@ def get_tutorial_01_run_1_gln_info() -> AutoDocExperimentInfo:
         {
             "command": [
                 "head",
-                "eir_auto_gp_tutorials/01_basic_tutorial/data/penncath/penncath.csv",
+                "eir_auto_gp_tutorials/01_basic_tutorial_1/data/penncath/penncath.csv",
             ],
             "output_path": Path(base_path) / "commands/label_file.txt",
         },
@@ -90,7 +90,7 @@ def get_tutorial_01_run_1_gln_info() -> AutoDocExperimentInfo:
         {
             "command": [
                 "tree",
-                "eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial/",
+                "eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial_1/",
                 "-L",
                 "2",
                 "-I",
@@ -107,7 +107,7 @@ def get_tutorial_01_run_1_gln_info() -> AutoDocExperimentInfo:
             "command": [
                 "tree",
                 "eir_auto_gp_tutorials/tutorial_runs/"
-                "01_basic_tutorial/feature_selection",
+                "01_basic_tutorial_1/feature_selection",
                 "-L",
                 "3",
                 "--noreport",
@@ -136,20 +136,66 @@ def get_tutorial_01_run_1_gln_info() -> AutoDocExperimentInfo:
     return ade
 
 
-def _get_model_path_for_predict() -> str:
-    run_1_output_path = "eir_auto_gp_tutorials/tutorial_runs/tutorial_01_run"
-    model_path = get_saved_model_path(run_folder=Path(run_1_output_path))
+def get_tutorial_01_run_2_info() -> AutoDocExperimentInfo:
+    base_path = "docs/tutorials/tutorial_files/01_basic_tutorial"
 
-    return model_path
+    command = [
+        "eirautogp",
+        "--genotype_data_path",
+        "eir_auto_gp_tutorials/01_basic_tutorial/data/penncath",
+        "--label_file_path",
+        "eir_auto_gp_tutorials/01_basic_tutorial/data/penncath/penncath.csv",
+        "--global_output_folder",
+        "eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial_2/",
+        "--output_cat_columns",
+        "CAD",
+        "--input_con_columns",
+        "tg",
+        "hdl",
+        "ldl",
+        "age",
+        "--input_cat_columns",
+        "sex",
+        "--folds",
+        "5",
+        "--feature_selection",
+        "gwas->dl",
+        "--n_dl_feature_selection_setup_folds",
+        "2",
+        "--do_test",
+        "--no-freeze_validation_set",
+    ]
 
+    file_copy_mapping = [
+        ("CAD_validation_results.csv", "figures/CAD_validation_results_2.csv"),
+        ("CAD_feature_selection.pdf", "figures/CAD_feature_selection_2.pdf"),
+        ("CAD_test_results.csv", "figures/CAD_test_results_2.csv"),
+    ]
 
-def _add_model_path_to_command(command: List[str]) -> List[str]:
-    model_path = _get_model_path_for_predict()
-    command = [x.replace("FILL_MODEL", model_path) for x in command]
-    return command
+    post_process_csvs = (
+        post_process_csv_files,
+        {
+            "folder": Path("docs/tutorials/tutorial_files/01_basic_tutorial/figures"),
+        },
+    )
+
+    data_output_path = Path("eir_auto_gp_tutorials/01_basic_tutorial/data/penncath.zip")
+
+    ade = AutoDocExperimentInfo(
+        name="AUTO_2",
+        data_url="https://drive.google.com/file/d/15Kgcxxm1CntoxH6Gq7Ev_KBj24izKg3p",
+        data_output_path=data_output_path,
+        base_path=Path(base_path),
+        command=command,
+        files_to_copy_mapping=file_copy_mapping,
+        post_run_functions=(post_process_csvs,),
+    )
+
+    return ade
 
 
 def get_experiments() -> Sequence[AutoDocExperimentInfo]:
-    exp_1 = get_tutorial_01_run_1_gln_info()
+    exp_1 = get_tutorial_01_run_1_info()
+    exp_2 = get_tutorial_01_run_2_info()
 
-    return [exp_1]
+    return [exp_1, exp_2]

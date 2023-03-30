@@ -17,6 +17,15 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 RUN python3.10 -m pip install eir-auto-gp
 
+RUN apt-get install -y curl unzip
+RUN curl -LJO https://s3.amazonaws.com/plink2-assets/alpha3/plink2_linux_avx2_20221024.zip && \
+    unzip plink2_*.zip && \
+    rm plink2_*.zip && \
+    chmod +x plink2 && \
+    mv plink2 /usr/local/bin && \
+    plink2 --version
+
+
 RUN apt-get clean
 
 CMD ["/bin/bash"]

@@ -20,6 +20,7 @@ from eir_auto_gp.modelling.dl_feature_selection import get_genotype_subset_snps_
 from eir_auto_gp.modelling.gwas_feature_selection import run_gwas_feature_selection
 from eir_auto_gp.preprocess.converge import ParseDataWrapper
 from eir_auto_gp.utils.utils import get_logger
+from eir_auto_gp.preprocess.converge import get_dynamic_valid_size, get_batch_size
 
 logger = get_logger(name=__name__)
 
@@ -53,7 +54,7 @@ def _get_fold_iterator(folds: str) -> Iterable:
     elif "," in folds:
         return [int(i) for i in folds.split(",")]
     else:
-        return [int(folds)]
+        return range(int(folds))
 
 
 class TestSingleRun(luigi.Task):
@@ -236,7 +237,7 @@ class TrainSingleRun(luigi.Task):
 class ModelInjectionParams:
     fold: int
     output_folder: str
-    batch_size: int
+    manual_valid_ids_file: Optional[str]
     genotype_input_source: str
     genotype_subset_snps_file: Optional[str]
     label_file_path: str
@@ -259,8 +260,10 @@ def build_injection_params(
     modelling_config: Dict[str, Any],
 ) -> ModelInjectionParams:
     compute_attributions = False
-    n_act_folds = feature_selection_config["n_dl_feature_selection_folds"]
-    if task == "train" and fold < n_act_folds:
+
+    fs = feature_selection_config["feature_selection"]
+    n_act_folds = feature_selection_config["n_dl_feature_selection_setup_folds"]
+    if task == "train" and fs in ("dl", "gwas->dl") and fold < n_act_folds:
         compute_attributions = True
 
     weighted_sampling_columns = None
@@ -269,15 +272,21 @@ def build_injection_params(
 
     feature_selection_tasks = feature_selection_config["feature_selection"]
 
-    gwas_manual_subset = None
+    gwas_manual_subset_file = None
     if feature_selection_tasks is not None:
-        if "gwas" in feature_selection_tasks:
-            gwas_manual_subset = run_gwas_feature_selection(
+        if "gwas" in feature_selection_tasks and task == "train":
+            gwas_manual_subset_file = run_gwas_feature_selection(
                 genotype_data_path=genotype_data_path,
                 data_config=data_config,
                 modelling_config=modelling_config,
                 feature_selection_config=feature_selection_config,
             )
+        elif "gwas" in feature_selection_tasks and task == "test":
+            fs_output_folder = Path(
+                feature_selection_config["feature_selection_output_folder"]
+            )
+            gwas_output_folder = fs_output_folder / "gwas_output"
+            gwas_manual_subset_file = Path(gwas_output_folder, "snps_to_keep.txt")
 
     bim_file = _get_bim_path(genotype_data_path=genotype_data_path)
     snp_subset_file = get_genotype_subset_snps_file(
@@ -288,17 +297,22 @@ def build_injection_params(
             feature_selection_config["feature_selection_output_folder"]
         ),
         bim_file=bim_file,
-        n_dl_feature_selection_folds=n_act_folds,
-        manual_subset_from_gwas=gwas_manual_subset,
+        n_dl_feature_selection_setup_folds=n_act_folds,
+        manual_subset_from_gwas=gwas_manual_subset_file,
     )
 
     base_output_folder = modelling_config["modelling_output_folder"]
     cur_run_output_folder = f"{base_output_folder}/fold_{fold}"
 
+    manual_valid_ids_file = None
+    valid_ids_file = Path(data_config["data_output_folder"], "ids/valid_ids.txt")
+    if task == "train" and valid_ids_file.exists():
+        manual_valid_ids_file = str(valid_ids_file)
+
     params = ModelInjectionParams(
         fold=fold,
         output_folder=cur_run_output_folder,
-        batch_size=64,
+        manual_valid_ids_file=manual_valid_ids_file,
         genotype_input_source=data_input_dict[f"{task}_genotype"].path,
         genotype_subset_snps_file=snp_subset_file,
         label_file_path=data_input_dict[f"{task}_tabular"].path,
@@ -369,6 +383,8 @@ def _get_global_injections(
     fold: int,
     output_folder: str,
     valid_size: int,
+    batch_size: int,
+    manual_valid_ids_file: Optional[str],
     n_snps: int,
     n_samples: int,
     compute_attributions: bool,
@@ -387,7 +403,9 @@ def _get_global_injections(
     injections = {
         "output_folder": output_folder,
         "device": device,
+        "batch_size": batch_size,
         "valid_size": valid_size,
+        "manual_valid_ids_file": manual_valid_ids_file,
         "dataloader_workers": n_workers,
         "memory_dataset": memory_dataset,
         "mixing_alpha": cur_mixing,
@@ -522,12 +540,15 @@ def _get_all_dynamic_injections(
     mip = injection_params
 
     samples_per_epoch = get_samples_per_epoch(model_injection_params=mip)
+
+    batch_size = get_batch_size(samples_per_epoch=samples_per_epoch)
+
     valid_size = get_dynamic_valid_size(
-        num_samples_per_epoch=samples_per_epoch, batch_size=mip.batch_size
+        num_samples_per_epoch=samples_per_epoch, batch_size=batch_size
     )
     iter_per_epoch = get_num_iter_per_epoch(
         num_samples_per_epoch=samples_per_epoch,
-        batch_size=mip.batch_size,
+        batch_size=batch_size,
         valid_size=valid_size,
     )
     bim_path = _get_bim_path(genotype_data_path=genotype_data_path)
@@ -542,6 +563,8 @@ def _get_all_dynamic_injections(
         "global_config": _get_global_injections(
             fold=mip.fold,
             output_folder=mip.output_folder,
+            batch_size=batch_size,
+            manual_valid_ids_file=mip.manual_valid_ids_file,
             valid_size=valid_size,
             iter_per_epoch=iter_per_epoch,
             n_snps=n_snps,
@@ -568,20 +591,6 @@ def _get_all_dynamic_injections(
         )
 
     return injections
-
-
-def get_dynamic_valid_size(
-    num_samples_per_epoch: int, batch_size: int, valid_size_upper_bound: int = 20000
-) -> int:
-    valid_size = int(0.1 * num_samples_per_epoch)
-
-    if valid_size < batch_size:
-        valid_size = batch_size
-
-    if valid_size > valid_size_upper_bound:
-        valid_size = valid_size_upper_bound
-
-    return valid_size
 
 
 @lru_cache()

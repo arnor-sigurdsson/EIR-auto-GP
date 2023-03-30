@@ -1,4 +1,4 @@
-eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial/feature_selection
+eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial_1/feature_selection
 ├── dl_importance
 │   ├── dl_attributions.csv
 │   ├── manhattan
@@ -9,18 +9,17 @@ eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial/feature_selection
 │       ├── dl_snps_2.txt
 │       ├── dl_snps_3.txt
 │       ├── dl_snps_4.txt
-│       ├── dl_snps_5.txt
 │       ├── dl_snps_fraction_0.txt
 │       ├── dl_snps_fraction_1.txt
 │       ├── dl_snps_fraction_2.txt
 │       ├── dl_snps_fraction_3.txt
-│       ├── dl_snps_fraction_4.txt
-│       └── dl_snps_fraction_5.txt
+│       └── dl_snps_fraction_4.txt
 ├── gwas_label_file.csv
-└── gwas_output
-    ├── gwas.CAD.glm.logistic.hybrid
-    ├── gwas.log
-    ├── plots
-    │   ├── gwas.CAD.glm.logistic.hybrid_manhattan.png
-    │   └── gwas.CAD.glm.logistic.hybrid_qq.png
-    └── snps_to_keep.txt
+├── gwas_output
+│   ├── gwas.CAD.glm.logistic.hybrid
+│   ├── gwas.log
+│   ├── plots
+│   │   ├── gwas.CAD.glm.logistic.hybrid_manhattan.png
+│   │   └── gwas.CAD.glm.logistic.hybrid_qq.png
+│   └── snps_to_keep.txt
+└── one_hot_mappings.json

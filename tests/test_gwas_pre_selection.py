@@ -22,7 +22,8 @@ def _get_test_cl_commands() -> list[str]:
         "--label_file_path tests/test_data/penncath.csv  "
         "--output_path runs/penncath_gwas "
         "--covariate_names age sex ldl hdl tg "
-        "--gwas_p_value_threshold 1e-04"
+        "--gwas_p_value_threshold 1e-04 "
+        "--target_names CAD"
     )
 
     commands = [

@@ -40,13 +40,14 @@ class RunAnalysisWrapper(luigi.WrapperTask):
             modelling_config=self.modelling_config,
             analysis_config=self.analysis_config,
         )
-        yield GatherFeatureSelectionResults(
-            folds=self.folds,
-            data_config=self.data_config,
-            feature_selection_config=self.feature_selection_config,
-            modelling_config=self.modelling_config,
-            analysis_config=self.analysis_config,
-        )
+        if self.feature_selection_config["feature_selection"] in ("dl", "gwas->dl"):
+            yield GatherFeatureSelectionResults(
+                folds=self.folds,
+                data_config=self.data_config,
+                feature_selection_config=self.feature_selection_config,
+                modelling_config=self.modelling_config,
+                analysis_config=self.analysis_config,
+            )
         if self.modelling_config["do_test"]:
             yield GatherTestResults(
                 folds=self.folds,
@@ -374,13 +375,17 @@ class GatherValidationResults(luigi.Task):
         feature_selection_folder = Path(
             self.feature_selection_config["feature_selection_output_folder"]
         )
-        df_fractions = gather_fractions(
-            feature_selection_folder=feature_selection_folder
-        )
+        dl_fs = self.feature_selection_config["feature_selection"] in ("dl", "gwas->dl")
 
         for target_name, df_results in val_results_iter:
             output_file = Path(output_folder, f"{target_name}_validation_results.csv")
-            df_results = df_results.join(df_fractions, how="left")
+
+            if dl_fs:
+                df_fractions = gather_fractions(
+                    feature_selection_folder=feature_selection_folder
+                )
+                df_results = df_results.join(df_fractions, how="left")
+
             df_results.to_csv(path_or_buf=output_file)
 
     def output(self):

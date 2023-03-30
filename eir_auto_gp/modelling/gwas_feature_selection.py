@@ -87,13 +87,17 @@ def run_gwas_feature_selection(
     fs_output_folder = feature_selection_config["feature_selection_output_folder"]
     gwas_output_path = Path(fs_output_folder, "gwas_output")
 
+    target_names = gps.parse_gwas_label_file_column_names(
+        target_names=filter_config.target_names, gwas_label_file=gwas_label_path
+    )
+
     train_ids_file = Path(filter_config.pre_split_folder, "train_ids_plink.txt")
     assert train_ids_file.exists(), f"Could not find train ids file at {train_ids_file}"
 
     command = gps.get_plink_gwas_command(
         base_path=base_path,
         label_file_path=gwas_label_path,
-        target_names=filter_config.target_names,
+        target_names=target_names,
         covariate_names=filter_config.covariate_names,
         output_path=gwas_output_path,
         ids_file=train_ids_file,

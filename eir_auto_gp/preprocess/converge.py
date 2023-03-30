@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 from shutil import copyfile
 from typing import Sequence, Tuple, Dict, Optional
@@ -81,6 +82,8 @@ class CommonSplitIntoTestSet(luigi.Task):
     output_format = luigi.Parameter()
     output_name = luigi.Parameter()
     pre_split_folder = luigi.Parameter()
+    freeze_validation_set = luigi.BoolParameter()
+    only_data = luigi.Parameter()
 
     def requires(self):
         """
@@ -122,21 +125,23 @@ class CommonSplitIntoTestSet(luigi.Task):
             genotype_path=genotype_path, label_file=label_file_path
         )
 
-        train_ids, test_ids = _id_setup_wrapper(
+        train_ids, valid_ids, test_ids = _id_setup_wrapper(
             output_root=output_root,
             pre_split_folder=self.pre_split_folder,
             common_ids_to_keep=common_ids_to_keep,
+            freeze_validation_set=self.freeze_validation_set,
         )
+        train_and_valid_ids = train_ids + valid_ids
 
         _split_csv_into_train_and_test(
-            train_ids=train_ids,
+            train_ids=train_and_valid_ids,
             test_ids=test_ids,
             source=label_file_path,
             destination=output_root / "tabular" / "final",
         )
 
         _split_deeplake_ds_into_train_and_test(
-            train_ids=train_ids,
+            train_ids=train_and_valid_ids,
             test_ids=test_ids,
             source=genotype_path,
             destination=output_root / "genotype" / "final",
@@ -162,6 +167,7 @@ class CommonSplitIntoTestSet(luigi.Task):
 def _id_setup_wrapper(
     output_root: Path,
     common_ids_to_keep: Sequence[str],
+    freeze_validation_set: bool,
     pre_split_folder: Optional[str] = None,
 ):
     if pre_split_folder is not None:
@@ -179,25 +185,42 @@ def _id_setup_wrapper(
         train_ids = (
             pd.read_csv(train_path, header=None).astype(str).squeeze("columns").tolist()
         )
+
         test_ids = (
             pd.read_csv(test_path, header=None).astype(str).squeeze("columns").tolist()
         )
 
+        valid_path = pre_split_folder / "valid_ids.txt"
+        freeze_validation_set = valid_path.exists() and freeze_validation_set
+
     else:
-        logger.info("Generating train and test IDs.")
+        logger.info("Generating train+valid and test IDs.")
 
-        train_ids, test_ids = _split_all_ids_into_train_and_test(
-            all_ids=common_ids_to_keep
+        train_ids, test_ids = _split_ids(all_ids=common_ids_to_keep)
+
+    valid_ids = []
+    if freeze_validation_set:
+        logger.info("Creating new frozen validation set.")
+
+        batch_size = get_batch_size(samples_per_epoch=len(train_ids))
+        valid_size = get_dynamic_valid_size(
+            num_samples_per_epoch=len(train_ids),
+            batch_size=batch_size,
         )
-
+        train_ids, valid_ids = _split_ids(
+            all_ids=train_ids, valid_or_test_size=valid_size
+        )
         _save_ids_to_text_file(
-            ids=train_ids, path=output_root / "ids" / "train_ids.txt"
+            ids=valid_ids, path=output_root / "ids" / "valid_ids.txt"
         )
-        _save_ids_to_text_file(ids=test_ids, path=output_root / "ids" / "test_ids.txt")
 
-    logger.info("Train IDs: %d", len(train_ids))
+    _save_ids_to_text_file(ids=train_ids, path=output_root / "ids" / "train_ids.txt")
+    _save_ids_to_text_file(ids=test_ids, path=output_root / "ids" / "test_ids.txt")
+
+    logger.info("Train and valid IDs: %d", len(train_ids))
     logger.info("Test IDs: %d", len(test_ids))
-    return train_ids, test_ids
+
+    return train_ids, valid_ids, test_ids
 
 
 def _save_ids_to_text_file(ids: Sequence[str], path: Path) -> None:
@@ -237,18 +260,18 @@ def gather_ids_from_csv_file(file_path: Path):
     return all_ids
 
 
-def _split_all_ids_into_train_and_test(
-    all_ids: Sequence[str],
+def _split_ids(
+    all_ids: Sequence[str], valid_or_test_size: float | int = 0.1
 ) -> Tuple[Sequence[str], Sequence[str]]:
-    train_ids, test_ids = eir.data_load.label_setup.split_ids(
-        ids=all_ids, valid_size=0.10
+    train_ids, test_or_valid_ids = eir.data_load.label_setup.split_ids(
+        ids=all_ids, valid_size=valid_or_test_size
     )
 
     train_ids_set = set(train_ids)
-    test_ids_set = set(test_ids)
+    test_ids_set = set(test_or_valid_ids)
     assert len(train_ids_set.intersection(test_ids_set)) == 0
 
-    return train_ids, test_ids
+    return train_ids, test_or_valid_ids
 
 
 def _split_deeplake_ds_into_train_and_test(
@@ -377,3 +400,29 @@ class ParseDataWrapper(luigi.Task):
 
     def output(self):
         return self.input()
+
+
+def get_dynamic_valid_size(
+    num_samples_per_epoch: int, batch_size: int, valid_size_upper_bound: int = 20000
+) -> int:
+    valid_size = int(0.1 * num_samples_per_epoch)
+
+    if valid_size < batch_size:
+        valid_size = batch_size
+
+    if valid_size > valid_size_upper_bound:
+        valid_size = valid_size_upper_bound
+
+    return valid_size
+
+
+def get_batch_size(
+    samples_per_epoch: int, upper_bound: int = 64, lower_bound: int = 16
+) -> int:
+    batch_size = 2 ** int(math.log2(samples_per_epoch / 20))
+
+    if batch_size > upper_bound:
+        return upper_bound
+    elif batch_size < lower_bound:
+        return lower_bound
+    return batch_size

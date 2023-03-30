@@ -18,7 +18,7 @@ def get_genotype_subset_snps_file(
     feature_selection_output_folder: Path,
     bim_file: str | Path,
     feature_selection_approach: Literal["dl", "gwas", "gwas->dl", None],
-    n_dl_feature_selection_folds: int,
+    n_dl_feature_selection_setup_folds: int,
     manual_subset_from_gwas: Optional[str | Path],
 ) -> Optional[Path]:
     match feature_selection_approach:
@@ -35,7 +35,7 @@ def get_genotype_subset_snps_file(
                 folder_with_runs=folder_with_runs,
                 feature_selection_output_folder=feature_selection_output_folder,
                 bim_file=bim_file,
-                n_dl_feature_selection_folds=n_dl_feature_selection_folds,
+                n_dl_feature_selection_setup_folds=n_dl_feature_selection_setup_folds,
                 manual_subset_from_gwas=manual_subset_from_gwas,
             )
             return computed_subset_file
@@ -46,7 +46,7 @@ def run_dl_bo_selection(
     folder_with_runs: Path,
     feature_selection_output_folder: Path,
     bim_file: str | Path,
-    n_dl_feature_selection_folds: int,
+    n_dl_feature_selection_setup_folds: int,
     manual_subset_from_gwas: Optional[str | Path],
 ) -> Optional[Path]:
     fs_out_folder = feature_selection_output_folder
@@ -56,7 +56,7 @@ def run_dl_bo_selection(
         return snp_subset_file
 
     fractions_file = subsets_out_folder / f"dl_snps_fraction_{fold}.txt"
-    if fold < n_dl_feature_selection_folds:
+    if fold < n_dl_feature_selection_setup_folds:
         gwas_snps_or_none = _handle_dl_feature_selection_options(
             bim_file=bim_file,
             manual_subset_from_gwas_file=manual_subset_from_gwas,

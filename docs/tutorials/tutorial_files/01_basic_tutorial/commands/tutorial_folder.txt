@@ -1,4 +1,4 @@
-eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial/
+eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial_1/
 ├── analysis
 │   ├── CAD_feature_selection.pdf
 │   ├── CAD_test_predictions.csv
@@ -11,11 +11,11 @@ eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial/
 ├── feature_selection
 │   ├── dl_importance
 │   ├── gwas_label_file.csv
-│   └── gwas_output
+│   ├── gwas_output
+│   └── one_hot_mappings.json
 └── modelling
     ├── fold_0
     ├── fold_1
     ├── fold_2
     ├── fold_3
-    ├── fold_4
-    └── fold_5
+    └── fold_4

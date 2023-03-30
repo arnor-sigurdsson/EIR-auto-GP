@@ -1,5 +1,5 @@
 usage: eirautogp [-h] --genotype_data_path GENOTYPE_DATA_PATH
-                 --label_file_path LABEL_FILE_PATH
+                 --label_file_path LABEL_FILE_PATH [--only_data]
                  [--global_output_folder GLOBAL_OUTPUT_FOLDER]
                  [--data_output_folder DATA_OUTPUT_FOLDER]
                  [--feature_selection_output_folder FEATURE_SELECTION_OUTPUT_FOLDER]
@@ -7,8 +7,9 @@ usage: eirautogp [-h] --genotype_data_path GENOTYPE_DATA_PATH
                  [--analysis_output_folder ANALYSIS_OUTPUT_FOLDER]
                  [--output_name OUTPUT_NAME]
                  [--pre_split_folder PRE_SPLIT_FOLDER]
+                 [--freeze_validation_set] [--no-freeze_validation_set]
                  [--feature_selection {dl,gwas,gwas->dl,None}]
-                 [--n_dl_feature_selection_folds N_DL_FEATURE_SELECTION_FOLDS]
+                 [--n_dl_feature_selection_setup_folds N_DL_FEATURE_SELECTION_SETUP_FOLDS]
                  [--gwas_p_value_threshold GWAS_P_VALUE_THRESHOLD]
                  [--folds FOLDS] [--input_cat_columns [INPUT_CAT_COLUMNS ...]]
                  [--input_con_columns [INPUT_CON_COLUMNS ...]]
@@ -27,10 +28,11 @@ options:
                         *only one* set of files is expected.
   --label_file_path LABEL_FILE_PATH
                         File path to label file with tabular inputs and labels to predict.
+  --only_data           If this flag is set, only the data processing step will be run.
   --global_output_folder GLOBAL_OUTPUT_FOLDER
                         Common root folder to save data, feature selection and modelling results in.
   --data_output_folder DATA_OUTPUT_FOLDER
-                        Folder to save the processed data in.
+                        Folder to save the processed data in and also to read the data fromif it already exists.
   --feature_selection_output_folder FEATURE_SELECTION_OUTPUT_FOLDER
                         Folder to save feature selection results in.
   --modelling_output_folder MODELLING_OUTPUT_FOLDER
@@ -42,22 +44,38 @@ options:
   --pre_split_folder PRE_SPLIT_FOLDER
                         If there is a pre-split folder, this will be used to
                         split the data into train/val and test sets. If not,
-                        the data will be split randomly.The folder should contain the following files:
-                          - train.txt: List of sample IDs to use for training.
-                          - test.txt: List of sample IDs to use for testing.
-                        If this option is not specified, the data will be split randomlyinto 90/10 train/test sets.
+                        the data will be split randomly.
+                        The folder should contain the following files:
+                          - train_ids.txt: List of sample IDs to use for training.
+                          - test_ids.txt: List of sample IDs to use for testing.
+                          - (Optional): valid_ids.txt: List of sample IDs to use for validation.
+                        If this option is not specified, the data will be split randomly
+                        into 90/10 (train+val)/test sets.
+  --freeze_validation_set
+                        If this flag is set, the validation set will be frozen
+                        and not changed between DL training folds.
+                        This only has an effect if the validation set is not specified
+                        in as a valid_ids.txt in file the pre_split_folder.
+                        If this flag is not set, the validation set will be randomly
+                        selected from the training set each time in each DL training run fold.
+                        This also has an effect when GWAS is used in feature selection.
+                        If the validation set is not specified manually or this flag is set,
+                        the GWAS will be performed on the training *and* validation set.
+                        This might potentially inflate the results on the validation set,
+                        particularly if the dataset is small. To turn off this behavior,
+                        you can use the --no-freeze_validation_set flag.
+  --no-freeze_validation_set
   --feature_selection {dl,gwas,gwas->dl,None}
-                            What kind of feature selection strategy to use for SNP selection:
-                              - If None, no feature selection is performed.
-                              - If 'dl', feature selection is performed using DL feature importance,
-                                and the top SNPs are selected iteratively using Bayesian optimization.
-                              - If 'gwas', feature selection is performed using GWAS p-values,
-                                as specified by the --gwas_p_value_threshold parameter.
-                              - If 'gwas->dl', feature selection is first performed using GWAS p-values,
-                                and then the top SNPs are selected iteratively using the DL importance method,
-                                but only on the SNPs under the GWAS threshold.
-                            
-  --n_dl_feature_selection_folds N_DL_FEATURE_SELECTION_FOLDS
+                        What kind of feature selection strategy to use for SNP selection:
+                          - If None, no feature selection is performed.
+                          - If 'dl', feature selection is performed using DL feature importance,
+                            and the top SNPs are selected iteratively using Bayesian optimization.
+                          - If 'gwas', feature selection is performed using GWAS p-values,
+                            as specified by the --gwas_p_value_threshold parameter.
+                          - If 'gwas->dl', feature selection is first performed using GWAS p-values,
+                            and then the top SNPs are selected iteratively using the DL importance method,
+                            but only on the SNPs under the GWAS threshold.
+  --n_dl_feature_selection_setup_folds N_DL_FEATURE_SELECTION_SETUP_FOLDS
                         How many folds to run DL attribution calculation on genotype data
                         before using results from attributions for feature selection.
                         Applicable only if using 'dl' or 'gwas->dl' feature_selection options.

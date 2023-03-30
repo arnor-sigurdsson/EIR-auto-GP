@@ -24,7 +24,7 @@ class AutoDocExperimentInfo:
     files_to_copy_mapping: Sequence[Tuple[str, str]]
     pre_run_command_modifications: Sequence[Callable[[List[str]], List[str]]] = ()
     post_run_functions: Sequence[Tuple[Callable, Dict]] = ()
-    force_run_command: bool = True
+    force_run_command: bool = False
 
 
 def make_tutorial_data(auto_doc_experiment_info: AutoDocExperimentInfo) -> None:
@@ -120,23 +120,43 @@ def find_and_copy_files(
                 logger.warning(f"No files found for pattern {pattern} in {run_folder}.")
 
 
-def run_experiment_from_command(command: List[str], force_run: bool = False):
-    global_output_folder = None
-    for i, arg in enumerate(command):
-        if arg == "--global_output_folder":
-            global_output_folder = command[i + 1]
-            break
+def run_experiment_from_command(command: List[str], force_run: bool = False) -> Path:
+    output_folders = _find_all_outputs(command=command)
+    assert output_folders is not None
 
-    assert global_output_folder is not None
+    all_exist = all([folder.exists() for folder in output_folders.values()])
+    if "--global_output_folder" in output_folders:
+        final_output_folder = output_folders["--global_output_folder"]
+    else:
+        assert len(output_folders) == 4
+        final_output_folder = output_folders["--data_output_folder"].parent
 
-    run_folder = Path(global_output_folder)
-
-    if not force_run and run_folder.exists():
-        return run_folder
+    if not force_run and all_exist:
+        return final_output_folder
 
     subprocess.run(args=command)
 
-    return run_folder
+    return final_output_folder
+
+
+def _find_all_outputs(command: list[str]) -> Dict[str, Path]:
+    targets = [
+        "--global_output_folder",
+        "--data_output_folder",
+        "--feature_selection_output_folder",
+        "--modelling_output_folder",
+        "--analysis_output_folder",
+    ]
+
+    values = {}
+    command_str = " ".join(command)
+    for target in targets:
+        regex = re.escape(target) + r"\s+([\w/]+)"
+        match = re.search(regex, command_str)
+        if match:
+            values[target] = Path(match.group(1))
+
+    return values
 
 
 def run_capture_and_save(command: List[str], output_path: Path, *args, **kwargs):

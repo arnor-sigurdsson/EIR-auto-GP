@@ -1,0 +1,13 @@
+eirautogp \
+--genotype_data_path eir_auto_gp_tutorials/01_basic_tutorial/data/penncath \
+--label_file_path eir_auto_gp_tutorials/01_basic_tutorial/data/penncath/penncath.csv \
+--data_output_folder eir_auto_gp_tutorials/tutorial_runs/02_multi_tutorial/data \
+--feature_selection_output_folder eir_auto_gp_tutorials/tutorial_runs/02_multi_tutorial/tg/feature_selection \
+--modelling_output_folder eir_auto_gp_tutorials/tutorial_runs/02_multi_tutorial/tg/modelling \
+--analysis_output_folder eir_auto_gp_tutorials/tutorial_runs/02_multi_tutorial/tg/analysis \
+--output_con_columns tg \
+--input_cat_columns sex \
+--folds 5 \
+--feature_selection gwas \
+--do_test \
+--input_con_columns ldl hdl age

@@ -1,6 +1,6 @@
 .. _01-basic-tutorial:
 
-01 – EIR-auto-GP Tutorial: Genomic Prediction for Coronary Artery Disease
+01 – Genomic Prediction for Coronary Artery Disease
 =========================================================================
 
 A - Setup
@@ -244,7 +244,7 @@ Finally, let's take a look at the ``analysis`` folder:
 .. csv-table:: Validation performance
    :file: ../tutorial_files/01_basic_tutorial/figures/CAD_validation_results.csv
    :header-rows: 1
-   :widths: 5, 5, 10, 10, 10, 10, 10, 10, 10
+   :widths: 10, 10, 10, 10, 10, 10, 10, 10, 10
 
 .. note::
     The best average performance is according to the defaults in ``EIR``,
@@ -280,3 +280,64 @@ folds, as well as an ensemble of all the folds.
 
 If you read this far, thank you for your patience! Hopefully you found this
 tutorial useful!
+
+Appendix – Validation Set Strategy
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+n the default validation set strategy,
+10% of the full training data
+(with a lower threshold of 16-64,
+depending on the dataset size,
+and an upper threshold of 20,000)
+is allocated for validation purposes,
+while the remaining 90% is utilized for training.
+This split is consistently maintained across all folds,
+ensuring that the validation set size remains constant.
+This approach not only contributes to the model training process
+but also plays a role in the execution of GWAS.
+Specifically, GWAS is applied exclusively to the training set.
+
+Alternatively, you can opt for an approach
+that involves randomly splitting the full training data into
+training and validation sets during each fold.
+This method, which can be activated by
+setting the ``--no-freeze-validation-set`` option,
+allows for independent data splits in each fold.
+Consequently, the validation set differs for every fold,
+providing a more varied evaluation of the model's performance.
+
+.. literalinclude:: ../tutorial_files/01_basic_tutorial/commands/AUTO_2.txt
+    :language: console
+    :emphasize-lines: 12
+
+However, as we no longer have a set training set,
+the GWAS is applied to the full training data,
+which includes the validation set.
+Although this grants the GWAS access to more data,
+it may result in overfitting concerning the validation set
+(i.e., the GWAS feature selection has had access to the validation data).
+While we still have the final test set to get an unbiased estimate of the
+model's performance, the validation results may be less reliable.
+This becomes less of a problem when using larger datasets,
+but important to keep in mind when using smaller datasets.
+
+We can see the results of this approach below:
+
+.. csv-table:: Validation performance
+   :file: ../tutorial_files/01_basic_tutorial/figures/CAD_validation_results_2.csv
+   :header-rows: 1
+
+
+.. csv-table:: Test set performance
+   :file: ../tutorial_files/01_basic_tutorial/figures/CAD_test_results_2.csv
+   :header-rows: 1
+
+Notice how there is a bigger gap for most metrics
+between the validation and test set performance
+compared to the previous example, indicating
+that the validation performance is less reliable.
+This highlights the importance of separating our
+data into training, validation and test sets. For example,
+if one had simply applied a GWAS to the full dataset
+and then used the top SNPs for training, validation and testing,
+it is likely that the reported metrics would be overestimated.

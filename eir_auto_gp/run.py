@@ -3,12 +3,13 @@ from argparse import RawTextHelpFormatter
 import shutil
 from copy import copy
 from pathlib import Path
-from typing import Dict, Any, Sequence
+from typing import Dict, Any, Sequence, Optional
 
 import luigi
 import pandas as pd
 
 from eir_auto_gp.analysis.run_analysis import RunAnalysisWrapper
+from eir_auto_gp.preprocess.converge import ParseDataWrapper
 from eir_auto_gp.utils.utils import get_logger
 from eir_auto_gp.preprocess.gwas_pre_selection import validate_geno_data_path
 
@@ -39,6 +40,13 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--only_data",
+        action="store_true",
+        required=False,
+        help="If this flag is set, only the data processing step will be run.",
+    )
+
+    parser.add_argument(
         "--global_output_folder",
         type=str,
         required=False,
@@ -50,7 +58,8 @@ def get_argument_parser() -> argparse.ArgumentParser:
         "--data_output_folder",
         type=str,
         required=False,
-        help="Folder to save the processed data in.",
+        help="Folder to save the processed data in and also to read the data from"
+        "if it already exists.",
     )
 
     parser.add_argument(
@@ -87,12 +96,37 @@ def get_argument_parser() -> argparse.ArgumentParser:
         required=False,
         help="If there is a pre-split folder, this will be used to\n"
         "split the data into train/val and test sets. If not,\n"
-        "the data will be split randomly."
+        "the data will be split randomly.\n"
         "The folder should contain the following files:\n"
-        "  - train.txt: List of sample IDs to use for training.\n"
-        "  - test.txt: List of sample IDs to use for testing.\n"
-        "If this option is not specified, the data will be split randomly"
-        "into 90/10 train/test sets.",
+        "  - train_ids.txt: List of sample IDs to use for training.\n"
+        "  - test_ids.txt: List of sample IDs to use for testing.\n"
+        "  - (Optional): valid_ids.txt: List of sample IDs to use for validation.\n"
+        "If this option is not specified, the data will be split randomly\n"
+        "into 90/10 (train+val)/test sets.",
+    )
+
+    parser.add_argument(
+        "--freeze_validation_set",
+        help="If this flag is set, the validation set will be frozen\n"
+        "and not changed between DL training folds.\n"
+        "This only has an effect if the validation set is not specified\n"
+        "in as a valid_ids.txt in file the pre_split_folder.\n"
+        "If this flag is not set, the validation set will be randomly\n"
+        "selected from the training set each time in each DL training run fold.\n"
+        "This also has an effect when GWAS is used in feature selection.\n"
+        "If the validation set is not specified manually or this flag is set,\n"
+        "the GWAS will be performed on the training *and* validation set.\n"
+        "This might potentially inflate the results on the validation set,\n"
+        "particularly if the dataset is small. To turn off this behavior,\n"
+        "you can use the --no-freeze_validation_set flag.",
+        default=True,
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--no-freeze_validation_set",
+        dest="freeze_validation_set",
+        action="store_false",
     )
 
     parser.add_argument(
@@ -100,21 +134,20 @@ def get_argument_parser() -> argparse.ArgumentParser:
         default="gwas->dl",
         choices=["dl", "gwas", "gwas->dl", None],
         required=False,
-        help="""\
-    What kind of feature selection strategy to use for SNP selection:
-      - If None, no feature selection is performed.
-      - If 'dl', feature selection is performed using DL feature importance,
-        and the top SNPs are selected iteratively using Bayesian optimization.
-      - If 'gwas', feature selection is performed using GWAS p-values,
-        as specified by the --gwas_p_value_threshold parameter.
-      - If 'gwas->dl', feature selection is first performed using GWAS p-values,
-        and then the top SNPs are selected iteratively using the DL importance method,
-        but only on the SNPs under the GWAS threshold.
-    """,
+        help="What kind of feature selection strategy to use for SNP selection:\n"
+        "  - If None, no feature selection is performed.\n"
+        "  - If 'dl', feature selection is performed using DL feature importance,\n"
+        "    and the top SNPs are selected iteratively using Bayesian optimization.\n"
+        "  - If 'gwas', feature selection is performed using GWAS p-values,\n"
+        "    as specified by the --gwas_p_value_threshold parameter.\n"
+        "  - If 'gwas->dl', feature selection is first performed using GWAS p-values,\n"
+        "    and then the top SNPs are selected iteratively using the DL "
+        "importance method,\n"
+        "    but only on the SNPs under the GWAS threshold.",
     )
 
     parser.add_argument(
-        "--n_dl_feature_selection_folds",
+        "--n_dl_feature_selection_setup_folds",
         type=int,
         default=3,
         required=False,
@@ -220,9 +253,9 @@ def validate_label_file(
 
 
 def validate_targets(
-    output_con_columns: list[str], output_cat_columns: list[str]
+    output_con_columns: list[str], output_cat_columns: list[str], only_data: bool
 ) -> None:
-    if len(output_con_columns) == 0 and len(output_cat_columns) == 0:
+    if not only_data and len(output_con_columns) == 0 and len(output_cat_columns) == 0:
         raise ValueError(
             "At least one output column must be specified as continuous or categorical."
         )
@@ -243,6 +276,33 @@ def validate_plink2_exists_in_path() -> None:
         )
 
 
+def validate_pre_split_folder(pre_split_folder: Optional[str]) -> None:
+    if not pre_split_folder:
+        return
+
+    ids = {}
+    for file in ["train_ids.txt", "valid_ids.txt", "test_ids.txt"]:
+        if not Path(pre_split_folder, file).exists():
+            continue
+        with open(Path(pre_split_folder, file), "r") as f:
+            ids[file] = set(f.read().splitlines())
+
+    if len(ids) == 0:
+        raise ValueError(
+            f"Pre-split folder {pre_split_folder} is invalid. "
+            f"Expected to find at least train_ids.txt and test_ids.txt."
+        )
+
+    assert "train_ids.txt" in ids
+    assert "test_ids.txt" in ids
+
+    if "valid_ids.txt" in ids:
+        assert ids["valid_ids.txt"].isdisjoint(ids["train_ids.txt"])
+        assert ids["valid_ids.txt"].isdisjoint(ids["test_ids.txt"])
+
+    assert ids["train_ids.txt"].isdisjoint(ids["test_ids.txt"])
+
+
 def run(cl_args: argparse.Namespace) -> None:
     validate_geno_data_path(geno_data_path=cl_args.genotype_data_path)
     validate_label_file(
@@ -255,8 +315,10 @@ def run(cl_args: argparse.Namespace) -> None:
     validate_targets(
         output_con_columns=cl_args.output_con_columns,
         output_cat_columns=cl_args.output_cat_columns,
+        only_data=cl_args.only_data,
     )
     validate_plink2_exists_in_path()
+    validate_pre_split_folder(pre_split_folder=cl_args.pre_split_folder)
 
     cl_args = parse_output_folders(cl_args=cl_args)
     cl_args = _add_pre_split_folder_if_present(cl_args=cl_args)
@@ -265,7 +327,7 @@ def run(cl_args: argparse.Namespace) -> None:
     feature_selection_config = build_feature_selection_config(cl_args=cl_args)
     modelling_config = build_modelling_config(cl_args=cl_args)
     analysis_config = build_analysis_config(cl_args=cl_args)
-    root_task = RunAnalysisWrapper(
+    root_task = get_root_task(
         folds=cl_args.folds,
         data_config=data_config,
         feature_selection_config=feature_selection_config,
@@ -277,6 +339,25 @@ def run(cl_args: argparse.Namespace) -> None:
         tasks=[root_task],
         workers=1,
         local_scheduler=True,
+    )
+
+
+def get_root_task(
+    data_config: Dict,
+    folds: int,
+    feature_selection_config: Dict,
+    modelling_config: Dict,
+    analysis_config: Dict,
+) -> RunAnalysisWrapper | ParseDataWrapper:
+    if data_config.get("only_data"):
+        return ParseDataWrapper(data_config=data_config)
+
+    return RunAnalysisWrapper(
+        folds=folds,
+        data_config=data_config,
+        feature_selection_config=feature_selection_config,
+        modelling_config=modelling_config,
+        analysis_config=analysis_config,
     )
 
 
@@ -344,7 +425,9 @@ def build_data_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "label_file_path",
         "data_output_folder",
         "output_name",
+        "only_data",
         "pre_split_folder",
+        "freeze_validation_set",
     ]
 
     base = extract_from_namespace(namespace=cl_args, keys=data_keys)
@@ -357,7 +440,7 @@ def build_feature_selection_config(cl_args: argparse.Namespace) -> Dict[str, Any
     feature_selection_keys = [
         "feature_selection_output_folder",
         "feature_selection",
-        "n_dl_feature_selection_folds",
+        "n_dl_feature_selection_setup_folds",
         "gwas_p_value_threshold",
     ]
 

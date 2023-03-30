@@ -1,11 +1,12 @@
 eirautogp \
 --genotype_data_path eir_auto_gp_tutorials/01_basic_tutorial/data/penncath \
 --label_file_path eir_auto_gp_tutorials/01_basic_tutorial/data/penncath/penncath.csv \
---global_output_folder eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial_1 \
+--global_output_folder eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial_2/ \
 --output_cat_columns CAD \
 --input_con_columns tg hdl ldl age \
 --input_cat_columns sex \
 --folds 5 \
 --feature_selection gwas->dl \
 --n_dl_feature_selection_setup_folds 2 \
---do_test
+--do_test \
+--no-freeze_validation_set

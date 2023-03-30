@@ -3,7 +3,8 @@ import subprocess
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+import json
+from typing import Optional, Tuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -49,10 +50,15 @@ def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
         common_ids_to_keep=common_ids_to_keep,
         output_root=Path(filter_config.output_path),
         pre_split_folder=filter_config.pre_split_folder,
+        freeze_validation_set=True,
     )
-    train_ids_plink, _ = add_plink_format_train_test_files(
+    train_ids_plink, *_ = add_plink_format_train_test_files(
         fam_file=fam_file_path,
         ids_folder=Path(filter_config.output_path, "ids"),
+    )
+
+    target_names = parse_gwas_label_file_column_names(
+        target_names=filter_config.target_names, gwas_label_file=gwas_label_path
     )
 
     base_path = fam_file_path.with_suffix("")
@@ -60,7 +66,7 @@ def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
     command = get_plink_gwas_command(
         base_path=base_path,
         label_file_path=gwas_label_path,
-        target_names=filter_config.target_names,
+        target_names=target_names,
         covariate_names=filter_config.covariate_names,
         output_path=gwas_output_path,
         ids_file=train_ids_plink,
@@ -91,6 +97,29 @@ def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
 
     logger.info("Running GWAS filter with command: %s", " ".join(filter_command))
     subprocess.run(filter_command, check=True)
+
+
+def parse_gwas_label_file_column_names(
+    target_names: list[str], gwas_label_file: Path
+) -> list[str]:
+    assert target_names
+    assert gwas_label_file.exists()
+
+    gwas_columns = pd.read_csv(gwas_label_file, nrows=0, sep="\s+").columns.tolist()
+    parsed_names = []
+
+    for target_name in target_names:
+        if target_name in gwas_columns:
+            parsed_names.append(target_name)
+            continue
+
+        prefix_matches = [
+            col for col in gwas_columns if col.startswith(f"{target_name}_")
+        ]
+        assert prefix_matches
+        parsed_names.extend(prefix_matches)
+
+    return parsed_names
 
 
 def _get_plink_filter_snps_command(
@@ -169,7 +198,7 @@ def get_pheno_names(
 
 def add_plink_format_train_test_files(
     fam_file: Path, ids_folder: Path
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path, Path | None]:
     df_fam = _read_fam(fam_path=fam_file)
     df_fam = df_fam[[0, 1]]
 
@@ -187,16 +216,42 @@ def add_plink_format_train_test_files(
     )
     test_ids = set(test_ids)
 
-    df_fam_train = df_fam[df_fam[1].isin(train_ids)]
-    df_fam_test = df_fam[df_fam[1].isin(test_ids)]
-
     train_output_path = Path(ids_folder, "train_ids_plink.txt")
+    extract_and_save_wrapper(
+        df_fam=df_fam,
+        output_path=train_output_path,
+        ids=train_ids,
+    )
+
     test_output_path = Path(ids_folder, "test_ids_plink.txt")
+    extract_and_save_wrapper(
+        df_fam=df_fam,
+        output_path=test_output_path,
+        ids=test_ids,
+    )
 
-    df_fam_train.to_csv(train_output_path, sep="\t", header=False, index=False)
-    df_fam_test.to_csv(test_output_path, sep="\t", header=False, index=False)
+    valid_output_path = None
+    if Path(ids_folder, "valid_ids.txt").exists():
+        valid_ids = (
+            pd.read_csv(Path(ids_folder, "valid_ids.txt"), header=None)[0]
+            .astype(str)
+            .tolist()
+        )
+        valid_ids = set(valid_ids)
 
-    return train_output_path, test_output_path
+        valid_output_path = Path(ids_folder, "valid_ids_plink.txt")
+        extract_and_save_wrapper(
+            df_fam=df_fam,
+            output_path=valid_output_path,
+            ids=valid_ids,
+        )
+
+    return train_output_path, test_output_path, valid_output_path
+
+
+def extract_and_save_wrapper(df_fam: pd.DataFrame, output_path: Path, ids: set[str]):
+    df_fam = df_fam[df_fam[1].isin(ids)]
+    df_fam.to_csv(output_path, sep="\t", header=False, index=False)
 
 
 def _read_fam(fam_path: Path) -> pd.DataFrame:
@@ -211,6 +266,11 @@ def _read_fam(fam_path: Path) -> pd.DataFrame:
 
 
 def gather_all_snps_to_keep(gwas_output_folder: Path, p_value_threshold: float) -> Path:
+    snps_to_keep_path = Path(gwas_output_folder, "snps_to_keep.txt")
+    if snps_to_keep_path.exists():
+        logger.info("Found existing %s file, not overwriting.", snps_to_keep_path)
+        return snps_to_keep_path
+
     snps_to_keep = set()
     for gwas_file in gwas_output_folder.iterdir():
         if "logistic" not in gwas_file.name and "linear" not in gwas_file.name:
@@ -225,7 +285,6 @@ def gather_all_snps_to_keep(gwas_output_folder: Path, p_value_threshold: float) 
     snps_to_keep = list(snps_to_keep)
     logger.info("Keeping %d SNPs in total.", len(snps_to_keep))
 
-    snps_to_keep_path = Path(gwas_output_folder, "snps_to_keep.txt")
     with open(snps_to_keep_path, "w") as f:
         f.write("\n".join(snps_to_keep))
 
@@ -236,7 +295,7 @@ def _gather_snps_to_keep_from_gwas_output(
     gwas_file_path: str | Path,
     p_value_threshold: float,
 ) -> list[str]:
-    df_gwas = pd.read_csv(gwas_file_path, sep="\t")
+    df_gwas = pd.read_csv(filepath_or_buffer=gwas_file_path, sep="\t")
 
     snps_to_keep = df_gwas[df_gwas["P"] < p_value_threshold]["ID"].tolist()
     logger.info(
@@ -291,14 +350,19 @@ def prepare_gwas_label_file(
     df.insert(0, "FID", df.index.map(iid_to_fid))
     df.insert(1, "IID", df.index)
 
-    df = _prepare_df_columns_for_gwas(df=df)
+    df, one_hot_mappings = _prepare_df_columns_for_gwas(df=df)
 
     df.to_csv(path_or_buf=output_path, sep="\t", index=False)
+    json_out = output_path.parent / "one_hot_mappings.json"
+    with open(json_out, "w") as f:
+        json.dump(one_hot_mappings, f)
 
     return Path(output_path)
 
 
-def _prepare_df_columns_for_gwas(df: pd.DataFrame) -> pd.DataFrame:
+def _prepare_df_columns_for_gwas(
+    df: pd.DataFrame,
+) -> Tuple[pd.DataFrame, dict[str, list[str]]]:
     """
     Note: We replace spaces with underscores in column names due to plink2 assuming
     tab/space separated columns.
@@ -307,20 +371,23 @@ def _prepare_df_columns_for_gwas(df: pd.DataFrame) -> pd.DataFrame:
     to one-hot encode. We can make this more sophisticated/configurable later.
     """
     one_hot_target_columns = []
+    one_hot_mappings = {}
     for column in df.columns:
         if column in ["FID", "IID"]:
             continue
 
         if df[column].dtype in ("object", "category"):
             one_hot_target_columns.append(column)
+            one_hot_mappings[column] = list(df[column].unique())
 
         elif df[column].dtype == "int":
             n_unique = df[column].nunique()
             if 2 < n_unique < 10:
                 one_hot_target_columns.append(column)
+                one_hot_mappings[column] = list(df[column].unique())
             else:
-                logger.info(
-                    "Column %s has %d unique values, not one-hot encoding.",
+                logger.debug(
+                    "Integer Column %s has %d unique values, not one-hot encoding.",
                     column,
                     n_unique,
                 )
@@ -330,7 +397,7 @@ def _prepare_df_columns_for_gwas(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = df.columns.str.replace(" ", "_")
     df = df.fillna(-9)
 
-    return df
+    return df, one_hot_mappings
 
 
 def plot_gwas_results(
@@ -362,6 +429,7 @@ def get_manhattan_plot(df: pd.DataFrame, p_value_line: Optional[float]) -> plt.F
         data=df,
         marker=".",
         suggestiveline=p_value_line,
+        genomewideline=None,
         sign_marker_p=None,
         sign_marker_color="r",
         snp="ID",
