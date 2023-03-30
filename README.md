@@ -6,12 +6,20 @@
 
 <p align="center">
   <a href="LICENSE" alt="License">
-        <img src="https://img.shields.io/badge/License-APGL-5B2D5B.svg" /></a>
+        <img src="https://img.shields.io/badge/License-APGL-5B2D5B.svg" />
+  </a>
+  
   <a href="https://www.python.org/downloads/" alt="Python">
-        <img src="https://img.shields.io/badge/python-3.10-blue.svg" /></a>
+        <img src="https://img.shields.io/badge/python-3.10-blue.svg" />
+  </a>
+  
+  <a href="https://codecov.io/gh/arnor-sigurdsson/EIR-auto-GP" > 
+        <img src="https://codecov.io/gh/arnor-sigurdsson/EIR-auto-GP/branch/master/graph/badge.svg?token=PODL2J83Y0"/> 
+  </a>
+  
   <a href='https://eir-auto-gp.readthedocs.io'>
     <img src='https://readthedocs.org/projects/eir-auto-gp/badge/?version=latest' alt='Documentation Status' />
-</a>
+  </a>
       
   
 </p>
