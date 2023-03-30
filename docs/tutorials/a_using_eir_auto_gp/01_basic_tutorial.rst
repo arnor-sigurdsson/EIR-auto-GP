@@ -41,18 +41,16 @@ Now, the downloaded data should have the following structure:
 Examining the data,
 we can see that we are working with 861473 SNPs (``.bim`` file)
 and 1401 individuals (``.fam`` file).
+
 Looking at the corresponding ``penncath.csv`` file, we can see the
 labels for each individual.
+
+.. literalinclude:: ../tutorial_files/01_basic_tutorial/commands/label_file.txt
+    :language: console
 
 .. important::
 
     The label file ID column must be called "ID" (uppercase).
-
-Taking a look at the ``penncath.csv`` file,
-we can see the following columns and sample values:
-
-.. literalinclude:: ../tutorial_files/01_basic_tutorial/commands/label_file.txt
-    :language: console
 
 So, here we can see the CAD status
 we want to predict (with 1 being CAD positive),

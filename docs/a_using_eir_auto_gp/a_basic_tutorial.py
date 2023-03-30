@@ -68,7 +68,7 @@ def get_tutorial_01_run_1_info() -> AutoDocExperimentInfo:
         {
             "command": [
                 "head",
-                "eir_auto_gp_tutorials/01_basic_tutorial_1/data/penncath/penncath.csv",
+                "eir_auto_gp_tutorials/01_basic_tutorial/data/penncath/penncath.csv",
             ],
             "output_path": Path(base_path) / "commands/label_file.txt",
         },
