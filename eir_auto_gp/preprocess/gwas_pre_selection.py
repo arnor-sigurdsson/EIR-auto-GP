@@ -105,7 +105,7 @@ def parse_gwas_label_file_column_names(
     assert target_names
     assert gwas_label_file.exists()
 
-    gwas_columns = pd.read_csv(gwas_label_file, nrows=0, sep="\s+").columns.tolist()
+    gwas_columns = pd.read_csv(gwas_label_file, nrows=0, sep=r"\s+").columns.tolist()
     parsed_names = []
 
     for target_name in target_names:
