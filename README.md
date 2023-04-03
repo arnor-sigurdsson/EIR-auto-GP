@@ -13,6 +13,11 @@
         <img src="https://img.shields.io/badge/python-3.10-blue.svg" />
   </a>
   
+  <a href="https://pypi.org/project/eir-auto-gp/" alt="Python">
+        <img src="https://img.shields.io/pypi/v/eir-auto-gp.svg" />
+  </a>
+  
+  
   <a href="https://codecov.io/gh/arnor-sigurdsson/EIR-auto-GP" > 
         <img src="https://codecov.io/gh/arnor-sigurdsson/EIR-auto-GP/branch/master/graph/badge.svg?token=PODL2J83Y0"/> 
   </a>
