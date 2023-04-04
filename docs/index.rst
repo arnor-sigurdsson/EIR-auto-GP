@@ -8,7 +8,6 @@ It is designed to streamline the process
 of preparing data, training, and evaluating models on genomic data,
 automating much of the process from raw input files to results analysis.
 
-|
 Installation
 ------------
 
@@ -21,6 +20,7 @@ Then, install EIR-auto-GP using pip:
 
     pip install eir-auto-gp
 
+
 Documentation
 -------------
 
@@ -30,3 +30,9 @@ Documentation
     quickstart
     tutorials/tutorial_index
     license
+
+Workflow Overview
+-----------------
+
+.. image:: source/_static/img/eir_auto_gp.svg
+    :align: center

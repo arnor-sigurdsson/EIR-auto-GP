@@ -145,7 +145,22 @@ We will go through these in the order of
 C - Data Output
 ^^^^^^^^^^^^^^^
 
-This folder contains the parsed genotype and tabular data,
+
+.. figure:: ../../source/_static/img/eir_auto_gp-data.svg
+    :align: center
+
+    The data processing pipeline. Starting with a Plink binary fileset
+    and a tabular label file, the data is split into a train and test set,
+    either randomly or according to a pre-specified split. The data is then
+    processed and organized on the disk, ready to be read by the ``EIR``
+    framework for model training. Prior to the full training pipeline,
+    one can pre-filter the SNPs using a GWAS p-value threshold, with
+    the ``eirautogwas`` command line interface.
+
+
+|
+
+The ``data`` folder contains the parsed genotype and tabular data,
 split into train and test sets. There is not much more to say about this folder,
 besides perhaps that you can have a look at the ``ids`` folder to see
 how the IDs have been split into train and test sets.
@@ -172,6 +187,27 @@ how the IDs have been split into train and test sets.
 
 D - Modelling Output
 ^^^^^^^^^^^^^^^^^^^^
+
+.. figure:: ../../source/_static/img/eir_auto_gp-model.svg
+    :align: center
+
+    The modelling and feature selection part of the pipeline.
+    The training and validation data are used to train and evaluate
+    the DL models. If GWAS is also used for feature selection (using the
+    ``--feature_selection gwas->dl`` option), the GWAS p-values are used
+    to filter the SNPs before the any DL models are trained. A set of :math:`F`
+    (controlled by the ``--n_dl_feature_selection_folds`` option)
+    DL models are trained on the full set of SNPs
+    (where "full" refers to either the full SNP set
+    or the SNP set after GWAS filtering if that option was specified).
+    The :math:`F` models are then used to calculate the importance of each SNP
+    using the DL feature importance / attribution method in `EIR`_. If DL is
+    used for feature selection
+    (using the ``dl`` or ``gwas->dl`` value for ``--feature_selection`` option),
+    the SNPs are iteratively pruned using Bayesian optimization w.r.t validation
+    set performance.
+
+
 
 This folder contains the `EIR`_ runs for each fold. See the `EIR`_ documentation
 and `this example tutorial`_ for more information about the output and how
@@ -237,7 +273,28 @@ the GWAS p-value threshold from before.
 F - Analysis Output
 ^^^^^^^^^^^^^^^^^^^
 
+.. figure:: ../../source/_static/img/eir_auto_gp-test.svg
+    :align: center
+
+    The analysis and test set prediction part of the pipeline.
+    The framework gathers the
+    validation performance results compiles them into a single ``.csv`` and
+    as well as an overview figure of the DL feature importance results if
+    applicable.
+    If the ``--do_test`` option is specified,
+    the trained DL models from each fold
+    are used to make predictions on the test set,
+    which are reported in the ``analysis`` folder as well as an ensemble
+    prediction.
+
+
 Finally, let's take a look at the ``analysis`` folder:
+
+.. literalinclude:: ../tutorial_files/01_basic_tutorial/commands/analysis_folder.txt
+    :language: console
+
+
+We will first take a look at the validation performance results:
 
 .. csv-table:: Validation performance
    :file: ../tutorial_files/01_basic_tutorial/figures/CAD_validation_results.csv
@@ -259,11 +316,10 @@ performance as a function of the fraction of SNPs used:
     :width: 100%
     :align: center
 
-Now, the results are a bit all over the place, perhaps because we have
-already filtered the SNPs using GWAS, and further filtering with the DL
-attributions does not add much in this case. Additionally, the validation
-set is quite small (5% default, lower threshold at 64 samples), so that might
-cause some fluctuations in the results.
+|
+
+Now, the results do not change much between trials, perhaps because we have
+already filtered the SNPs using GWAS.
 
 In any case, now let's finally take a look at the test set performance:
 
@@ -282,7 +338,7 @@ tutorial useful!
 Appendix – Validation Set Strategy
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-n the default validation set strategy,
+The default validation set strategy,
 10% of the full training data
 (with a lower threshold of 16-64,
 depending on the dataset size,

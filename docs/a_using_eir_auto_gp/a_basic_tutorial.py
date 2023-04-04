@@ -116,6 +116,20 @@ def get_tutorial_01_run_1_info() -> AutoDocExperimentInfo:
         },
     )
 
+    get_analysis_folder = (
+        run_capture_and_save,
+        {
+            "command": [
+                "tree",
+                "eir_auto_gp_tutorials/tutorial_runs/" "01_basic_tutorial_1/analysis",
+                "-L",
+                "3",
+                "--noreport",
+            ],
+            "output_path": Path(base_path) / "commands/analysis_folder.txt",
+        },
+    )
+
     ade = AutoDocExperimentInfo(
         name="AUTO_1",
         data_url="https://drive.google.com/file/d/15Kgcxxm1CntoxH6Gq7Ev_KBj24izKg3p",
@@ -129,6 +143,7 @@ def get_tutorial_01_run_1_info() -> AutoDocExperimentInfo:
             get_eir_train_auto_gp_help,
             get_tutorial_folder,
             get_feature_selection_folder,
+            get_analysis_folder,
             post_process_csvs,
         ),
     )
