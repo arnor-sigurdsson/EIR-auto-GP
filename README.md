@@ -58,7 +58,7 @@ Please refer to the [Documentation](https://eir-auto-gp.readthedocs.io/en/latest
 
 ## Workflow
 
-The rough workflow can be vizialized as follows:
+The rough workflow can be visualized as follows:
 
 <p align="center">
   <img src="docs/source/_static/img/eir_auto_gp.svg" alt="EIR auto GP Workflow">
