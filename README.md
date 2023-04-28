@@ -1,7 +1,7 @@
 # EIR-auto-GP
 
 <p align="center">
-  <img src="docs/source/_static/img/eir-auto-gp-logo.svg" alt="Eir Auto GP Logo">
+  <img src="docs/source/_static/img/eir-auto-gp-logo.svg" alt="EIR auto GP Logo">
 </p>
 
 <p align="center">
@@ -57,6 +57,12 @@ Then, install `EIR-auto-GP` using `pip`:
 Please refer to the [Documentation](https://eir-auto-gp.readthedocs.io/en/latest/) for examples and information.
 
 ## Workflow
+
+The rough workflow can be visualized as follows:
+
+<p align="center">
+  <img src="docs/source/_static/img/eir_auto_gp.svg" alt="EIR auto GP Workflow">
+</p>
 
 1. Data processing: EIR-auto-GP processes the input `.bed/.bim/.fam` PLINK files and `.csv` label file, preparing the data for model training and evaluation.
 2. Train/test split: The processed data is automatically split into training and testing sets, with the option of manually specifying splits.
