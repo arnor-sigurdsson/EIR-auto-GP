@@ -263,7 +263,7 @@ def build_injection_params(
 
     fs = feature_selection_config["feature_selection"]
     n_act_folds = feature_selection_config["n_dl_feature_selection_setup_folds"]
-    if task == "train" and fs in ("dl", "gwas->dl") and fold < n_act_folds:
+    if task == "train" and fs in ("dl", "gwas->dl", "dl+gwas") and fold < n_act_folds:
         compute_attributions = True
 
     weighted_sampling_columns = None

@@ -83,7 +83,7 @@ class CommonSplitIntoTestSet(luigi.Task):
     output_name = luigi.Parameter()
     pre_split_folder = luigi.Parameter()
     freeze_validation_set = luigi.BoolParameter()
-    only_data = luigi.Parameter()
+    only_data = luigi.BoolParameter()
 
     def requires(self):
         """
@@ -170,6 +170,9 @@ def _id_setup_wrapper(
     freeze_validation_set: bool,
     pre_split_folder: Optional[str] = None,
 ):
+    valid_path = None
+    valid_path_exists = False
+
     if pre_split_folder is not None:
         pre_split_folder = Path(pre_split_folder)
         logger.info("Using pre-split folder: %s", pre_split_folder)
@@ -191,7 +194,7 @@ def _id_setup_wrapper(
         )
 
         valid_path = pre_split_folder / "valid_ids.txt"
-        freeze_validation_set = valid_path.exists() and freeze_validation_set
+        valid_path_exists = valid_path.exists()
 
     else:
         logger.info("Generating train+valid and test IDs.")
@@ -200,16 +203,26 @@ def _id_setup_wrapper(
 
     valid_ids = []
     if freeze_validation_set:
-        logger.info("Creating new frozen validation set.")
+        if not valid_path_exists:
+            logger.info("Creating new frozen validation set.")
 
-        batch_size = get_batch_size(samples_per_epoch=len(train_ids))
-        valid_size = get_dynamic_valid_size(
-            num_samples_per_epoch=len(train_ids),
-            batch_size=batch_size,
-        )
-        train_ids, valid_ids = _split_ids(
-            all_ids=train_ids, valid_or_test_size=valid_size
-        )
+            batch_size = get_batch_size(samples_per_epoch=len(train_ids))
+            valid_size = get_dynamic_valid_size(
+                num_samples_per_epoch=len(train_ids),
+                batch_size=batch_size,
+            )
+            train_ids, valid_ids = _split_ids(
+                all_ids=train_ids, valid_or_test_size=valid_size
+            )
+        else:
+            logger.info("Using frozen validation set from %s.", valid_path)
+            valid_ids = (
+                pd.read_csv(valid_path, header=None)
+                .astype(str)
+                .squeeze("columns")
+                .tolist()
+            )
+
         _save_ids_to_text_file(
             ids=valid_ids, path=output_root / "ids" / "valid_ids.txt"
         )
@@ -252,9 +265,13 @@ def _gather_all_ids(
     return list(all_ids)
 
 
-def gather_ids_from_csv_file(file_path: Path):
+def gather_ids_from_csv_file(file_path: Path, drop_nas: bool = False):
     logger.debug("Gathering IDs from %s.", file_path)
-    df = pd.read_csv(file_path, usecols=["ID"])
+    df = pd.read_csv(filepath_or_buffer=file_path)
+
+    if drop_nas:
+        df = df.dropna(how="any", axis=0)
+
     all_ids = tuple(df["ID"].astype(str))
 
     return all_ids

@@ -313,7 +313,9 @@ def gather_all_ids(fam_file_path: str | Path, label_file_path: str | Path) -> li
     df_fam = _read_fam(fam_path=fam_file_path)
     genotype_ids = set(df_fam[1].astype(str))
 
-    labelled_ids = set(gather_ids_from_csv_file(file_path=label_file_path))
+    labelled_ids = set(
+        gather_ids_from_csv_file(file_path=label_file_path, drop_nas=True)
+    )
 
     common_ids_to_keep = set().union(genotype_ids, labelled_ids)
     common_ids = genotype_ids.intersection(labelled_ids)

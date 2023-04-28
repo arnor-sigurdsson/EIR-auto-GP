@@ -17,7 +17,7 @@ def get_genotype_subset_snps_file(
     folder_with_runs: Path,
     feature_selection_output_folder: Path,
     bim_file: str | Path,
-    feature_selection_approach: Literal["dl", "gwas", "gwas->dl", None],
+    feature_selection_approach: Literal["dl", "gwas", "gwas->dl", "dl+gwas", None],
     n_dl_feature_selection_setup_folds: int,
     manual_subset_from_gwas: Optional[str | Path],
 ) -> Optional[Path]:
@@ -39,6 +39,23 @@ def get_genotype_subset_snps_file(
                 manual_subset_from_gwas=manual_subset_from_gwas,
             )
             return computed_subset_file
+        case "dl+gwas":
+            if fold > n_dl_feature_selection_setup_folds:
+                assert manual_subset_from_gwas is not None
+
+            gwas_output_folder = manual_subset_from_gwas.parent
+            computed_subset_file = run_dl_plus_gwas_bo_selection(
+                fold=fold,
+                folder_with_runs=folder_with_runs,
+                feature_selection_output_folder=feature_selection_output_folder,
+                gwas_output_folder=gwas_output_folder,
+                bim_file=bim_file,
+                n_dl_feature_selection_setup_folds=n_dl_feature_selection_setup_folds,
+            )
+            return computed_subset_file
+
+        case _:
+            raise ValueError()
 
 
 def run_dl_bo_selection(
@@ -85,12 +102,90 @@ def run_dl_bo_selection(
     )
     logger.info("Top %d SNPs selected.", top_n)
 
-    df_top_n = get_top_n_snp_list_df(df_attributions=df_attributions, top_n_snps=top_n)
+    df_top_n = get_dl_top_n_snp_list_df(
+        df_attributions=df_attributions, top_n_snps=top_n
+    )
     ensure_path_exists(path=snp_subset_file)
     df_top_n.to_csv(path_or_buf=snp_subset_file, index=False, header=False)
     fractions_file.write_text(str(fraction))
 
     return snp_subset_file
+
+
+def run_dl_plus_gwas_bo_selection(
+    fold: int,
+    folder_with_runs: Path,
+    feature_selection_output_folder: Path,
+    bim_file: Path,
+    n_dl_feature_selection_setup_folds: int,
+    gwas_output_folder: Optional[Path],
+) -> Optional[Path]:
+    fs_out_folder = feature_selection_output_folder
+    subsets_out_folder = fs_out_folder / "dl_importance" / "snp_subsets"
+    snp_subset_file = subsets_out_folder / f"dl_snps_{fold}.txt"
+    if snp_subset_file.exists():
+        return snp_subset_file
+
+    fractions_file = subsets_out_folder / f"dl_snps_fraction_{fold}.txt"
+    if fold < n_dl_feature_selection_setup_folds:
+        _handle_dl_feature_selection_options(
+            bim_file=bim_file,
+            manual_subset_from_gwas_file=None,
+            snp_subset_file=snp_subset_file,
+            fractions_file=fractions_file,
+        )
+        return None
+
+    assert gwas_output_folder is not None
+    df_gwas = _read_gwas_df(gwas_output_folder=gwas_output_folder)
+    df_gwas = df_gwas.rename(columns={"P": "GWAS P-VALUE"})
+    df_gwas = df_gwas[["GWAS P-VALUE"]]
+
+    df_dl_attributions = gather_eir_snp_attributions(folder_with_runs=folder_with_runs)
+
+    importance_file = fs_out_folder / "dl_importance" / "dl_attributions.csv"
+    ensure_path_exists(path=importance_file)
+    df_dl_attributions.to_csv(path_or_buf=importance_file)
+
+    plot_snp_manhattan_plots(
+        df_snp_grads=df_dl_attributions,
+        outfolder=importance_file.parent,
+        title_extra="Aggregated",
+    )
+
+    df_dl_gwas = df_dl_attributions.join(other=df_gwas)
+
+    top_n, fraction = get_auto_top_n(
+        df_attributions=df_dl_gwas,
+        folder_with_runs=folder_with_runs,
+        feature_selection_output_folder=feature_selection_output_folder,
+        fold=fold,
+    )
+    logger.info("Top %d SNPs selected.", top_n)
+
+    df_top_n = get_dl_gwas_top_n_snp_list_df(df_dl_gwas=df_dl_gwas, top_n_snps=top_n)
+    ensure_path_exists(path=snp_subset_file)
+    df_top_n.to_csv(path_or_buf=snp_subset_file, index=False, header=False)
+    fractions_file.write_text(str(fraction))
+
+    return snp_subset_file
+
+
+def _read_gwas_df(gwas_output_folder: Path) -> pd.DataFrame:
+    dfs = []
+    for gwas_file in gwas_output_folder.iterdir():
+        if "logistic" not in gwas_file.name and "linear" not in gwas_file.name:
+            continue
+
+        df_gwas = pd.read_csv(filepath_or_buffer=gwas_file, sep="\t")
+        df_gwas = df_gwas.rename(columns={"ID": "VAR_ID"})
+        df_gwas = df_gwas.set_index("VAR_ID")
+        dfs.append(df_gwas)
+
+    assert len(dfs) == 1
+    df_gwas = dfs[0]
+
+    return df_gwas
 
 
 def _handle_dl_feature_selection_options(
@@ -119,7 +214,7 @@ def _handle_dl_feature_selection_options(
     return None
 
 
-def get_top_n_snp_list_df(
+def get_dl_top_n_snp_list_df(
     df_attributions: pd.DataFrame, top_n_snps: int
 ) -> pd.DataFrame:
     target_columns = [i for i in df_attributions.columns if "Aggregated" in i]
@@ -127,6 +222,26 @@ def get_top_n_snp_list_df(
     target_column = target_columns[0]
 
     df_top_n = df_attributions.nlargest(n=top_n_snps, columns=target_column)
+    df_top_n = df_top_n.reset_index()
+    df_top_n = df_top_n.rename(columns={"VAR_ID": "SNP"})
+    df_top_n = df_top_n[["SNP"]]
+
+    return df_top_n
+
+
+def get_dl_gwas_top_n_snp_list_df(
+    df_dl_gwas: pd.DataFrame, top_n_snps: int
+) -> pd.DataFrame:
+    dl_target_columns = [i for i in df_dl_gwas.columns if "Aggregated" in i]
+    assert len(dl_target_columns) == 1
+    dl_target_column = dl_target_columns[0]
+
+    target_columns = [dl_target_column, "GWAS P-VALUE"]
+    assert set(target_columns).issubset(set(df_dl_gwas.columns))
+
+    df_sorted = df_dl_gwas.sort_values(by=target_columns, ascending=[False, True])
+    df_top_n = df_sorted.head(n=top_n_snps)
+
     df_top_n = df_top_n.reset_index()
     df_top_n = df_top_n.rename(columns={"VAR_ID": "SNP"})
     df_top_n = df_top_n[["SNP"]]

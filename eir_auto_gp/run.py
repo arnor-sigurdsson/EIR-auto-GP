@@ -132,7 +132,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--feature_selection",
         default="gwas->dl",
-        choices=["dl", "gwas", "gwas->dl", None],
+        choices=["dl", "gwas", "gwas->dl", "dl+gwas", None],
         required=False,
         help="What kind of feature selection strategy to use for SNP selection:\n"
         "  - If None, no feature selection is performed.\n"
@@ -409,11 +409,20 @@ def _add_pre_split_folder_if_present(cl_args: argparse.Namespace) -> argparse.Na
     cl_args_copy = copy(cl_args)
     genotype_path = Path(cl_args_copy.genotype_data_path)
 
-    if (genotype_path / "ids").exists():
+    id_path = genotype_path / "ids"
+    if id_path.exists():
         cl_args_copy.pre_split_folder = str(genotype_path / "ids")
+
+        found_files = [
+            i.name
+            for i in id_path.iterdir()
+            if i.is_file() and i.name.endswith(".txt") and "_plink" not in i.name
+        ]
+
         logger.info(
-            f"Found pre-split folder {cl_args_copy.pre_split_folder}. "
-            f"in root genotype folder. Using those for train/test split."
+            f"Found pre-split folder '{cl_args_copy.pre_split_folder}'. "
+            f"in root genotype folder. "
+            f"Using files: {found_files} for respective splits."
         )
 
     return cl_args_copy
