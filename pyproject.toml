@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "EIR-auto-GP"
-version = "0.0.2-alpha"
+version = "0.0.3-alpha"
 description = ""
 authors = ["Arnor Sigurdsson <arnor-sigurdsson@users.noreply.github.com>"]
 readme = "README.md"
