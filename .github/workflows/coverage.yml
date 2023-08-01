@@ -10,7 +10,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
           architecture: x64
       - name: Set up environment
         run: |
@@ -27,8 +27,8 @@ jobs:
           plink2 --version
       - name: Run tests with Python
         run: |
-          pip install tox==3.28.0
-          pip install poetry==1.3.1
+          pip install tox==4.6.4
+          pip install poetry==1.5.1
           tox -e py
       - name: Generate report
         uses: codecov/codecov-action@v3
