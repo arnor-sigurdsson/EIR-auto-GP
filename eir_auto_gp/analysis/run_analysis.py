@@ -105,6 +105,9 @@ class GatherFeatureSelectionResults(luigi.Task):
             output_path = output_folder / f"{target_name}_feature_selection.pdf"
             figure.savefig(output_path)
 
+            df_output_path = output_folder / f"{target_name}_feature_selection.csv"
+            df_combined.to_csv(path_or_buf=df_output_path)
+
     def output(self):
         output_folder = Path(self.analysis_config["analysis_output_folder"])
         ensure_path_exists(path=output_folder, is_folder=True)

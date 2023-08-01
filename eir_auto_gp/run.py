@@ -1,12 +1,14 @@
 import argparse
 from argparse import RawTextHelpFormatter
 import shutil
+import json
 from copy import copy
 from pathlib import Path
 from typing import Dict, Any, Sequence, Optional
 
 import luigi
 import pandas as pd
+from aislib.misc_utils import ensure_path_exists
 
 from eir_auto_gp.analysis.run_analysis import RunAnalysisWrapper
 from eir_auto_gp.preprocess.converge import ParseDataWrapper
@@ -364,8 +366,26 @@ def get_root_task(
 def main():
     parser = get_argument_parser()
     cl_args = get_cl_args(parser=parser)
+    store_experiment_config(cl_args=cl_args)
 
     run(cl_args=cl_args)
+
+
+def store_experiment_config(
+    cl_args: argparse.Namespace,
+) -> None:
+    config_dict = vars(cl_args)
+
+    ensure_path_exists(path=Path(cl_args.global_output_folder), is_folder=True)
+    output_path = Path(cl_args.global_output_folder) / "config.json"
+
+    if output_path.exists():
+        logger.warning(
+            f"Output config file {output_path} already exists. " "Overwriting it."
+        )
+
+    with open(output_path, "w") as f:
+        json.dump(config_dict, f, indent=4)
 
 
 def parse_output_folders(cl_args: argparse.Namespace) -> argparse.Namespace:

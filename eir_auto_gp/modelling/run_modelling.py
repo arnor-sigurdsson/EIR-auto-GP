@@ -13,7 +13,7 @@ import psutil
 import torch
 import yaml
 from aislib.misc_utils import ensure_path_exists
-from eir.setup.config import recursive_dict_replace
+from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_replace
 
 from eir_auto_gp.modelling.configs import get_aggregate_config, AggregateConfig
 from eir_auto_gp.modelling.dl_feature_selection import get_genotype_subset_snps_file
@@ -391,7 +391,7 @@ def _get_global_injections(
     iter_per_epoch: int,
     weighted_sampling_columns: list[str],
 ) -> Dict[str, Any]:
-    mixing_candidates = [0.2]
+    mixing_candidates = [0.0]
     cur_mixing = mixing_candidates[fold % len(mixing_candidates)]
 
     device = _get_device()
@@ -544,7 +544,7 @@ def _get_all_dynamic_injections(
     batch_size = get_batch_size(samples_per_epoch=samples_per_epoch)
 
     valid_size = get_dynamic_valid_size(
-        num_samples_per_epoch=samples_per_epoch, batch_size=batch_size
+        num_samples_per_epoch=samples_per_epoch, minimum=batch_size
     )
     iter_per_epoch = get_num_iter_per_epoch(
         num_samples_per_epoch=samples_per_epoch,

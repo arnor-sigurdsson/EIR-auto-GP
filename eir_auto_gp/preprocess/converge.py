@@ -209,7 +209,7 @@ def _id_setup_wrapper(
             batch_size = get_batch_size(samples_per_epoch=len(train_ids))
             valid_size = get_dynamic_valid_size(
                 num_samples_per_epoch=len(train_ids),
-                batch_size=batch_size,
+                minimum=batch_size,
             )
             train_ids, valid_ids = _split_ids(
                 all_ids=train_ids, valid_or_test_size=valid_size
@@ -280,6 +280,7 @@ def gather_ids_from_csv_file(file_path: Path, drop_nas: bool = False):
 def _split_ids(
     all_ids: Sequence[str], valid_or_test_size: float | int = 0.1
 ) -> Tuple[Sequence[str], Sequence[str]]:
+    assert len(all_ids) > 0
     train_ids, test_or_valid_ids = eir.data_load.label_setup.split_ids(
         ids=all_ids, valid_size=valid_or_test_size
     )
@@ -420,12 +421,12 @@ class ParseDataWrapper(luigi.Task):
 
 
 def get_dynamic_valid_size(
-    num_samples_per_epoch: int, batch_size: int, valid_size_upper_bound: int = 20000
+    num_samples_per_epoch: int, minimum: int, valid_size_upper_bound: int = 20000
 ) -> int:
     valid_size = int(0.1 * num_samples_per_epoch)
 
-    if valid_size < batch_size:
-        valid_size = batch_size
+    if valid_size < minimum:
+        valid_size = minimum
 
     if valid_size > valid_size_upper_bound:
         valid_size = valid_size_upper_bound
