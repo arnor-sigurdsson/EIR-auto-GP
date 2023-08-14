@@ -376,12 +376,15 @@ def store_experiment_config(
 ) -> None:
     config_dict = vars(cl_args)
 
+    if cl_args.global_output_folder is None:
+        return
+
     ensure_path_exists(path=Path(cl_args.global_output_folder), is_folder=True)
     output_path = Path(cl_args.global_output_folder) / "config.json"
 
     if output_path.exists():
         logger.warning(
-            f"Output config file {output_path} already exists. " "Overwriting it."
+            f"Output config file {output_path} already exists. Overwriting it."
         )
 
     with open(output_path, "w") as f:
