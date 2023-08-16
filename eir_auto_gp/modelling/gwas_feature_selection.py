@@ -127,8 +127,9 @@ def all_gwas_already_finished(
     target_names: Sequence[str], gwas_output_folder: str | Path
 ) -> bool:
     for target_name in target_names:
+        parsed_target_name = gps.parse_target_for_plink(target=target_name)
         gwas_file = tuple(
-            i for i in Path(gwas_output_folder).glob(f"gwas.{target_name}*")
+            i for i in Path(gwas_output_folder).glob(f"gwas.{parsed_target_name}*")
         )
         if not gwas_file:
             return False

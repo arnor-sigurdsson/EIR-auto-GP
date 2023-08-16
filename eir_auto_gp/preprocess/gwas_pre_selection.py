@@ -116,8 +116,12 @@ def parse_gwas_label_file_column_names(
         prefix_matches = [
             col for col in gwas_columns if col.startswith(f"{target_name}_")
         ]
-        assert prefix_matches
-        parsed_names.extend(prefix_matches)
+        target_gwas_format = parse_target_for_plink(target=target_name)
+        gwas_matches = [col for col in gwas_columns if col == target_gwas_format]
+        all_matches = prefix_matches + gwas_matches
+
+        assert all_matches
+        parsed_names.extend(all_matches)
 
     return parsed_names
 
@@ -166,8 +170,11 @@ def get_plink_gwas_command(
     )
 
     if covariate_names:
+        covariate_names_parsed = [
+            parse_target_for_plink(target=col) for col in covariate_names
+        ]
         command_base += f" --covar {label_file_path}"
-        command_base += f" --covar-name {' '.join(covariate_names)}"
+        command_base += f" --covar-name {' '.join(covariate_names_parsed)}"
         command_base += " --covar-variance-standardize"
 
     if ids_file is not None:
@@ -367,7 +374,8 @@ def _prepare_df_columns_for_gwas(
 ) -> Tuple[pd.DataFrame, dict[str, list[str]]]:
     """
     Note: We replace spaces with underscores in column names due to plink2 assuming
-    tab/space separated columns.
+    tab/space separated columns (i.e., it cannot handle spaces in column names
+    even when quoted).
 
     Note: For now we just have some simple heuristics for determining which columns
     to one-hot encode. We can make this more sophisticated/configurable later.
@@ -396,10 +404,15 @@ def _prepare_df_columns_for_gwas(
 
     df = pd.get_dummies(df, columns=one_hot_target_columns)
 
-    df.columns = df.columns.str.replace(" ", "_")
+    df.columns = [parse_target_for_plink(target=col) for col in df.columns]
     df = df.fillna(-9)
 
     return df, one_hot_mappings
+
+
+def parse_target_for_plink(target: str) -> str:
+    target = target.replace(" ", "_").replace("-", "_")
+    return target
 
 
 def plot_gwas_results(

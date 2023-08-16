@@ -377,10 +377,12 @@ def store_experiment_config(
     config_dict = vars(cl_args)
 
     if cl_args.global_output_folder is None:
-        return
+        output_folder = Path(cl_args.modelling_output_folder).parent
+    else:
+        output_folder = Path(cl_args.global_output_folder)
 
-    ensure_path_exists(path=Path(cl_args.global_output_folder), is_folder=True)
-    output_path = Path(cl_args.global_output_folder) / "config.json"
+    ensure_path_exists(path=output_folder, is_folder=True)
+    output_path = output_folder / "config.json"
 
     if output_path.exists():
         logger.warning(

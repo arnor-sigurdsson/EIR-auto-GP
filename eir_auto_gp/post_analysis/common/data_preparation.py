@@ -30,19 +30,30 @@ def build_data_paths(run_dir: Path) -> DataPaths:
     gwas_folder = run_dir / "feature_selection/gwas_output/"
     if gwas_folder.exists():
         gwas_attributions = next(
-            i for i in gwas_folder.iterdir() if "glm.logistic" in i.name
+            i
+            for i in gwas_folder.iterdir()
+            if "glm.logistic" in i.name or "glm.linear" in i.name
         )
         assert gwas_attributions.exists()
     else:
         gwas_attributions = None
 
+    config_path = run_dir / "config.json"
+    config_dict = json.load(config_path.open("r"))
+
+    data_dir = config_dict["data_output_folder"]
+    if data_dir:
+        data_dir = Path(data_dir)
+    else:
+        data_dir = run_dir / "data"
+
     paths = DataPaths(
         experiment_config=run_dir / "config.json",
-        train_data_path=run_dir / "data/genotype/final/train",
-        test_data_path=run_dir / "data/genotype/final/test",
-        train_labels_path=run_dir / "data/tabular/final/labels_train.csv",
-        test_labels_path=run_dir / "data/tabular/final/labels_test.csv",
-        snp_bim_path=run_dir / "data/genotype/processed/parsed_files/data_final.bim",
+        train_data_path=data_dir / "genotype/final/train",
+        test_data_path=data_dir / "genotype/final/test",
+        train_labels_path=data_dir / "tabular/final/labels_train.csv",
+        test_labels_path=data_dir / "tabular/final/labels_test.csv",
+        snp_bim_path=data_dir / "genotype/processed/parsed_files/data_final.bim",
         dl_attribution_path=run_dir
         / "feature_selection/dl_importance/dl_attributions.csv",
         gwas_attribution_path=gwas_attributions,
@@ -74,6 +85,13 @@ def get_subset_indices_and_names(
 ) -> tuple[np.ndarray, list[str]]:
     df_bim = eir_setup_omics.read_bim(bim_file_path=str(bim_file_path))
 
+    if not dl_attributions_path.exists():
+        raise ValueError(
+            f"Path {dl_attributions_path} does not exist."
+            f"Post analysis is currently only supported for runs with "
+            f"DL attributions."
+        )
+
     df_attributions = pd.read_csv(filepath_or_buffer=dl_attributions_path)
     df_top_snps = get_dl_top_n_snp_list_df(
         df_attributions=df_attributions,
@@ -93,7 +111,7 @@ def get_subset_indices_and_names(
 
 def _check_bim(df_bim: pd.DataFrame, top_snps_list: list[str]) -> None:
     assert df_bim["VAR_ID"].nunique() == df_bim.shape[0]
-    assert df_bim["VAR_ID"].isin(top_snps_list).all()
+    assert pd.Series(top_snps_list).isin(df_bim["VAR_ID"]).all()
 
 
 def set_up_model_data(
@@ -113,6 +131,10 @@ def set_up_model_data(
         labels_input_path=labels_input_path,
         experiment_info=experiment_info,
     )
+
+    df_genotype_input.sort_index(inplace=True)
+    df_tabular_input.sort_index(inplace=True)
+    df_target.sort_index(inplace=True)
 
     assert df_genotype_input.shape[0] == df_target.shape[0] == df_tabular_input.shape[0]
     assert df_genotype_input.index.equals(df_target.index)

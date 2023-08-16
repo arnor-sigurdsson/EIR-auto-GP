@@ -43,7 +43,7 @@ def plot_performance(df: pd.DataFrame, output_path: Path, metric: str) -> None:
     )
     plt.title(metric.upper())
 
-    if not df["include_tabular"].all():
+    if not df["include_tabular"].any():
         complexity_descriptions = {
             1: "Genotype (G)",
             2: "Genotype (G), OH",
