@@ -173,8 +173,15 @@ def get_plink_gwas_command(
         covariate_names_parsed = [
             parse_target_for_plink(target=col) for col in covariate_names
         ]
+
+        covariate_names_filtered = get_covariate_names(
+            label_file_path=label_file_path,
+            target_names=target_names,
+            covariate_names=covariate_names_parsed,
+        )
+
         command_base += f" --covar {label_file_path}"
-        command_base += f" --covar-name {' '.join(covariate_names_parsed)}"
+        command_base += f" --covar-name {' '.join(covariate_names_filtered)}"
         command_base += " --covar-variance-standardize"
 
     if ids_file is not None:
@@ -192,15 +199,60 @@ def get_pheno_names(
     id_columns = ["ID", "FID", "IID"]
     all_columns = pd.read_csv(label_file_path, nrows=1, sep=r"\s+").columns.tolist()
     to_skip = id_columns + covariate_names
+
+    inferred_covariate_names = []
+    for covariate in covariate_names:
+        inferred_covariate_names.extend(
+            [col for col in all_columns if col.startswith(f"{covariate}_")]
+        )
+
+    to_skip += inferred_covariate_names
+
     inferred_target_names = [col for col in all_columns if col not in to_skip]
+
+    targets_to_use = []
+    for target in inferred_target_names:
+        targets_to_use.extend(
+            [col for col in all_columns if col.startswith(f"{target}_")]
+        )
 
     logger.info(
         "No phenotype target names provided, "
         "inferring target names from label file: %s",
-        inferred_target_names,
+        targets_to_use,
     )
 
-    return inferred_target_names
+    return targets_to_use
+
+
+def get_covariate_names(
+    label_file_path: Path, target_names: list[str], covariate_names: list[str]
+) -> list[str]:
+    id_columns = ["ID", "FID", "IID"]
+    all_columns = pd.read_csv(label_file_path, nrows=1, sep=r"\s+").columns.tolist()
+    to_skip = id_columns + target_names
+
+    inferred_target_names = []
+    for target in target_names:
+        inferred_target_names.extend(
+            [col for col in all_columns if col.startswith(f"{target}")]
+        )
+
+    to_skip += inferred_target_names
+
+    all_covariates = [col for col in all_columns if col not in to_skip]
+    covariates_to_use = []
+    for covariate in covariate_names:
+        covariates_to_use.extend(
+            [col for col in all_covariates if col.startswith(f"{covariate}")]
+        )
+
+    logger.info(
+        "No covariate names provided, inferring covariate names from label file: %s",
+        covariates_to_use,
+    )
+
+    return covariates_to_use
 
 
 def add_plink_format_train_test_files(
@@ -404,7 +456,7 @@ def _prepare_df_columns_for_gwas(
                     n_unique,
                 )
 
-    df = pd.get_dummies(df, columns=one_hot_target_columns)
+    df = pd.get_dummies(df, columns=one_hot_target_columns, drop_first=True)
 
     df.columns = [parse_target_for_plink(target=col) for col in df.columns]
     df = df.fillna(-9)
