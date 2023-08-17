@@ -13,6 +13,7 @@ from eir_auto_gp.preprocess.gwas_pre_selection import (
     _get_plink_filter_snps_command,
     get_plink_gwas_command,
     get_pheno_names,
+    get_covariate_names,
 )
 
 
@@ -121,9 +122,9 @@ def test_get_plink_gwas_command():
 
     with patch("eir_auto_gp.preprocess.gwas_pre_selection.ensure_path_exists") as _:
         with patch(
-            "eir_auto_gp.preprocess.gwas_pre_selection.ensure_path_exists"
-        ) as mocked_get_pheno_names:
-            mocked_get_pheno_names.return_value = target_names
+            "eir_auto_gp.preprocess.gwas_pre_selection.get_covariate_names"
+        ) as mocked_get_covar_names:
+            mocked_get_covar_names.return_value = covariate_names
 
             result = get_plink_gwas_command(
                 base_path=base_path,
@@ -145,7 +146,6 @@ def test_get_plink_gwas_command():
         "A",
         "B",
         "--glm",
-        "skip-invalid-pheno",
         "firth-fallback",
         "hide-covar",
         "omit-ref",
@@ -167,8 +167,16 @@ def test_get_plink_gwas_command():
 @pytest.mark.parametrize(
     "target_names,covariate_names,expected_result",
     [
-        (["A", "B"], ["C", "D"], ["A", "B"]),
-        (None, ["C", "D"], ["A", "B"]),
+        (
+            ["A", "B"],
+            ["C", "D"],
+            ["A", "B"],
+        ),
+        (
+            None,
+            ["C", "D"],
+            ["A", "B"],
+        ),
     ],
 )
 def test_get_pheno_names(target_names, covariate_names, expected_result):
@@ -176,6 +184,54 @@ def test_get_pheno_names(target_names, covariate_names, expected_result):
 
     with patch("pandas.read_csv", side_effect=mocked_read_csv):
         result = get_pheno_names(
+            label_file_path=label_file_path,
+            target_names=target_names,
+            covariate_names=covariate_names,
+        )
+
+    assert result == expected_result
+
+
+def mocked_read_csv_covariate(*args, **kwargs):
+    df_mock = pd.DataFrame(
+        {
+            "A": [1],
+            "B": [2],
+            "C": [3],
+            "D": [4],
+            "ID": [5],
+            "FID": [6],
+            "IID": [7],
+        }
+    )
+    return df_mock
+
+
+@pytest.mark.parametrize(
+    "target_names,covariate_names,expected_result",
+    [
+        (
+            ["A", "B"],
+            ["C", "D"],
+            ["C", "D"],
+        ),
+        (
+            ["A", "B"],
+            None,
+            [],
+        ),
+        (
+            ["A", "B"],
+            [],
+            [],
+        ),
+    ],
+)
+def test_get_covariate_names(target_names, covariate_names, expected_result):
+    label_file_path = Path("label_file_path")
+
+    with patch("pandas.read_csv", side_effect=mocked_read_csv_covariate):
+        result = get_covariate_names(
             label_file_path=label_file_path,
             target_names=target_names,
             covariate_names=covariate_names,

@@ -164,7 +164,7 @@ def get_plink_gwas_command(
         " --1"
         f" --pheno {label_file_path}"
         f" --pheno-name {' '.join(pheno_names)}"
-        f" --glm skip-invalid-pheno "
+        f" --glm "
         f"firth-fallback hide-covar omit-ref no-x-sex allow-no-covars"
         f" --out {output_path}/gwas"
     )
@@ -203,7 +203,7 @@ def get_pheno_names(
     inferred_covariate_names = []
     for covariate in covariate_names:
         inferred_covariate_names.extend(
-            [col for col in all_columns if col.startswith(f"{covariate}_")]
+            [col for col in all_columns if col.startswith(f"{covariate}")]
         )
 
     to_skip += inferred_covariate_names
@@ -213,7 +213,7 @@ def get_pheno_names(
     targets_to_use = []
     for target in inferred_target_names:
         targets_to_use.extend(
-            [col for col in all_columns if col.startswith(f"{target}_")]
+            [col for col in all_columns if col.startswith(f"{target}")]
         )
 
     logger.info(
@@ -226,7 +226,7 @@ def get_pheno_names(
 
 
 def get_covariate_names(
-    label_file_path: Path, target_names: list[str], covariate_names: list[str]
+    label_file_path: Path, target_names: list[str], covariate_names: Optional[list[str]]
 ) -> list[str]:
     id_columns = ["ID", "FID", "IID"]
     all_columns = pd.read_csv(label_file_path, nrows=1, sep=r"\s+").columns.tolist()
@@ -239,6 +239,9 @@ def get_covariate_names(
         )
 
     to_skip += inferred_target_names
+
+    if covariate_names is None:
+        covariate_names = []
 
     all_covariates = [col for col in all_columns if col not in to_skip]
     covariates_to_use = []
