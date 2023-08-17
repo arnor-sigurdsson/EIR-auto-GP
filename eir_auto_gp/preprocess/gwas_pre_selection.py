@@ -359,6 +359,8 @@ def prepare_gwas_label_file(
     df.insert(0, "FID", df.index.map(iid_to_fid))
     df.insert(1, "IID", df.index)
 
+    assert df.index.name == "ID"
+
     df, one_hot_mappings = _prepare_df_columns_for_gwas(df=df)
 
     df.to_csv(path_or_buf=output_path, sep="\t", index=False)

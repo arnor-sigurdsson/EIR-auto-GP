@@ -75,5 +75,9 @@ def run_all():
     run_effect_analysis(post_analysis_object=post_analysis_object)
 
 
-if __name__ == "__main__":
+def main():
     run_all()
+
+
+if __name__ == "__main__":
+    main()
