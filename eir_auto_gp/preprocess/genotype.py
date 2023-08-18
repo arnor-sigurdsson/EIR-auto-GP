@@ -81,6 +81,7 @@ class OneHotAutoSNPs(Config):
     output_format = luigi.Parameter()
     output_name = luigi.Parameter()
     file_name = str(output_name)
+    genotype_processing_chunk_size = luigi.IntParameter()
 
     def run(self):
         input_path = Path(self.input().path)
@@ -90,7 +91,7 @@ class OneHotAutoSNPs(Config):
         ensure_path_exists(output_path, is_folder=True)
 
         chunk_generator = get_sample_generator_from_bed(
-            bed_path=input_path, chunk_size=1000
+            bed_path=input_path, chunk_size=self.chunk_size
         )
         sample_id_one_hot_array_generator = _get_one_hot_encoded_generator(
             chunked_sample_generator=chunk_generator
@@ -116,6 +117,7 @@ class FinalizeGenotypeParsing(luigi.Task):
     output_folder = luigi.Parameter()
     output_format = luigi.Parameter()
     output_name = luigi.Parameter()
+    genotype_processing_chunk_size = luigi.IntParameter()
 
     def run(self):
         raw_path = Path(str(self.raw_data_path))

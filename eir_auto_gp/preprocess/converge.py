@@ -84,6 +84,7 @@ class CommonSplitIntoTestSet(luigi.Task):
     pre_split_folder = luigi.Parameter()
     freeze_validation_set = luigi.BoolParameter()
     only_data = luigi.BoolParameter()
+    genotype_processing_chunk_size = luigi.IntParameter()
 
     def requires(self):
         """
@@ -101,6 +102,7 @@ class CommonSplitIntoTestSet(luigi.Task):
             output_folder=str(self.data_output_folder) + "/genotype",
             output_name=self.output_name,
             output_format=self.output_format,
+            chunk_size=self.genotype_processing_chunk_size,
         )
 
         label_file_task = ParseLabelFile(

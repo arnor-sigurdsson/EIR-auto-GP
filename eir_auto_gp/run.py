@@ -35,6 +35,15 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--genotype_processing_chunk_size",
+        type=int,
+        default=1000,
+        help="Chunk size for processing genotype data. Inreasing"
+        "this value will increase the memory usage, but will"
+        "likely speed up the processing.",
+    )
+
+    parser.add_argument(
         "--label_file_path",
         type=str,
         required=True,
@@ -462,6 +471,7 @@ def build_data_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "only_data",
         "pre_split_folder",
         "freeze_validation_set",
+        "genotype_processing_chunk_size",
     ]
 
     base = extract_from_namespace(namespace=cl_args, keys=data_keys)
