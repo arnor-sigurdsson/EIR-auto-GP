@@ -102,7 +102,7 @@ class CommonSplitIntoTestSet(luigi.Task):
             output_folder=str(self.data_output_folder) + "/genotype",
             output_name=self.output_name,
             output_format=self.output_format,
-            chunk_size=self.genotype_processing_chunk_size,
+            genotype_processing_chunk_size=self.genotype_processing_chunk_size,
         )
 
         label_file_task = ParseLabelFile(

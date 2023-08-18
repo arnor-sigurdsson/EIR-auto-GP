@@ -91,7 +91,7 @@ class OneHotAutoSNPs(Config):
         ensure_path_exists(output_path, is_folder=True)
 
         chunk_generator = get_sample_generator_from_bed(
-            bed_path=input_path, chunk_size=self.chunk_size
+            bed_path=input_path, chunk_size=int(self.genotype_processing_chunk_size)
         )
         sample_id_one_hot_array_generator = _get_one_hot_encoded_generator(
             chunked_sample_generator=chunk_generator
