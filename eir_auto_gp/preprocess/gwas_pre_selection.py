@@ -218,7 +218,7 @@ def get_pheno_names(
 
     logger.info(
         "No phenotype target names provided, "
-        "inferring target names from label file: %s",
+        "inferring target names from label file for GWAS: %s",
         targets_to_use,
     )
 
@@ -250,8 +250,11 @@ def get_covariate_names(
             [col for col in all_covariates if col.startswith(f"{covariate}")]
         )
 
+    covariates_to_use = sorted(list(set(covariates_to_use)))
+
     logger.info(
-        "No covariate names provided, inferring covariate names from label file: %s",
+        "Inferred covariate names from label file and passed in covariates"
+        "for GWAS: %s",
         covariates_to_use,
     )
 

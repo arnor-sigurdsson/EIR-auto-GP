@@ -445,4 +445,6 @@ def get_batch_size(
         return upper_bound
     elif batch_size < lower_bound:
         return lower_bound
+
+    logger.info("Batch size set to: %d", batch_size)
     return batch_size
