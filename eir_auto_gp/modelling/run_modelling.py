@@ -314,11 +314,6 @@ def build_injection_params(
     base_output_folder = modelling_config["modelling_output_folder"]
     cur_run_output_folder = f"{base_output_folder}/fold_{fold}"
 
-    manual_valid_ids_file = None
-    valid_ids_file = Path(data_config["data_output_folder"], "ids/valid_ids.txt")
-    if task == "train" and valid_ids_file.exists():
-        manual_valid_ids_file = str(valid_ids_file)
-
     label_file_path = build_tmp_label_file(
         label_file_path=data_input_dict[f"{task}_tabular"].path,
         output_cat_columns=modelling_config["output_cat_columns"],
@@ -326,10 +321,30 @@ def build_injection_params(
         output_con_columns=modelling_config["output_con_columns"],
     )
 
+    manual_valid_ids_file = None
+    valid_ids_file = Path(data_config["data_output_folder"], "ids/valid_ids.txt")
+    if task == "train" and valid_ids_file.exists():
+        manual_valid_ids_file = str(valid_ids_file)
+        manual_valid_ids = pd.read_csv(manual_valid_ids_file, header=None)[0].tolist()
+
+        df_ids = pd.read_csv(label_file_path, usecols=["ID"])
+        df_ids = df_ids.dropna()
+
+        manual_valid_ids = list(
+            set(manual_valid_ids).intersection(set(df_ids["ID"].tolist()))
+        )
+
+        manual_valid_ids_file = Path(base_output_folder, "tmp", "valid_ids.txt")
+        manual_valid_ids_file.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(manual_valid_ids_file, "w") as f:
+            for id_ in manual_valid_ids:
+                f.write(f"{id_}\n")
+
     params = ModelInjectionParams(
         fold=fold,
         output_folder=cur_run_output_folder,
-        manual_valid_ids_file=manual_valid_ids_file,
+        manual_valid_ids_file=str(manual_valid_ids_file),
         genotype_input_source=data_input_dict[f"{task}_genotype"].path,
         genotype_subset_snps_file=snp_subset_file,
         label_file_path=label_file_path,
