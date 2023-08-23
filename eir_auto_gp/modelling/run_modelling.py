@@ -43,8 +43,18 @@ class RunModellingWrapper(luigi.Task):
                 modelling_config=self.modelling_config,
             )
 
+            cleanup_tmp_files(modelling_config=self.modelling_config)
+
     def output(self):
         return self.input()
+
+
+def cleanup_tmp_files(modelling_config: Dict[str, Any]) -> None:
+    tmp_dir = Path(modelling_config["modelling_output_folder"]) / "tmp"
+    if tmp_dir.exists():
+        for file in tmp_dir.iterdir():
+            file.unlink()
+        tmp_dir.rmdir()
 
 
 def _get_fold_iterator(folds: str) -> Iterable:
@@ -309,13 +319,20 @@ def build_injection_params(
     if task == "train" and valid_ids_file.exists():
         manual_valid_ids_file = str(valid_ids_file)
 
+    label_file_path = build_tmp_label_file(
+        label_file_path=data_input_dict[f"{task}_tabular"].path,
+        output_cat_columns=modelling_config["output_cat_columns"],
+        tmp_dir=Path(base_output_folder, "tmp"),
+        output_con_columns=modelling_config["output_con_columns"],
+    )
+
     params = ModelInjectionParams(
         fold=fold,
         output_folder=cur_run_output_folder,
         manual_valid_ids_file=manual_valid_ids_file,
         genotype_input_source=data_input_dict[f"{task}_genotype"].path,
         genotype_subset_snps_file=snp_subset_file,
-        label_file_path=data_input_dict[f"{task}_tabular"].path,
+        label_file_path=label_file_path,
         input_cat_columns=modelling_config["input_cat_columns"],
         input_con_columns=modelling_config["input_con_columns"],
         output_cat_columns=modelling_config["output_cat_columns"],
@@ -325,6 +342,30 @@ def build_injection_params(
     )
 
     return params
+
+
+def build_tmp_label_file(
+    label_file_path: str,
+    tmp_dir: Path,
+    output_cat_columns: list[str],
+    output_con_columns: list[str],
+) -> str:
+    tmp_label_file_path = Path(tmp_dir) / "label_file.csv"
+
+    if tmp_label_file_path.exists():
+        return str(tmp_label_file_path)
+
+    df = pd.read_csv(label_file_path)
+
+    if output_cat_columns:
+        df = df.dropna(subset=output_cat_columns)
+    if output_con_columns:
+        df = df.dropna(subset=output_con_columns)
+
+    ensure_path_exists(path=tmp_label_file_path.parent, is_folder=True)
+    df.to_csv(tmp_label_file_path, index=False)
+
+    return str(tmp_label_file_path)
 
 
 def build_configs(
