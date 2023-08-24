@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from aislib.misc_utils import get_logger
 import numpy as np
 import pandas as pd
 from eir.data_load.data_source_modules.deeplake_ops import load_deeplake_dataset
@@ -11,6 +12,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
 from eir_auto_gp.modelling.dl_feature_selection import get_dl_top_n_snp_list_df
+
+logger = get_logger(name=__name__)
 
 
 @dataclass()
@@ -136,6 +139,12 @@ def set_up_model_data(
     df_tabular_input.sort_index(inplace=True)
     df_target.sort_index(inplace=True)
 
+    df_target, df_genotype_input, df_tabular_input = _handle_missing_target_values(
+        df_target=df_target,
+        df_genotype_input=df_genotype_input,
+        df_tabular_input=df_tabular_input,
+    )
+
     assert df_genotype_input.shape[0] == df_target.shape[0] == df_tabular_input.shape[0]
     assert df_genotype_input.index.equals(df_target.index)
     assert df_genotype_input.index.equals(df_tabular_input.index)
@@ -147,6 +156,24 @@ def set_up_model_data(
     )
 
     return model_data
+
+
+def _handle_missing_target_values(
+    df_target: pd.DataFrame,
+    df_genotype_input: pd.DataFrame,
+    df_tabular_input: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    logger.info("Handling missing target values, target shape: %s", df_target.shape)
+
+    df_target = df_target.dropna()
+    df_genotype_input = df_genotype_input.loc[df_target.index]
+    df_tabular_input = df_tabular_input.loc[df_target.index]
+
+    assert df_genotype_input.shape[0] == df_target.shape[0] == df_tabular_input.shape[0]
+
+    logger.info("After dropping missing values, target shape: %s", df_target.shape)
+
+    return df_target, df_genotype_input, df_tabular_input
 
 
 def process_split_model_data(
