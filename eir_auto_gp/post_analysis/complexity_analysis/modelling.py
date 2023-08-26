@@ -1,22 +1,19 @@
 import warnings
 from dataclasses import dataclass
 from itertools import product
-from typing import Dict, Any, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, Dict, Generator
 
 import numpy as np
 import pandas as pd
 import xgboost
 from eir.train_utils import metrics as eir_metrics
 from sklearn import metrics
-from sklearn.linear_model import LogisticRegressionCV, ElasticNetCV
-from sklearn.preprocessing import LabelEncoder
 from sklearn.exceptions import ConvergenceWarning
-
+from sklearn.linear_model import ElasticNetCV, LogisticRegressionCV
+from sklearn.preprocessing import LabelEncoder
 
 if TYPE_CHECKING:
-    from eir_auto_gp.post_analysis.run_complexity_analysis import (
-        ModelReadyObject,
-    )
+    from eir_auto_gp.post_analysis.run_complexity_analysis import ModelReadyObject
 
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
 

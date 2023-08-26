@@ -1,11 +1,11 @@
 from pathlib import Path
 from typing import Callable
 
-import pytest
 import pandas as pd
+import pytest
 
-from eir_auto_gp.run import get_argument_parser, run, store_experiment_config
 from eir_auto_gp.post_analysis import run_post_analysis
+from eir_auto_gp.run import get_argument_parser, run, store_experiment_config
 
 
 def _get_test_modelling_cl_command(

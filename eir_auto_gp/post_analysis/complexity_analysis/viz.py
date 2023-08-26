@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from aislib.misc_utils import ensure_path_exists
 import pandas as pd
 import seaborn as sns
 import xgboost
+from aislib.misc_utils import ensure_path_exists
 from matplotlib import pyplot as plt
-from sklearn.linear_model import LogisticRegressionCV, ElasticNetCV
+from sklearn.linear_model import ElasticNetCV, LogisticRegressionCV
 
 
 def assign_complexity(row):

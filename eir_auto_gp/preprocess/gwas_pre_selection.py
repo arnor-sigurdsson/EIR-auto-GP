@@ -1,22 +1,19 @@
 import argparse
+import json
 import subprocess
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
-import json
 from typing import Optional, Tuple
 
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
+import pandas as pd
+from aislib.misc_utils import ensure_path_exists
 from qmplot import manhattanplot, qqplot
 from qmplot.modules._qq import ppoints
-from aislib.misc_utils import ensure_path_exists
 
-from eir_auto_gp.preprocess.converge import (
-    gather_ids_from_csv_file,
-    _id_setup_wrapper,
-)
+from eir_auto_gp.preprocess.converge import _id_setup_wrapper, gather_ids_from_csv_file
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)

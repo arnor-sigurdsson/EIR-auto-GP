@@ -1,6 +1,6 @@
 import subprocess
 from pathlib import Path
-from typing import Dict, Any, Sequence, Optional
+from typing import Any, Dict, Optional, Sequence
 
 from aislib.misc_utils import ensure_path_exists, get_logger
 

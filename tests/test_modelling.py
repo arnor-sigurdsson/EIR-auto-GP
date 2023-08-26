@@ -1,9 +1,9 @@
-from pathlib import Path
 import json
+from pathlib import Path
 from statistics import mean
 
-import pytest
 import pandas as pd
+import pytest
 from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 
 from eir_auto_gp.run import get_argument_parser, run

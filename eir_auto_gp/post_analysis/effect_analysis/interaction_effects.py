@@ -1,9 +1,9 @@
+import warnings
 from itertools import combinations
 from pathlib import Path
-import warnings
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from aislib.misc_utils import get_logger
 from eir.setup.input_setup_modules.setup_omics import read_bim
 from joblib import Parallel, delayed
@@ -11,8 +11,8 @@ from statsmodels.base.model import LikelihoodModelResults
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
 
 from eir_auto_gp.post_analysis.effect_analysis.genotype_effects import (
-    get_statsmodels_fit_function,
     get_snp_allele_maps,
+    get_statsmodels_fit_function,
 )
 
 logger = get_logger(name=__name__)

@@ -7,13 +7,13 @@ from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 
 from eir_auto_gp.modelling.run_modelling import _lines_in_file
 from eir_auto_gp.preprocess.gwas_pre_selection import (
+    _get_plink_filter_snps_command,
+    get_covariate_names,
     get_gwas_parser,
     get_gwas_pre_filter_config,
-    run_gwas_pre_filter_wrapper,
-    _get_plink_filter_snps_command,
-    get_plink_gwas_command,
     get_pheno_names,
-    get_covariate_names,
+    get_plink_gwas_command,
+    run_gwas_pre_filter_wrapper,
 )
 
 

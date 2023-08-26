@@ -1,11 +1,11 @@
 import os
 import subprocess
-from dataclasses import fields, dataclass
+from dataclasses import dataclass, fields
 from functools import lru_cache
 from pathlib import Path
 from statistics import mean
 from tempfile import TemporaryDirectory
-from typing import Dict, Any, Optional, Iterable, Literal, Sequence
+from typing import Any, Dict, Iterable, Literal, Optional, Sequence
 
 import luigi
 import pandas as pd
@@ -15,12 +15,15 @@ import yaml
 from aislib.misc_utils import ensure_path_exists
 from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_replace
 
-from eir_auto_gp.modelling.configs import get_aggregate_config, AggregateConfig
+from eir_auto_gp.modelling.configs import AggregateConfig, get_aggregate_config
 from eir_auto_gp.modelling.dl_feature_selection import get_genotype_subset_snps_file
 from eir_auto_gp.modelling.gwas_feature_selection import run_gwas_feature_selection
-from eir_auto_gp.preprocess.converge import ParseDataWrapper
+from eir_auto_gp.preprocess.converge import (
+    ParseDataWrapper,
+    get_batch_size,
+    get_dynamic_valid_size,
+)
 from eir_auto_gp.utils.utils import get_logger
-from eir_auto_gp.preprocess.converge import get_dynamic_valid_size, get_batch_size
 
 logger = get_logger(name=__name__)
 

@@ -7,8 +7,8 @@ from aislib.misc_utils import ensure_path_exists
 from luigi.util import requires
 from plink_pipelines.make_dataset import (
     RenameOnFailureMixin,
-    get_sample_generator_from_bed,
     _get_one_hot_encoded_generator,
+    get_sample_generator_from_bed,
     write_one_hot_outputs,
 )
 

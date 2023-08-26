@@ -2,7 +2,7 @@ import json
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import Iterator, Dict, Sequence, Literal, Tuple
+from typing import Dict, Iterator, Literal, Sequence, Tuple
 
 import luigi
 import matplotlib.pyplot as plt

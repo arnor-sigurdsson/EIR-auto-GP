@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from aislib.misc_utils import get_logger, ensure_path_exists
+from aislib.misc_utils import ensure_path_exists, get_logger
 
 from eir_auto_gp.post_analysis.effect_analysis.genotype_effects import (
     get_allele_effects,

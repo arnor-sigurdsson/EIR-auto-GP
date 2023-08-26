@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Tuple, Iterator, Literal
+from typing import Iterator, Literal, Optional, Tuple
 
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists

@@ -3,17 +3,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from aislib.misc_utils import get_logger
 import numpy as np
 import pandas as pd
+from aislib.misc_utils import get_logger
 from eir.data_load.data_source_modules.deeplake_ops import load_deeplake_dataset
 from eir.setup.input_setup_modules import setup_omics as eir_setup_omics
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 from eir_auto_gp.modelling.dl_feature_selection import (
-    get_dl_top_n_snp_list_df,
     get_dl_gwas_top_n_snp_list_df,
+    get_dl_top_n_snp_list_df,
 )
 
 logger = get_logger(name=__name__)

@@ -7,14 +7,14 @@ import seaborn as sns
 from aislib.misc_utils import ensure_path_exists
 
 from eir_auto_gp.post_analysis.common.data_preparation import (
+    FitTransformers,
     ModelData,
     SplitModelData,
-    FitTransformers,
 )
 from eir_auto_gp.post_analysis.complexity_analysis.modelling import (
-    train_and_evaluate_xboost,
-    train_and_evaluate_linear,
     get_training_eval_iterator,
+    train_and_evaluate_linear,
+    train_and_evaluate_xboost,
 )
 from eir_auto_gp.post_analysis.complexity_analysis.viz import plot_performance
 

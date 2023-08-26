@@ -1,9 +1,9 @@
-from pathlib import Path
 import warnings
-from typing import Optional, Callable, Iterable
+from pathlib import Path
+from typing import Callable, Iterable, Optional
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from aislib.misc_utils import get_logger
 from eir.setup.input_setup_modules.setup_omics import read_bim
 from joblib import Parallel, delayed

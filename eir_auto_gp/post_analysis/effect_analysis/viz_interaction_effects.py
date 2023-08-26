@@ -1,6 +1,5 @@
 import heapq
 import re
-from _operator import itemgetter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
@@ -8,6 +7,7 @@ from typing import Optional, Sequence
 import networkx as nx
 import numpy as np
 import pandas as pd
+from _operator import itemgetter
 from aislib.misc_utils import ensure_path_exists
 from eir.setup.input_setup_modules.setup_omics import read_bim
 from matplotlib import pyplot as plt

@@ -1,8 +1,8 @@
 import math
+import warnings
 from pathlib import Path
 from shutil import copyfile
-from typing import Sequence, Tuple, Dict, Optional
-import warnings
+from typing import Dict, Optional, Sequence, Tuple
 
 warnings.filterwarnings("ignore", message=".*newer version of deeplake.*")
 
