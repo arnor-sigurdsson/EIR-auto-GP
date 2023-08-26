@@ -269,36 +269,22 @@ def build_injection_params(
     feature_selection_config: Dict[str, Any],
     modelling_config: Dict[str, Any],
 ) -> ModelInjectionParams:
-    compute_attributions = False
-
-    fs = feature_selection_config["feature_selection"]
-    n_act_folds = feature_selection_config["n_dl_feature_selection_setup_folds"]
-    if task == "train" and fs in ("dl", "gwas->dl", "dl+gwas") and fold < n_act_folds:
-        compute_attributions = True
-
-    weighted_sampling_columns = None
-    if modelling_config["output_cat_columns"]:
-        weighted_sampling_columns = ["all"]
-
-    feature_selection_tasks = feature_selection_config["feature_selection"]
-
-    gwas_manual_subset_file = None
-    if feature_selection_tasks is not None:
-        if "gwas" in feature_selection_tasks and task == "train":
-            gwas_manual_subset_file = run_gwas_feature_selection(
-                genotype_data_path=genotype_data_path,
-                data_config=data_config,
-                modelling_config=modelling_config,
-                feature_selection_config=feature_selection_config,
-            )
-        elif "gwas" in feature_selection_tasks and task == "test":
-            fs_output_folder = Path(
-                feature_selection_config["feature_selection_output_folder"]
-            )
-            gwas_output_folder = fs_output_folder / "gwas_output"
-            gwas_manual_subset_file = Path(gwas_output_folder, "snps_to_keep.txt")
+    compute_attributions = should_compute_attributions(
+        task=task, feature_selection_config=feature_selection_config, fold=fold
+    )
+    weighted_sampling_columns = get_weighted_sampling_columns(
+        modelling_config=modelling_config
+    )
+    gwas_manual_subset_file = get_gwas_manual_subset_file(
+        task=task,
+        feature_selection_config=feature_selection_config,
+        genotype_data_path=genotype_data_path,
+        data_config=data_config,
+        modelling_config=modelling_config,
+    )
 
     bim_file = _get_bim_path(genotype_data_path=genotype_data_path)
+    n_act_folds = feature_selection_config["n_dl_feature_selection_setup_folds"]
     snp_subset_file = get_genotype_subset_snps_file(
         fold=fold,
         folder_with_runs=folder_with_runs,
@@ -319,27 +305,15 @@ def build_injection_params(
         output_cat_columns=modelling_config["output_cat_columns"],
         tmp_dir=Path(base_output_folder, "tmp"),
         output_con_columns=modelling_config["output_con_columns"],
+        prefix_name=task,
     )
 
-    manual_valid_ids_file = None
-    valid_ids_file = Path(data_config["data_output_folder"], "ids/valid_ids.txt")
-    if task == "train" and valid_ids_file.exists():
-        manual_valid_ids_file = str(valid_ids_file)
-        manual_valid_ids = pd.read_csv(manual_valid_ids_file, header=None)[0].tolist()
-
-        df_ids = pd.read_csv(label_file_path, usecols=["ID"])
-        df_ids = df_ids.dropna()
-
-        manual_valid_ids = list(
-            set(manual_valid_ids).intersection(set(df_ids["ID"].tolist()))
-        )
-
-        manual_valid_ids_file = Path(base_output_folder, "tmp", "valid_ids.txt")
-        manual_valid_ids_file.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(manual_valid_ids_file, "w") as f:
-            for id_ in manual_valid_ids:
-                f.write(f"{id_}\n")
+    manual_valid_ids_file = get_manual_valid_ids_file(
+        task=task,
+        data_config=data_config,
+        label_file_path=label_file_path,
+        base_output_folder=base_output_folder,
+    )
 
     params = ModelInjectionParams(
         fold=fold,
@@ -359,18 +333,101 @@ def build_injection_params(
     return params
 
 
+def should_compute_attributions(
+    task: str, feature_selection_config: Dict[str, Any], fold: int
+) -> bool:
+    fs = feature_selection_config["feature_selection"]
+    n_act_folds = feature_selection_config["n_dl_feature_selection_setup_folds"]
+    return (
+        task == "train" and fs in ("dl", "gwas->dl", "dl+gwas") and fold < n_act_folds
+    )
+
+
+def get_weighted_sampling_columns(
+    modelling_config: Dict[str, Any]
+) -> Optional[list[str]]:
+    return ["all"] if modelling_config["output_cat_columns"] else None
+
+
+def get_gwas_manual_subset_file(
+    task: str,
+    feature_selection_config: Dict[str, Any],
+    genotype_data_path: str,
+    data_config: Dict[str, Any],
+    modelling_config: Dict[str, Any],
+) -> Optional[Path]:
+    feature_selection_tasks = feature_selection_config["feature_selection"]
+    if feature_selection_tasks is None:
+        return None
+
+    if "gwas" in feature_selection_tasks:
+        if task == "train":
+            return run_gwas_feature_selection(
+                genotype_data_path=genotype_data_path,
+                data_config=data_config,
+                modelling_config=modelling_config,
+                feature_selection_config=feature_selection_config,
+            )
+        elif task == "test":
+            fs_output_folder = Path(
+                feature_selection_config["feature_selection_output_folder"]
+            )
+            gwas_output_folder = fs_output_folder / "gwas_output"
+            return Path(gwas_output_folder, "snps_to_keep.txt")
+
+    return None
+
+
+def get_manual_valid_ids_file(
+    task: str,
+    data_config: Dict[str, Any],
+    label_file_path: str,
+    base_output_folder: str,
+) -> Optional[str]:
+    if task != "train":
+        return None
+
+    valid_ids_file = Path(data_config["data_output_folder"], "ids/valid_ids.txt")
+    if not valid_ids_file.exists():
+        return None
+
+    manual_valid_ids = pd.read_csv(valid_ids_file, header=None)[0].tolist()
+    df_ids = pd.read_csv(label_file_path, usecols=["ID"]).dropna()
+    intersected_ids = list(
+        set(manual_valid_ids).intersection(set(df_ids["ID"].tolist()))
+    )
+
+    manual_valid_ids_file = Path(base_output_folder, "tmp", "valid_ids.txt")
+    manual_valid_ids_file.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(manual_valid_ids_file, "w") as f:
+        for id_ in intersected_ids:
+            f.write(f"{id_}\n")
+
+    return str(manual_valid_ids_file)
+
+
 def build_tmp_label_file(
     label_file_path: str,
     tmp_dir: Path,
     output_cat_columns: list[str],
     output_con_columns: list[str],
+    prefix_name: str,
 ) -> str:
-    tmp_label_file_path = Path(tmp_dir) / "label_file.csv"
+    tmp_label_file_path = Path(tmp_dir) / f"{prefix_name}_label_file.csv"
 
     if tmp_label_file_path.exists():
         return str(tmp_label_file_path)
 
     df = pd.read_csv(label_file_path)
+
+    if prefix_name == "test":
+        train_file_path = Path(tmp_dir) / "train_label_file.csv"
+        assert Path(train_file_path).exists()
+        df_train = pd.read_csv(train_file_path, usecols=["ID"])
+        ids_train = set(df_train["ID"].tolist())
+        ids_test = set(df["ID"].tolist())
+        assert len(ids_train.intersection(ids_test)) == 0
 
     if output_cat_columns:
         df = df.dropna(subset=output_cat_columns)

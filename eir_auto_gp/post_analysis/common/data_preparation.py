@@ -11,7 +11,10 @@ from eir.setup.input_setup_modules import setup_omics as eir_setup_omics
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
-from eir_auto_gp.modelling.dl_feature_selection import get_dl_top_n_snp_list_df
+from eir_auto_gp.modelling.dl_feature_selection import (
+    get_dl_top_n_snp_list_df,
+    get_dl_gwas_top_n_snp_list_df,
+)
 
 logger = get_logger(name=__name__)
 
@@ -84,32 +87,80 @@ class ModelData:
 
 
 def get_subset_indices_and_names(
-    bim_file_path: Path, dl_attributions_path: Path, top_n_snps: int
+    bim_file_path: Path,
+    dl_attributions_path: Optional[Path],
+    gwas_attributions_path: Optional[Path],
+    top_n_snps: int,
 ) -> tuple[np.ndarray, list[str]]:
     df_bim = eir_setup_omics.read_bim(bim_file_path=str(bim_file_path))
+    validate_file_paths(dl_path=dl_attributions_path, gwas_path=gwas_attributions_path)
 
-    if not dl_attributions_path.exists():
-        raise ValueError(
-            f"Path {dl_attributions_path} does not exist."
-            f"Post analysis is currently only supported for runs with "
-            f"DL attributions."
+    df_dl_attributions: Optional[pd.DataFrame] = None
+    df_gwas_attributions: Optional[pd.DataFrame] = None
+
+    if dl_attributions_path is not None and dl_attributions_path.exists():
+        logger.info("DL attributions %s exist.", dl_attributions_path)
+        df_dl_attributions = pd.read_csv(filepath_or_buffer=dl_attributions_path)
+
+    if gwas_attributions_path is not None and gwas_attributions_path.exists():
+        logger.info("GWAS attributions %s exist.", gwas_attributions_path)
+        df_gwas_attributions = _read_gwas_attributions(
+            gwas_attributions_path=gwas_attributions_path
         )
 
-    df_attributions = pd.read_csv(filepath_or_buffer=dl_attributions_path)
-    df_top_snps = get_dl_top_n_snp_list_df(
-        df_attributions=df_attributions,
-        df_bim=df_bim,
-        top_n_snps=top_n_snps,
-    )
+    match (df_dl_attributions, df_gwas_attributions):
+        case (pd.DataFrame(), None):
+            df_top_snps = get_dl_top_n_snp_list_df(
+                df_attributions=df_dl_attributions, df_bim=df_bim, top_n_snps=top_n_snps
+            )
+        case (None, pd.DataFrame()):
+            df_top_snps = _get_gwas_top_n_snp_list_df(
+                df_gwas=df_gwas_attributions, top_n_snps=top_n_snps
+            )
+        case (pd.DataFrame(), pd.DataFrame()):
+            df_dl_gwas = df_dl_attributions.join(other=df_gwas_attributions)
+            df_top_snps = get_dl_gwas_top_n_snp_list_df(
+                df_dl_gwas=df_dl_gwas, top_n_snps=top_n_snps
+            )
+        case _:
+            raise ValueError("Both DL and GWAS attributions are None.")
+
     top_snps_list = df_top_snps["SNP"].tolist()
     _check_bim(df_bim=df_bim, top_snps_list=top_snps_list)
 
     subset_indices = eir_setup_omics._setup_snp_subset_indices(
-        df_bim=df_bim,
-        snps_to_subset=top_snps_list,
+        df_bim=df_bim, snps_to_subset=top_snps_list
     )
 
     return subset_indices, top_snps_list
+
+
+def validate_file_paths(dl_path: Optional[Path], gwas_path: Optional[Path]) -> None:
+    if (dl_path is None or not dl_path.exists()) and (
+        gwas_path is None or not gwas_path.exists()
+    ):
+        raise ValueError(
+            f"Neither {dl_path} nor {gwas_path} exist. "
+            "Post-analysis requires at least one of these files to exist."
+        )
+
+
+def _get_gwas_top_n_snp_list_df(df_gwas: pd.DataFrame, top_n_snps: int) -> pd.DataFrame:
+    df = df_gwas.sort_values(by="GWAS P-VALUE", ascending=True)
+    df_top_n = df.iloc[:top_n_snps, :]
+    df_top_n.index.name = "SNP"
+    df_top_n["SNP"] = df_top_n.index
+    return df_top_n
+
+
+def _read_gwas_attributions(gwas_attributions_path: Path) -> pd.DataFrame:
+    df_gwas = pd.read_csv(filepath_or_buffer=gwas_attributions_path, sep="\t")
+    df_gwas = df_gwas.rename(columns={"ID": "VAR_ID"})
+    df_gwas = df_gwas.set_index("VAR_ID")
+    df_gwas = df_gwas.rename(columns={"P": "GWAS P-VALUE"})
+    df_gwas = df_gwas[["GWAS P-VALUE"]]
+
+    return df_gwas
 
 
 def _check_bim(df_bim: pd.DataFrame, top_snps_list: list[str]) -> None:
@@ -337,6 +388,7 @@ def set_up_split_model_data(
     subset_indices, top_snps_list = get_subset_indices_and_names(
         bim_file_path=data_paths.snp_bim_path,
         dl_attributions_path=data_paths.dl_attribution_path,
+        gwas_attributions_path=data_paths.gwas_attribution_path,
         top_n_snps=top_snps,
     )
 

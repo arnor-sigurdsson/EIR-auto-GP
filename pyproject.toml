@@ -34,6 +34,7 @@ sphinx-rtd-theme = "^1.2.0"
 pdf2image = "^1.16.3"
 gdown = "^4.7.1"
 coverage = "^7.2.2"
+isort = "^5.12.0"
 
 [build-system]
 requires = ["poetry-core"]

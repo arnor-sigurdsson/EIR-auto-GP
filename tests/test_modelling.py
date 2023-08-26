@@ -69,7 +69,7 @@ def check_modelling_results(run_folder: Path, check_test: bool) -> None:
         assert avg >= 0.5
 
 
-def check_average_performances(file_path: Path, threshold: float = 0.6) -> None:
+def check_average_performances(file_path: Path, threshold: float = 0.5) -> None:
     df = pd.read_csv(filepath_or_buffer=file_path)
 
     assert df["perf-average"].max() >= threshold

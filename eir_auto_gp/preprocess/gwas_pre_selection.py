@@ -360,7 +360,11 @@ def _gather_snps_to_keep_from_gwas_output(
     gwas_file_path: str | Path,
     p_value_threshold: float,
 ) -> list[str]:
-    df_gwas = pd.read_csv(filepath_or_buffer=gwas_file_path, sep="\t")
+    df_gwas = pd.read_csv(
+        filepath_or_buffer=gwas_file_path,
+        sep="\t",
+        low_memory=False,
+    )
 
     snps_to_keep = df_gwas[df_gwas["P"] < p_value_threshold]["ID"].tolist()
     logger.info(
@@ -482,7 +486,7 @@ def plot_gwas_results(
         if "linear" not in f.name and "logistic" not in f.name:
             continue
 
-        df = pd.read_csv(f, sep="\t")
+        df = pd.read_csv(f, sep="\t", low_memory=False)
         df = df.dropna(how="any", axis=0)
 
         fig_manhattan = get_manhattan_plot(df=df, p_value_line=p_value_line)

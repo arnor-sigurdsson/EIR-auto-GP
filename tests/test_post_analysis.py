@@ -1,35 +1,43 @@
 from pathlib import Path
 from typing import Callable
 
+import pytest
 import pandas as pd
 
 from eir_auto_gp.run import get_argument_parser, run, store_experiment_config
 from eir_auto_gp.post_analysis import run_post_analysis
 
 
-def _get_test_modelling_cl_command(folder_path: Path, target_type: str) -> str:
+def _get_test_modelling_cl_command(
+    folder_path: Path, target_type: str, feature_selection: str
+) -> str:
     base = (
-        f"--genotype_data_path  {folder_path}/ "
-        f"--label_file_path {folder_path}/phenotype.csv  "
+        f"--genotype_data_path {folder_path}/ "
+        f"--label_file_path {folder_path}/phenotype.csv "
         "--global_output_folder runs/simulated_test "
         f"--output_{target_type}_columns phenotype "
         "--folds 2 "
+        f"--feature_selection {feature_selection} "
+        "--n_dl_feature_selection_setup_folds 1 "
         "--do_test "
-        "--feature_selection dl "
-        "--n_dl_feature_selection_setup_folds 1"
+        "--gwas_p_value_threshold 1e-01 "
     )
 
     return base
 
 
+@pytest.mark.parametrize("feature_selection", ["dl", "gwas", "gwas->dl"])
 def test_post_analysis_classification(
+    feature_selection: str,
     simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
     tmp_path: Path,
 ) -> None:
     simulated_path = simulate_genetic_data_to_bed(10000, 12, "binary")
 
     command = _get_test_modelling_cl_command(
-        folder_path=simulated_path, target_type="cat"
+        folder_path=simulated_path,
+        target_type="cat",
+        feature_selection=feature_selection,
     )
 
     parser = get_argument_parser()
@@ -54,14 +62,18 @@ def test_post_analysis_classification(
     )
 
 
+@pytest.mark.parametrize("feature_selection", ["dl", "gwas", "gwas->dl"])
 def test_post_analysis_regression(
+    feature_selection: str,
     simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
     tmp_path: Path,
 ) -> None:
     simulated_path = simulate_genetic_data_to_bed(10000, 12, "continuous")
 
     command = _get_test_modelling_cl_command(
-        folder_path=simulated_path, target_type="con"
+        folder_path=simulated_path,
+        target_type="con",
+        feature_selection=feature_selection,
     )
 
     parser = get_argument_parser()
