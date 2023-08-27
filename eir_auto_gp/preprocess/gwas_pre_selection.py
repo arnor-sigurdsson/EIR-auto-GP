@@ -486,17 +486,23 @@ def plot_gwas_results(
         df = pd.read_csv(f, sep="\t", low_memory=False)
         df = df.dropna(how="any", axis=0)
 
-        fig_manhattan = get_manhattan_plot(df=df, p_value_line=p_value_line)
-        manhattan_output_path = Path(
-            gwas_output_path, "plots", f"{f.name}_manhattan.png"
-        )
-        ensure_path_exists(path=manhattan_output_path)
-        fig_manhattan.savefig(fname=manhattan_output_path, dpi=300)
+        try:
+            fig_manhattan = get_manhattan_plot(df=df, p_value_line=p_value_line)
+            manhattan_output_path = Path(
+                gwas_output_path, "plots", f"{f.name}_manhattan.png"
+            )
+            ensure_path_exists(path=manhattan_output_path)
+            fig_manhattan.savefig(fname=manhattan_output_path, dpi=300)
+        except Exception as e:
+            logger.warning("Failed to plot Manhattan plot for %s: %s", f, e)
 
-        fig_qq = get_qq_plot(df=df)
-        qq_output_path = Path(gwas_output_path, "plots", f"{f.name}_qq.png")
-        ensure_path_exists(path=qq_output_path)
-        fig_qq.savefig(fname=qq_output_path, dpi=300)
+        try:
+            fig_qq = get_qq_plot(df=df)
+            qq_output_path = Path(gwas_output_path, "plots", f"{f.name}_qq.png")
+            ensure_path_exists(path=qq_output_path)
+            fig_qq.savefig(fname=qq_output_path, dpi=300)
+        except Exception as e:
+            logger.warning("Failed to plot QQ plot for %s: %s", f, e)
 
 
 def get_manhattan_plot(df: pd.DataFrame, p_value_line: Optional[float]) -> plt.Figure:
