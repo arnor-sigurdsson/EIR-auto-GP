@@ -1185,13 +1185,13 @@ files = [
 
 [[package]]
 name = "eir-dl"
-version = "0.1.37a0"
+version = "0.1.38a0"
 description = ""
 optional = false
 python-versions = ">=3.11.0,<4.0.0"
 files = [
-    {file = "eir_dl-0.1.37a0-py3-none-any.whl", hash = "sha256:79254d6c911ab8d1c788c197225e46b73ef1b735e2f2def1dcddb3bbede33d12"},
-    {file = "eir_dl-0.1.37a0.tar.gz", hash = "sha256:57d077e3f2073508d80489a646fb6aaa63d8988846ef38dcaa2c963ae15a8fd5"},
+    {file = "eir_dl-0.1.38a0-py3-none-any.whl", hash = "sha256:f9fa3f99684419425e1ed35b72e203d8f432bef349ccf84f3ef7725bdfa1ef5b"},
+    {file = "eir_dl-0.1.38a0.tar.gz", hash = "sha256:467d6d1933fa0277c0b42ef47e4e0f2200f80d1dcf9d1e7582409fcb016eed82"},
 ]
 
 [package.dependencies]
@@ -3467,13 +3467,13 @@ py = ">=1.10.0,<2.0.0"
 
 [[package]]
 name = "pluggy"
-version = "1.2.0"
+version = "1.3.0"
 description = "plugin and hook calling mechanisms for python"
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8"
 files = [
-    {file = "pluggy-1.2.0-py3-none-any.whl", hash = "sha256:c2fd55a7d7a3863cba1a013e4e2414658b1d07b6bc57b3919e0c63c9abb99849"},
-    {file = "pluggy-1.2.0.tar.gz", hash = "sha256:d12f0c4b579b15f5e054301bb226ee85eeeba08ffec228092f8defbaa3a4c4b3"},
+    {file = "pluggy-1.3.0-py3-none-any.whl", hash = "sha256:d89c696a773f8bd377d18e5ecda92b7a3793cbe66c87060a6fb58c7b6e1061f7"},
+    {file = "pluggy-1.3.0.tar.gz", hash = "sha256:cf61ae8f126ac6f7c451172cf30e3e43d3ca77615509771b3a984a0730651e12"},
 ]
 
 [package.extras]
