@@ -171,7 +171,9 @@ def build_df_from_basic_results(
     df_linear_total = compute_total_effect(df=df_linear)
 
     df_linear_renamed = _rename_linear_regression_index(
-        df_results=df_linear_total, allele_maps=allele_maps, snp=snp
+        df_results=df_linear_total,
+        allele_maps=allele_maps,
+        snp=snp,
     )
 
     df_linear_column_renamed = df_linear_renamed.rename(
@@ -201,12 +203,12 @@ def compute_total_effect(
 
 def _rename_linear_regression_index(
     df_results: pd.DataFrame, allele_maps: dict[str, dict[str, str]], snp: str
-):
+) -> pd.DataFrame:
     snp_allele_map = allele_maps[snp]
     cur_mapping = {}
     for index in df_results.index:
         if index != "Intercept":
-            assert snp in index
+            assert snp in index, f"{snp} not in {index} of {df_results}"
         if "Intercept" in index:
             key = "REF"
         elif "[T.1]" in index:

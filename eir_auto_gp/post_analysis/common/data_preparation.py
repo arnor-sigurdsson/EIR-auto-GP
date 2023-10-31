@@ -111,16 +111,20 @@ def get_subset_indices_and_names(
     match (df_dl_attributions, df_gwas_attributions):
         case (pd.DataFrame(), None):
             df_top_snps = get_dl_top_n_snp_list_df(
-                df_attributions=df_dl_attributions, df_bim=df_bim, top_n_snps=top_n_snps
+                df_attributions=df_dl_attributions,
+                df_bim=df_bim,
+                top_n_snps=top_n_snps,
             )
         case (None, pd.DataFrame()):
             df_top_snps = _get_gwas_top_n_snp_list_df(
-                df_gwas=df_gwas_attributions, top_n_snps=top_n_snps
+                df_gwas=df_gwas_attributions,
+                top_n_snps=top_n_snps,
             )
         case (pd.DataFrame(), pd.DataFrame()):
             df_dl_gwas = df_dl_attributions.join(other=df_gwas_attributions)
             df_top_snps = get_dl_gwas_top_n_snp_list_df(
-                df_dl_gwas=df_dl_gwas, top_n_snps=top_n_snps
+                df_dl_gwas=df_dl_gwas,
+                top_n_snps=top_n_snps,
             )
         case _:
             raise ValueError("Both DL and GWAS attributions are None.")
@@ -129,7 +133,8 @@ def get_subset_indices_and_names(
     _check_bim(df_bim=df_bim, top_snps_list=top_snps_list)
 
     subset_indices = eir_setup_omics._setup_snp_subset_indices(
-        df_bim=df_bim, snps_to_subset=top_snps_list
+        df_bim=df_bim,
+        snps_to_subset=top_snps_list,
     )
 
     return subset_indices, top_snps_list
