@@ -28,7 +28,7 @@ def get_allele_effects(
 
     df_bim = read_bim(bim_file_path=str(bim_file))
     rs_ids = df_genotype.columns
-    allele_maps = get_snp_allele_maps(df_bim=df_bim, rs_ids=rs_ids)
+    allele_maps = get_snp_allele_maps(df_bim=df_bim, snp_ids=rs_ids)
 
     df_results = get_all_linear_results(
         df=df_combined,
@@ -134,10 +134,10 @@ def build_basic_fit_formula(target: str, snp: str) -> str:
 
 
 def get_snp_allele_maps(
-    df_bim: pd.DataFrame, rs_ids: Iterable[str]
+    df_bim: pd.DataFrame, snp_ids: Iterable[str]
 ) -> dict[str, dict[str, str]]:
     snp_allele_maps = {}
-    for rs_id in rs_ids:
+    for rs_id in snp_ids:
         snp_allele_maps[rs_id] = get_snp_allele_nucleotide_map(
             df_bim=df_bim, rs_id=rs_id
         )

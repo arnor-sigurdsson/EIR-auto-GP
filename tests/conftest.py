@@ -41,7 +41,9 @@ def simulate_genetic_data(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     snp_data = np.random.randint(0, 3, size=(n_individuals, n_snps))
 
-    df_snp = pd.DataFrame(snp_data, columns=[f"snp{i+1}" for i in range(n_snps)])
+    snp_list = _get_snp_list(n_snps=n_snps)
+
+    df_snp = pd.DataFrame(snp_data, columns=snp_list)
 
     causal_snps = ["snp1", "snp2"]
 
@@ -75,3 +77,21 @@ def simulate_genetic_data(
 
     df_snp, df_pheno = df_snp.drop(columns=["phenotype"]), df_snp["phenotype"]
     return df_snp, df_pheno
+
+
+def _get_snp_list(n_snps: int) -> list[str]:
+    snp_edge_cases = [
+        "1:rs7551801",
+        "rs7551801_A_T",
+        "1:rs7551801_A_T",
+        "rs7551801_A_TTT",
+        "123456789",
+        "rs75-51#801",
+    ]
+
+    snp_base_cases = [f"snp{i+1}" for i in range(n_snps - len(snp_edge_cases))]
+
+    snp_list = snp_base_cases + snp_edge_cases
+    assert len(snp_list) == n_snps
+
+    return snp_list

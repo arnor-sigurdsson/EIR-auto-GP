@@ -31,8 +31,8 @@ def get_interaction_effects(
     df_combined = pd.concat(objs=[df_target, df_genotype], axis=1)
 
     df_bim = read_bim(bim_file_path=str(bim_file))
-    rs_ids = df_genotype.columns
-    allele_maps = get_snp_allele_maps(df_bim=df_bim, rs_ids=rs_ids)
+    snp_ids = df_genotype.columns
+    allele_maps = get_snp_allele_maps(df_bim=df_bim, snp_ids=snp_ids)
 
     df_results = compute_interactions(
         df=df_combined,
@@ -183,7 +183,6 @@ def build_df_from_interaction_results(
     results_as_html = results.summary().tables[1].as_html()
     df_linear = pd.read_html(results_as_html, header=0, index_col=0)[0]
     df_linear.index.name = "allele"
-    df_linear.index = df_linear.index.str.replace("_", " ")
     df_linear.index = df_linear.index.str.replace(r"C\(Q\(", "", regex=True)
     df_linear.index = df_linear.index.str.replace(r"Q\(", "", regex=True)
     df_linear.index = df_linear.index.str.replace(r"\)", "", regex=True)
