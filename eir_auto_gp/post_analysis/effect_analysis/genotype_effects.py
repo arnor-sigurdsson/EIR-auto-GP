@@ -166,7 +166,6 @@ def build_df_from_basic_results(
     results_as_html = results.summary().tables[1].as_html()
     df_linear = pd.read_html(results_as_html, header=0, index_col=0)[0]
     df_linear.index.name = "allele"
-    df_linear.index = df_linear.index.str.replace("_", " ")
 
     df_linear_total = compute_total_effect(df=df_linear)
 
