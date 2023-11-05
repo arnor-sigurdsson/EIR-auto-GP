@@ -92,7 +92,10 @@ def train_and_evaluate_wrapper(analysis_object: "PostAnalysisObject"):
 def process_results(
     all_results: list, target_type: str, analysis_output_path: Path
 ) -> pd.DataFrame:
-    df_all_results = pd.concat([r["performance"] for r in all_results])
+    df_all_results = pd.concat(
+        [r["performance"] for r in all_results],
+        ignore_index=True,
+    )
     numerical_columns = _get_metric_columns(target_type=target_type)
 
     average = df_all_results[numerical_columns].mean(axis=1)
