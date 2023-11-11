@@ -171,7 +171,7 @@ def _id_setup_wrapper(
     common_ids_to_keep: Sequence[str],
     freeze_validation_set: bool,
     pre_split_folder: Optional[str] = None,
-):
+) -> tuple[list[str], list[str], list[str]]:
     valid_path = None
     valid_path_exists = False
 
@@ -190,9 +190,19 @@ def _id_setup_wrapper(
         train_ids = (
             pd.read_csv(train_path, header=None).astype(str).squeeze("columns").tolist()
         )
+        check_extra_ids(
+            ids_to_check=train_ids,
+            id_set_name="train",
+            common_ids=common_ids_to_keep,
+        )
 
         test_ids = (
             pd.read_csv(test_path, header=None).astype(str).squeeze("columns").tolist()
+        )
+        check_extra_ids(
+            ids_to_check=test_ids,
+            id_set_name="test",
+            common_ids=common_ids_to_keep,
         )
 
         valid_path = pre_split_folder / "valid_ids.txt"
@@ -224,6 +234,11 @@ def _id_setup_wrapper(
                 .squeeze("columns")
                 .tolist()
             )
+            check_extra_ids(
+                ids_to_check=valid_ids,
+                id_set_name="valid",
+                common_ids=common_ids_to_keep,
+            )
 
         _save_ids_to_text_file(
             ids=valid_ids, path=output_root / "ids" / "valid_ids.txt"
@@ -235,7 +250,53 @@ def _id_setup_wrapper(
     logger.info("Train and valid IDs: %d", len(train_ids))
     logger.info("Test IDs: %d", len(test_ids))
 
+    check_missing_ids(
+        train_ids=train_ids,
+        valid_ids=valid_ids,
+        test_ids=test_ids,
+        common_ids=common_ids_to_keep,
+    )
+
     return train_ids, valid_ids, test_ids
+
+
+def check_extra_ids(
+    ids_to_check: Sequence[str],
+    id_set_name: str,
+    common_ids: Sequence[str],
+    preview_limit: int = 10,
+) -> None:
+    common_ids_set = set(common_ids)
+
+    extra_ids = list(set(ids_to_check) - common_ids_set)
+    if extra_ids:
+        preview = extra_ids[:preview_limit]
+        raise ValueError(
+            f"{id_set_name} contains IDs not in common IDs from "
+            f"genotype data and label file."
+            f"Preview of extra IDs: {preview}."
+            f"Please check that the IDs in {id_set_name} "
+            f"are available in both genotype data and label file."
+        )
+
+
+def check_missing_ids(
+    train_ids: Sequence[str],
+    valid_ids: Sequence[str],
+    test_ids: Sequence[str],
+    common_ids: Sequence[str],
+    preview_limit: int = 10,
+) -> None:
+    common_ids_set = set(common_ids)
+
+    combined_ids = set(train_ids) | set(valid_ids) | set(test_ids)
+    missing_ids = list(common_ids_set - combined_ids)
+    if missing_ids:
+        preview = missing_ids[:preview_limit]
+        logger.warning(
+            f"Some common IDs are missing in the final sets. "
+            f"Preview of missing IDs: {preview}"
+        )
 
 
 def _save_ids_to_text_file(ids: Sequence[str], path: Path) -> None:
@@ -251,7 +312,12 @@ def _gather_all_ids(
     genotype_ids = set(
         eir.data_load.label_setup.gather_ids_from_data_source(data_source=genotype_path)
     )
+    logger.info(
+        "Gathered %d IDs from genotype data: ", len(genotype_ids), genotype_path
+    )
+
     label_file_ids = set(gather_ids_from_csv_file(file_path=label_file))
+    logger.info("Gathered %d IDs from label file: %s", len(label_file_ids), label_file)
 
     all_ids = set().union(genotype_ids, label_file_ids)
     if filter_common:

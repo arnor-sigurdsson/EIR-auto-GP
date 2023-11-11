@@ -1,4 +1,5 @@
 import warnings
+from io import StringIO
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
@@ -164,7 +165,8 @@ def build_df_from_basic_results(
     snp: str,
 ) -> pd.DataFrame:
     results_as_html = results.summary().tables[1].as_html()
-    df_linear = pd.read_html(results_as_html, header=0, index_col=0)[0]
+    html_buffer = StringIO(results_as_html)
+    df_linear = pd.read_html(io=html_buffer, header=0, index_col=0)[0]
     df_linear.index.name = "allele"
 
     df_linear_total = compute_total_effect(df=df_linear)

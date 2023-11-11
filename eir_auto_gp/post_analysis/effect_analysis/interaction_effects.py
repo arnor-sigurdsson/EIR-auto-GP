@@ -1,4 +1,5 @@
 import warnings
+from io import StringIO
 from itertools import combinations
 from pathlib import Path
 
@@ -160,7 +161,7 @@ def _extract_p_value_from_interaction_results(
     p_values = results.pvalues
     last_row_name = p_values.index[-1]
     assert ":" in last_row_name
-    p_value = p_values[-1]
+    p_value = p_values.iloc[-1]
     return p_value
 
 
@@ -181,7 +182,8 @@ def build_df_from_interaction_results(
     snp_2: str,
 ) -> pd.DataFrame:
     results_as_html = results.summary().tables[1].as_html()
-    df_linear = pd.read_html(results_as_html, header=0, index_col=0)[0]
+    html_buffer = StringIO(results_as_html)
+    df_linear = pd.read_html(io=html_buffer, header=0, index_col=0)[0]
     df_linear.index.name = "allele"
     df_linear.index = df_linear.index.str.replace(r"C\(Q\(", "", regex=True)
     df_linear.index = df_linear.index.str.replace(r"Q\(", "", regex=True)
