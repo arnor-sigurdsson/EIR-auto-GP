@@ -486,6 +486,9 @@ def plot_gwas_results(
         df = pd.read_csv(f, sep="\t", low_memory=False)
         df = df.dropna(how="any", axis=0)
 
+        df["P"] = df["P"].replace(0, np.finfo(float).tiny)
+        df["P"] = df["P"].map(lambda x: -np.log10(max(x, np.finfo(float).tiny)))
+
         try:
             fig_manhattan = get_manhattan_plot(df=df, p_value_line=p_value_line)
             manhattan_output_path = Path(
