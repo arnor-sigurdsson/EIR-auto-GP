@@ -4,7 +4,7 @@ import subprocess
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -468,7 +468,20 @@ def _prepare_df_columns_for_gwas(
     df.columns = [parse_target_for_plink(target=col) for col in df.columns]
     df = df.fillna(-9)
 
-    return df, one_hot_mappings
+    one_hot_mappings_converted = _convert_int64(obj=one_hot_mappings)
+
+    return df, one_hot_mappings_converted
+
+
+def _convert_int64(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        return {k: _convert_int64(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_int64(x) for x in obj]
+    elif isinstance(obj, np.int64):
+        return int(obj)
+    else:
+        return obj
 
 
 def parse_target_for_plink(target: str) -> str:
