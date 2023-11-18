@@ -77,7 +77,7 @@ def run_gwas_feature_selection(
     gwas_label_path = Path(filter_config.output_path, "gwas_label_file.csv")
     ensure_path_exists(path=gwas_label_path)
     if not gwas_label_path.exists():
-        gps.prepare_gwas_label_file(
+        _, one_hot_mappings_file = gps.prepare_gwas_label_file(
             label_file_path=filter_config.label_file_path,
             fam_file_path=fam_file_path,
             output_path=gwas_label_path,

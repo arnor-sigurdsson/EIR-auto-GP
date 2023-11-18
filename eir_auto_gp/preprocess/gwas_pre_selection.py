@@ -32,7 +32,7 @@ def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
     fam_file_path = next(Path(filter_config.genotype_data_path).glob("*.fam"))
 
     gwas_label_path = Path(filter_config.output_path, "gwas_label_file.csv")
-    prepare_gwas_label_file(
+    _, one_hot_mappings_file = prepare_gwas_label_file(
         label_file_path=filter_config.label_file_path,
         fam_file_path=fam_file_path,
         output_path=gwas_label_path,
@@ -67,6 +67,7 @@ def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
         covariate_names=filter_config.covariate_names,
         output_path=gwas_output_path,
         ids_file=train_ids_plink,
+        one_hot_mappings_file=one_hot_mappings_file,
     )
 
     logger.info("Running GWAS with command: %s", " ".join(command))
@@ -146,6 +147,7 @@ def get_plink_gwas_command(
     covariate_names: list[str],
     output_path: str | Path,
     ids_file: Optional[str | Path],
+    one_hot_mappings_file: Optional[Path],
 ) -> list[str]:
     ensure_path_exists(path=output_path, is_folder=True)
 
@@ -175,6 +177,7 @@ def get_plink_gwas_command(
             label_file_path=label_file_path,
             target_names=target_names,
             covariate_names=covariate_names_parsed,
+            one_hot_mappings_file=one_hot_mappings_file,
         )
 
         command_base += f" --covar {label_file_path}"
@@ -223,7 +226,10 @@ def get_pheno_names(
 
 
 def get_covariate_names(
-    label_file_path: Path, target_names: list[str], covariate_names: Optional[list[str]]
+    label_file_path: Path,
+    target_names: list[str],
+    covariate_names: Optional[list[str]],
+    one_hot_mappings_file: Optional[Path],
 ) -> list[str]:
     id_columns = ["ID", "FID", "IID"]
     all_columns = pd.read_csv(label_file_path, nrows=1, sep=r"\s+").columns.tolist()
@@ -234,23 +240,32 @@ def get_covariate_names(
         inferred_target_names.extend(
             [col for col in all_columns if col.startswith(f"{target}")]
         )
-
     to_skip += inferred_target_names
+
+    if one_hot_mappings_file:
+        with open(one_hot_mappings_file, "r") as f:
+            one_hot_mappings = json.load(f)
+    else:
+        one_hot_mappings = {}
+
+    all_covariates = [col for col in all_columns if col not in to_skip]
 
     if covariate_names is None:
         covariate_names = []
 
-    all_covariates = [col for col in all_columns if col not in to_skip]
     covariates_to_use = []
     for covariate in covariate_names:
-        covariates_to_use.extend(
-            [col for col in all_covariates if col.startswith(f"{covariate}")]
-        )
+        if covariate in one_hot_mappings:
+            covariates_to_use.extend(one_hot_mappings[covariate])
+        else:
+            covariates_to_use.extend(
+                [col for col in all_covariates if col == covariate]
+            )
 
     covariates_to_use = sorted(list(set(covariates_to_use)))
 
     logger.info(
-        "Inferred covariate names from label file and passed in covariates"
+        "Inferred covariate names from label file and passed in covariates "
         "for GWAS: %s",
         covariates_to_use,
     )
@@ -408,7 +423,7 @@ def _get_train_ids_file(filter_config: "GWASPreFilterConfig") -> Path:
 
 def prepare_gwas_label_file(
     label_file_path: str | Path, fam_file_path: str | Path, output_path: str | Path
-) -> Path:
+) -> tuple[Path, Path]:
     df = pd.read_csv(filepath_or_buffer=label_file_path, index_col=0, dtype={"ID": str})
 
     df_fam = _read_fam(fam_path=fam_file_path)
@@ -427,7 +442,7 @@ def prepare_gwas_label_file(
     with open(json_out, "w") as f:
         json.dump(one_hot_mappings, f)
 
-    return Path(output_path)
+    return Path(output_path), json_out
 
 
 def _prepare_df_columns_for_gwas(
