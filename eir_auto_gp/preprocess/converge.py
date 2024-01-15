@@ -489,7 +489,9 @@ class ParseDataWrapper(luigi.Task):
 
 
 def get_dynamic_valid_size(
-    num_samples_per_epoch: int, minimum: int, valid_size_upper_bound: int = 20000
+    num_samples_per_epoch: int,
+    minimum: int,
+    valid_size_upper_bound: int = 20000,
 ) -> int:
     valid_size = int(0.1 * num_samples_per_epoch)
 
@@ -503,7 +505,9 @@ def get_dynamic_valid_size(
 
 
 def get_batch_size(
-    samples_per_epoch: int, upper_bound: int = 64, lower_bound: int = 16
+    samples_per_epoch: int,
+    upper_bound: int = 64,
+    lower_bound: int = 4,
 ) -> int:
     batch_size = 2 ** int(math.log2(samples_per_epoch / 20))
 
@@ -513,4 +517,16 @@ def get_batch_size(
         return lower_bound
 
     logger.info("Batch size set to: %d", batch_size)
+
+    if batch_size <= 8:
+        logger.warning(
+            "Computed batch size based on number of training"
+            " samples per epoch (%d) "
+            " is very small (%d). This may cause issues with training."
+            " This is likely due to a small number of samples in the dataset."
+            " Consider increasing the number of samples in the dataset if possible.",
+            samples_per_epoch,
+            batch_size,
+        )
+
     return batch_size
