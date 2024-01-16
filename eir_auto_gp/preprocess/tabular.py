@@ -30,10 +30,11 @@ class ParseLabelFile(luigi.Task):
         return luigi.LocalTarget(self.output_path())
 
 
-def _parse_label_df(df: pd.DataFrame) -> pd.DataFrame:
-    df_no_na = _remove_any_na_from_label_df(df=df)
+def _parse_label_df(df: pd.DataFrame, remove_na: bool = False) -> pd.DataFrame:
+    if remove_na:
+        df = _remove_any_na_from_label_df(df=df)
 
-    return df_no_na
+    return df
 
 
 def _remove_any_na_from_label_df(df: pd.DataFrame) -> pd.DataFrame:

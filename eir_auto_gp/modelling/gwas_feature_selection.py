@@ -1,6 +1,6 @@
 import subprocess
 from pathlib import Path
-from typing import Dict, Any, Sequence, Optional
+from typing import Any, Dict, Optional, Sequence
 
 from aislib.misc_utils import ensure_path_exists, get_logger
 
@@ -76,8 +76,9 @@ def run_gwas_feature_selection(
 
     gwas_label_path = Path(filter_config.output_path, "gwas_label_file.csv")
     ensure_path_exists(path=gwas_label_path)
+    one_hot_mappings_file = None
     if not gwas_label_path.exists():
-        gps.prepare_gwas_label_file(
+        _, one_hot_mappings_file = gps.prepare_gwas_label_file(
             label_file_path=filter_config.label_file_path,
             fam_file_path=fam_file_path,
             output_path=gwas_label_path,
@@ -90,7 +91,7 @@ def run_gwas_feature_selection(
     target_names = gps.parse_gwas_label_file_column_names(
         target_names=filter_config.target_names, gwas_label_file=gwas_label_path
     )
-
+    maybe_prepare_plink_split_files(pre_split_folder=filter_config.pre_split_folder)
     train_ids_file = Path(filter_config.pre_split_folder, "train_ids_plink.txt")
     assert train_ids_file.exists(), f"Could not find train ids file at {train_ids_file}"
 
@@ -101,6 +102,7 @@ def run_gwas_feature_selection(
         covariate_names=filter_config.covariate_names,
         output_path=gwas_output_path,
         ids_file=train_ids_file,
+        one_hot_mappings_file=one_hot_mappings_file,
     )
 
     if not all_gwas_already_finished(
@@ -123,12 +125,74 @@ def run_gwas_feature_selection(
     return snps_to_keep_path
 
 
+def maybe_prepare_plink_split_files(pre_split_folder: str) -> None:
+    maybe_make_plink_train_ids_file(pre_split_folder=pre_split_folder)
+    maybe_make_plink_test_ids_file(pre_split_folder=pre_split_folder)
+
+
+from pathlib import Path
+
+
+def maybe_make_plink_train_ids_file(pre_split_folder: str) -> None:
+    pre_split_folder_path = Path(pre_split_folder)
+
+    train_ids_file = pre_split_folder_path / "train_ids_plink.txt"
+
+    if train_ids_file.exists():
+        return
+
+    train_ids = pre_split_folder_path / "train_ids.txt"
+    val_ids = pre_split_folder_path / "valid_ids.txt"
+
+    if not train_ids.exists():
+        raise ValueError(f"Could not find train ids file at {train_ids}")
+
+    if not val_ids.exists():
+        raise ValueError(f"Could not find val ids file at {val_ids}")
+
+    with open(train_ids_file, "w") as f:
+        with open(train_ids, "r") as train_f:
+            for line in train_f:
+                line = line.strip()
+                f.write(f"{line}\t{line}\n")
+
+        with open(val_ids, "r") as val_f:
+            for line in val_f:
+                line = line.strip()
+                f.write(f"{line}\t{line}\n")
+
+    logger.info(
+        "Could not find plink train ids file at %s, so created it.", train_ids_file
+    )
+
+
+def maybe_make_plink_test_ids_file(pre_split_folder: str) -> None:
+    pre_split_folder_path = Path(pre_split_folder)
+
+    test_ids_file = pre_split_folder_path / "test_ids_plink.txt"
+
+    if test_ids_file.exists():
+        return
+
+    test_ids = pre_split_folder_path / "test_ids.txt"
+
+    if not test_ids.exists():
+        raise ValueError(f"Could not find test ids file at {test_ids}")
+
+    with open(test_ids_file, "w") as f:
+        with open(test_ids, "r") as test_f:
+            for line in test_f:
+                line = line.strip()
+                f.write(f"{line}\t{line}\n")
+
+
 def all_gwas_already_finished(
     target_names: Sequence[str], gwas_output_folder: str | Path
 ) -> bool:
     for target_name in target_names:
+        parsed_target_name = gps.parse_target_for_plink(target=target_name)
         gwas_file = tuple(
-            i for i in Path(gwas_output_folder).glob(f"gwas.{target_name}*")
+            i for i in Path(gwas_output_folder).glob(f"gwas.{parsed_target_name}*")
         )
         if not gwas_file:
             return False

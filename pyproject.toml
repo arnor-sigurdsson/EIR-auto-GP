@@ -7,11 +7,18 @@ readme = "README.md"
 packages = [{include = "eir_auto_gp"}]
 
 [tool.poetry.dependencies]
-python = "^3.10.0"
-eir-dl = "^0.1.31a0"
-plink-pipelines = "^0.1.5a0"
+python = ">=3.11.0,<3.12"
+eir-dl = "^0.1.36a0"
+plink-pipelines = "^0.1.7a0"
 scikit-optimize = "^0.9.0"
 qmplot = "^0.3.2"
+pandas = "^2.0.3"
+xgboost = "^1.7.6"
+statsmodels = "^0.14.0"
+lxml = "^4.9.3"
+nxviz = "^0.7.4"
+networkx = "^3.1"
+psutil = "^5.9.5"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.1.0"
@@ -27,6 +34,7 @@ sphinx-rtd-theme = "^1.2.0"
 pdf2image = "^1.16.3"
 gdown = "^4.7.1"
 coverage = "^7.2.2"
+isort = "^5.12.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -35,3 +43,4 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry.scripts]
 eirautogp = "eir_auto_gp.run:main"
 eirautogwas = "eir_auto_gp.preprocess.gwas_pre_selection:main"
+eirautopostanalysis = "eir_auto_gp.post_analysis.run_post_analysis:main"

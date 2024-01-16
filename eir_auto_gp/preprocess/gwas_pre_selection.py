@@ -1,22 +1,19 @@
 import argparse
+import json
 import subprocess
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
-import json
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
+import pandas as pd
+from aislib.misc_utils import ensure_path_exists
 from qmplot import manhattanplot, qqplot
 from qmplot.modules._qq import ppoints
-from aislib.misc_utils import ensure_path_exists
 
-from eir_auto_gp.preprocess.converge import (
-    gather_ids_from_csv_file,
-    _id_setup_wrapper,
-)
+from eir_auto_gp.preprocess.converge import _id_setup_wrapper, gather_ids_from_csv_file
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
@@ -35,7 +32,7 @@ def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
     fam_file_path = next(Path(filter_config.genotype_data_path).glob("*.fam"))
 
     gwas_label_path = Path(filter_config.output_path, "gwas_label_file.csv")
-    prepare_gwas_label_file(
+    _, one_hot_mappings_file = prepare_gwas_label_file(
         label_file_path=filter_config.label_file_path,
         fam_file_path=fam_file_path,
         output_path=gwas_label_path,
@@ -70,6 +67,7 @@ def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
         covariate_names=filter_config.covariate_names,
         output_path=gwas_output_path,
         ids_file=train_ids_plink,
+        one_hot_mappings_file=one_hot_mappings_file,
     )
 
     logger.info("Running GWAS with command: %s", " ".join(command))
@@ -116,8 +114,12 @@ def parse_gwas_label_file_column_names(
         prefix_matches = [
             col for col in gwas_columns if col.startswith(f"{target_name}_")
         ]
-        assert prefix_matches
-        parsed_names.extend(prefix_matches)
+        target_gwas_format = parse_target_for_plink(target=target_name)
+        gwas_matches = [col for col in gwas_columns if col == target_gwas_format]
+        all_matches = prefix_matches + gwas_matches
+
+        assert all_matches
+        parsed_names.extend(all_matches)
 
     return parsed_names
 
@@ -145,6 +147,7 @@ def get_plink_gwas_command(
     covariate_names: list[str],
     output_path: str | Path,
     ids_file: Optional[str | Path],
+    one_hot_mappings_file: Optional[Path],
 ) -> list[str]:
     ensure_path_exists(path=output_path, is_folder=True)
 
@@ -160,14 +163,25 @@ def get_plink_gwas_command(
         " --1"
         f" --pheno {label_file_path}"
         f" --pheno-name {' '.join(pheno_names)}"
-        f" --glm skip-invalid-pheno "
+        f" --glm "
         f"firth-fallback hide-covar omit-ref no-x-sex allow-no-covars"
         f" --out {output_path}/gwas"
     )
 
     if covariate_names:
+        covariate_names_parsed = [
+            parse_target_for_plink(target=col) for col in covariate_names
+        ]
+
+        covariate_names_filtered = get_covariate_names(
+            label_file_path=label_file_path,
+            target_names=target_names,
+            covariate_names=covariate_names_parsed,
+            one_hot_mappings_file=one_hot_mappings_file,
+        )
+
         command_base += f" --covar {label_file_path}"
-        command_base += f" --covar-name {' '.join(covariate_names)}"
+        command_base += f" --covar-name {' '.join(covariate_names_filtered)}"
         command_base += " --covar-variance-standardize"
 
     if ids_file is not None:
@@ -185,15 +199,78 @@ def get_pheno_names(
     id_columns = ["ID", "FID", "IID"]
     all_columns = pd.read_csv(label_file_path, nrows=1, sep=r"\s+").columns.tolist()
     to_skip = id_columns + covariate_names
+
+    inferred_covariate_names = []
+    for covariate in covariate_names:
+        inferred_covariate_names.extend(
+            [col for col in all_columns if col.startswith(f"{covariate}")]
+        )
+
+    to_skip += inferred_covariate_names
+
     inferred_target_names = [col for col in all_columns if col not in to_skip]
+
+    targets_to_use = []
+    for target in inferred_target_names:
+        targets_to_use.extend(
+            [col for col in all_columns if col.startswith(f"{target}")]
+        )
 
     logger.info(
         "No phenotype target names provided, "
-        "inferring target names from label file: %s",
-        inferred_target_names,
+        "inferring target names from label file for GWAS: %s",
+        targets_to_use,
     )
 
-    return inferred_target_names
+    return targets_to_use
+
+
+def get_covariate_names(
+    label_file_path: Path,
+    target_names: list[str],
+    covariate_names: Optional[list[str]],
+    one_hot_mappings_file: Optional[Path],
+) -> list[str]:
+    id_columns = ["ID", "FID", "IID"]
+    all_columns = pd.read_csv(label_file_path, nrows=1, sep=r"\s+").columns.tolist()
+    to_skip = id_columns + target_names
+
+    inferred_target_names = []
+    for target in target_names:
+        inferred_target_names.extend(
+            [col for col in all_columns if col.startswith(f"{target}")]
+        )
+    to_skip += inferred_target_names
+
+    if one_hot_mappings_file:
+        with open(one_hot_mappings_file, "r") as f:
+            one_hot_mappings = json.load(f)
+    else:
+        one_hot_mappings = {}
+
+    all_covariates = [col for col in all_columns if col not in to_skip]
+
+    if covariate_names is None:
+        covariate_names = []
+
+    covariates_to_use = []
+    for covariate in covariate_names:
+        if covariate in one_hot_mappings:
+            covariates_to_use.extend(one_hot_mappings[covariate])
+        else:
+            covariates_to_use.extend(
+                [col for col in all_covariates if col == covariate]
+            )
+
+    covariates_to_use = sorted(list(set(covariates_to_use)))
+
+    logger.info(
+        "Inferred covariate names from label file and passed in covariates "
+        "for GWAS: %s",
+        covariates_to_use,
+    )
+
+    return covariates_to_use
 
 
 def add_plink_format_train_test_files(
@@ -295,7 +372,11 @@ def _gather_snps_to_keep_from_gwas_output(
     gwas_file_path: str | Path,
     p_value_threshold: float,
 ) -> list[str]:
-    df_gwas = pd.read_csv(filepath_or_buffer=gwas_file_path, sep="\t")
+    df_gwas = pd.read_csv(
+        filepath_or_buffer=gwas_file_path,
+        sep="\t",
+        low_memory=False,
+    )
 
     snps_to_keep = df_gwas[df_gwas["P"] < p_value_threshold]["ID"].tolist()
     logger.info(
@@ -342,7 +423,7 @@ def _get_train_ids_file(filter_config: "GWASPreFilterConfig") -> Path:
 
 def prepare_gwas_label_file(
     label_file_path: str | Path, fam_file_path: str | Path, output_path: str | Path
-) -> Path:
+) -> tuple[Path, Path]:
     df = pd.read_csv(filepath_or_buffer=label_file_path, index_col=0, dtype={"ID": str})
 
     df_fam = _read_fam(fam_path=fam_file_path)
@@ -352,6 +433,8 @@ def prepare_gwas_label_file(
     df.insert(0, "FID", df.index.map(iid_to_fid))
     df.insert(1, "IID", df.index)
 
+    assert df.index.name == "ID"
+
     df, one_hot_mappings = _prepare_df_columns_for_gwas(df=df)
 
     df.to_csv(path_or_buf=output_path, sep="\t", index=False)
@@ -359,7 +442,7 @@ def prepare_gwas_label_file(
     with open(json_out, "w") as f:
         json.dump(one_hot_mappings, f)
 
-    return Path(output_path)
+    return Path(output_path), json_out
 
 
 def _prepare_df_columns_for_gwas(
@@ -367,7 +450,8 @@ def _prepare_df_columns_for_gwas(
 ) -> Tuple[pd.DataFrame, dict[str, list[str]]]:
     """
     Note: We replace spaces with underscores in column names due to plink2 assuming
-    tab/space separated columns.
+    tab/space separated columns (i.e., it cannot handle spaces in column names
+    even when quoted).
 
     Note: For now we just have some simple heuristics for determining which columns
     to one-hot encode. We can make this more sophisticated/configurable later.
@@ -394,12 +478,30 @@ def _prepare_df_columns_for_gwas(
                     n_unique,
                 )
 
-    df = pd.get_dummies(df, columns=one_hot_target_columns)
+    df = pd.get_dummies(df, columns=one_hot_target_columns, drop_first=True)
 
-    df.columns = df.columns.str.replace(" ", "_")
+    df.columns = [parse_target_for_plink(target=col) for col in df.columns]
     df = df.fillna(-9)
 
-    return df, one_hot_mappings
+    one_hot_mappings_converted = _convert_int64(obj=one_hot_mappings)
+
+    return df, one_hot_mappings_converted
+
+
+def _convert_int64(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        return {k: _convert_int64(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_int64(x) for x in obj]
+    elif isinstance(obj, np.int64):
+        return int(obj)
+    else:
+        return obj
+
+
+def parse_target_for_plink(target: str) -> str:
+    target = target.replace(" ", "_").replace("-", "_")
+    return target
 
 
 def plot_gwas_results(
@@ -409,20 +511,28 @@ def plot_gwas_results(
         if "linear" not in f.name and "logistic" not in f.name:
             continue
 
-        df = pd.read_csv(f, sep="\t")
+        df = pd.read_csv(f, sep="\t", low_memory=False)
         df = df.dropna(how="any", axis=0)
 
-        fig_manhattan = get_manhattan_plot(df=df, p_value_line=p_value_line)
-        manhattan_output_path = Path(
-            gwas_output_path, "plots", f"{f.name}_manhattan.png"
-        )
-        ensure_path_exists(path=manhattan_output_path)
-        fig_manhattan.savefig(fname=manhattan_output_path, dpi=300)
+        df["P"] = df["P"].replace(0, np.finfo(float).tiny)
 
-        fig_qq = get_qq_plot(df=df)
-        qq_output_path = Path(gwas_output_path, "plots", f"{f.name}_qq.png")
-        ensure_path_exists(path=qq_output_path)
-        fig_qq.savefig(fname=qq_output_path, dpi=300)
+        try:
+            fig_manhattan = get_manhattan_plot(df=df, p_value_line=p_value_line)
+            manhattan_output_path = Path(
+                gwas_output_path, "plots", f"{f.name}_manhattan.png"
+            )
+            ensure_path_exists(path=manhattan_output_path)
+            fig_manhattan.savefig(fname=manhattan_output_path, dpi=300)
+        except Exception as e:
+            logger.warning("Failed to plot Manhattan plot for %s: %s", f, e)
+
+        try:
+            fig_qq = get_qq_plot(df=df)
+            qq_output_path = Path(gwas_output_path, "plots", f"{f.name}_qq.png")
+            ensure_path_exists(path=qq_output_path)
+            fig_qq.savefig(fname=qq_output_path, dpi=300)
+        except Exception as e:
+            logger.warning("Failed to plot QQ plot for %s: %s", f, e)
 
 
 def get_manhattan_plot(df: pd.DataFrame, p_value_line: Optional[float]) -> plt.Figure:

@@ -1,8 +1,8 @@
 import math
+import warnings
 from pathlib import Path
 from shutil import copyfile
-from typing import Sequence, Tuple, Dict, Optional
-import warnings
+from typing import Dict, Optional, Sequence, Tuple
 
 warnings.filterwarnings("ignore", message=".*newer version of deeplake.*")
 
@@ -84,6 +84,7 @@ class CommonSplitIntoTestSet(luigi.Task):
     pre_split_folder = luigi.Parameter()
     freeze_validation_set = luigi.BoolParameter()
     only_data = luigi.BoolParameter()
+    genotype_processing_chunk_size = luigi.IntParameter()
 
     def requires(self):
         """
@@ -101,6 +102,7 @@ class CommonSplitIntoTestSet(luigi.Task):
             output_folder=str(self.data_output_folder) + "/genotype",
             output_name=self.output_name,
             output_format=self.output_format,
+            genotype_processing_chunk_size=self.genotype_processing_chunk_size,
         )
 
         label_file_task = ParseLabelFile(
@@ -169,7 +171,7 @@ def _id_setup_wrapper(
     common_ids_to_keep: Sequence[str],
     freeze_validation_set: bool,
     pre_split_folder: Optional[str] = None,
-):
+) -> tuple[list[str], list[str], list[str]]:
     valid_path = None
     valid_path_exists = False
 
@@ -188,9 +190,19 @@ def _id_setup_wrapper(
         train_ids = (
             pd.read_csv(train_path, header=None).astype(str).squeeze("columns").tolist()
         )
+        check_extra_ids(
+            ids_to_check=train_ids,
+            id_set_name="train",
+            common_ids=common_ids_to_keep,
+        )
 
         test_ids = (
             pd.read_csv(test_path, header=None).astype(str).squeeze("columns").tolist()
+        )
+        check_extra_ids(
+            ids_to_check=test_ids,
+            id_set_name="test",
+            common_ids=common_ids_to_keep,
         )
 
         valid_path = pre_split_folder / "valid_ids.txt"
@@ -209,7 +221,7 @@ def _id_setup_wrapper(
             batch_size = get_batch_size(samples_per_epoch=len(train_ids))
             valid_size = get_dynamic_valid_size(
                 num_samples_per_epoch=len(train_ids),
-                batch_size=batch_size,
+                minimum=batch_size,
             )
             train_ids, valid_ids = _split_ids(
                 all_ids=train_ids, valid_or_test_size=valid_size
@@ -222,6 +234,11 @@ def _id_setup_wrapper(
                 .squeeze("columns")
                 .tolist()
             )
+            check_extra_ids(
+                ids_to_check=valid_ids,
+                id_set_name="valid",
+                common_ids=common_ids_to_keep,
+            )
 
         _save_ids_to_text_file(
             ids=valid_ids, path=output_root / "ids" / "valid_ids.txt"
@@ -233,7 +250,53 @@ def _id_setup_wrapper(
     logger.info("Train and valid IDs: %d", len(train_ids))
     logger.info("Test IDs: %d", len(test_ids))
 
+    check_missing_ids(
+        train_ids=train_ids,
+        valid_ids=valid_ids,
+        test_ids=test_ids,
+        common_ids=common_ids_to_keep,
+    )
+
     return train_ids, valid_ids, test_ids
+
+
+def check_extra_ids(
+    ids_to_check: Sequence[str],
+    id_set_name: str,
+    common_ids: Sequence[str],
+    preview_limit: int = 10,
+) -> None:
+    common_ids_set = set(common_ids)
+
+    extra_ids = list(set(ids_to_check) - common_ids_set)
+    if extra_ids:
+        preview = extra_ids[:preview_limit]
+        raise ValueError(
+            f"{id_set_name} contains IDs not in common IDs from "
+            f"genotype data and label file."
+            f"Preview of extra IDs: {preview}."
+            f"Please check that the IDs in {id_set_name} "
+            f"are available in both genotype data and label file."
+        )
+
+
+def check_missing_ids(
+    train_ids: Sequence[str],
+    valid_ids: Sequence[str],
+    test_ids: Sequence[str],
+    common_ids: Sequence[str],
+    preview_limit: int = 10,
+) -> None:
+    common_ids_set = set(common_ids)
+
+    combined_ids = set(train_ids) | set(valid_ids) | set(test_ids)
+    missing_ids = list(common_ids_set - combined_ids)
+    if missing_ids:
+        preview = missing_ids[:preview_limit]
+        logger.warning(
+            f"Some common IDs are missing in the final sets. "
+            f"Preview of missing IDs: {preview}"
+        )
 
 
 def _save_ids_to_text_file(ids: Sequence[str], path: Path) -> None:
@@ -249,7 +312,12 @@ def _gather_all_ids(
     genotype_ids = set(
         eir.data_load.label_setup.gather_ids_from_data_source(data_source=genotype_path)
     )
+    logger.info(
+        "Gathered %d IDs from genotype data: ", len(genotype_ids), genotype_path
+    )
+
     label_file_ids = set(gather_ids_from_csv_file(file_path=label_file))
+    logger.info("Gathered %d IDs from label file: %s", len(label_file_ids), label_file)
 
     all_ids = set().union(genotype_ids, label_file_ids)
     if filter_common:
@@ -280,6 +348,7 @@ def gather_ids_from_csv_file(file_path: Path, drop_nas: bool = False):
 def _split_ids(
     all_ids: Sequence[str], valid_or_test_size: float | int = 0.1
 ) -> Tuple[Sequence[str], Sequence[str]]:
+    assert len(all_ids) > 0
     train_ids, test_or_valid_ids = eir.data_load.label_setup.split_ids(
         ids=all_ids, valid_size=valid_or_test_size
     )
@@ -420,12 +489,14 @@ class ParseDataWrapper(luigi.Task):
 
 
 def get_dynamic_valid_size(
-    num_samples_per_epoch: int, batch_size: int, valid_size_upper_bound: int = 20000
+    num_samples_per_epoch: int,
+    minimum: int,
+    valid_size_upper_bound: int = 20000,
 ) -> int:
     valid_size = int(0.1 * num_samples_per_epoch)
 
-    if valid_size < batch_size:
-        valid_size = batch_size
+    if valid_size < minimum:
+        valid_size = minimum
 
     if valid_size > valid_size_upper_bound:
         valid_size = valid_size_upper_bound
@@ -434,7 +505,9 @@ def get_dynamic_valid_size(
 
 
 def get_batch_size(
-    samples_per_epoch: int, upper_bound: int = 64, lower_bound: int = 16
+    samples_per_epoch: int,
+    upper_bound: int = 64,
+    lower_bound: int = 4,
 ) -> int:
     batch_size = 2 ** int(math.log2(samples_per_epoch / 20))
 
@@ -442,4 +515,18 @@ def get_batch_size(
         return upper_bound
     elif batch_size < lower_bound:
         return lower_bound
+
+    logger.info("Batch size set to: %d", batch_size)
+
+    if batch_size <= 8:
+        logger.warning(
+            "Computed batch size based on number of training"
+            " samples per epoch (%d) "
+            " is very small (%d). This may cause issues with training."
+            " This is likely due to a small number of samples in the dataset."
+            " Consider increasing the number of samples in the dataset if possible.",
+            samples_per_epoch,
+            batch_size,
+        )
+
     return batch_size

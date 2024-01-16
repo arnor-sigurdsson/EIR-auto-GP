@@ -1,8 +1,9 @@
 from pathlib import Path
-from typing import Optional, Tuple, Iterator, Literal
+from typing import Iterator, Literal, Optional, Tuple
 
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists
+from eir.setup.input_setup_modules.setup_omics import read_bim
 from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 from eir.visualization.interpretation_visualization import plot_snp_manhattan_plots
 from skopt import Optimizer
@@ -102,8 +103,11 @@ def run_dl_bo_selection(
     )
     logger.info("Top %d SNPs selected.", top_n)
 
+    df_bim = read_bim(bim_file_path=bim_file)
     df_top_n = get_dl_top_n_snp_list_df(
-        df_attributions=df_attributions, top_n_snps=top_n
+        df_attributions=df_attributions,
+        df_bim=df_bim,
+        top_n_snps=top_n,
     )
     ensure_path_exists(path=snp_subset_file)
     df_top_n.to_csv(path_or_buf=snp_subset_file, index=False, header=False)
@@ -215,14 +219,25 @@ def _handle_dl_feature_selection_options(
 
 
 def get_dl_top_n_snp_list_df(
-    df_attributions: pd.DataFrame, top_n_snps: int
+    df_attributions: pd.DataFrame, df_bim: pd.DataFrame, top_n_snps: int
 ) -> pd.DataFrame:
+    """
+    We use the bim order in case there are e.g. duplicated BP coordinates,
+    to preserve the original order.
+    """
+
     target_columns = [i for i in df_attributions.columns if "Aggregated" in i]
     assert len(target_columns) == 1
     target_column = target_columns[0]
 
+    df_bim["order"] = df_bim.reset_index().index
+
     df_top_n = df_attributions.nlargest(n=top_n_snps, columns=target_column)
     df_top_n = df_top_n.reset_index()
+
+    df_top_n = df_top_n.merge(df_bim[["VAR_ID", "order"]], on="VAR_ID")
+    df_top_n = df_top_n.sort_values(by=["order"])
+
     df_top_n = df_top_n.rename(columns={"VAR_ID": "SNP"})
     df_top_n = df_top_n[["SNP"]]
 

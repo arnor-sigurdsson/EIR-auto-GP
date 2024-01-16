@@ -1,17 +1,19 @@
 import argparse
-from argparse import RawTextHelpFormatter
+import json
 import shutil
+from argparse import RawTextHelpFormatter
 from copy import copy
 from pathlib import Path
-from typing import Dict, Any, Sequence, Optional
+from typing import Any, Dict, Optional, Sequence
 
 import luigi
 import pandas as pd
+from aislib.misc_utils import ensure_path_exists
 
 from eir_auto_gp.analysis.run_analysis import RunAnalysisWrapper
 from eir_auto_gp.preprocess.converge import ParseDataWrapper
-from eir_auto_gp.utils.utils import get_logger
 from eir_auto_gp.preprocess.gwas_pre_selection import validate_geno_data_path
+from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
 
@@ -30,6 +32,15 @@ def get_argument_parser() -> argparse.ArgumentParser:
         "Note that the file names are not included in this path,\n"
         "only the root folder. The file names are inferred, and\n"
         "*only one* set of files is expected.",
+    )
+
+    parser.add_argument(
+        "--genotype_processing_chunk_size",
+        type=int,
+        default=1000,
+        help="Chunk size for processing genotype data. Inreasing"
+        "this value will increase the memory usage, but will"
+        "likely speed up the processing.",
     )
 
     parser.add_argument(
@@ -364,8 +375,31 @@ def get_root_task(
 def main():
     parser = get_argument_parser()
     cl_args = get_cl_args(parser=parser)
+    store_experiment_config(cl_args=cl_args)
 
     run(cl_args=cl_args)
+
+
+def store_experiment_config(
+    cl_args: argparse.Namespace,
+) -> None:
+    config_dict = vars(cl_args)
+
+    if cl_args.global_output_folder is None:
+        output_folder = Path(cl_args.modelling_output_folder).parent
+    else:
+        output_folder = Path(cl_args.global_output_folder)
+
+    ensure_path_exists(path=output_folder, is_folder=True)
+    output_path = output_folder / "config.json"
+
+    if output_path.exists():
+        logger.warning(
+            f"Output config file {output_path} already exists. Overwriting it."
+        )
+
+    with open(output_path, "w") as f:
+        json.dump(config_dict, f, indent=4)
 
 
 def parse_output_folders(cl_args: argparse.Namespace) -> argparse.Namespace:
@@ -437,6 +471,7 @@ def build_data_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "only_data",
         "pre_split_folder",
         "freeze_validation_set",
+        "genotype_processing_chunk_size",
     ]
 
     base = extract_from_namespace(namespace=cl_args, keys=data_keys)

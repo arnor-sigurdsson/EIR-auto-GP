@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -7,12 +8,13 @@ from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 
 from eir_auto_gp.modelling.run_modelling import _lines_in_file
 from eir_auto_gp.preprocess.gwas_pre_selection import (
+    _get_plink_filter_snps_command,
+    get_covariate_names,
     get_gwas_parser,
     get_gwas_pre_filter_config,
-    run_gwas_pre_filter_wrapper,
-    _get_plink_filter_snps_command,
-    get_plink_gwas_command,
     get_pheno_names,
+    get_plink_gwas_command,
+    run_gwas_pre_filter_wrapper,
 )
 
 
@@ -121,9 +123,9 @@ def test_get_plink_gwas_command():
 
     with patch("eir_auto_gp.preprocess.gwas_pre_selection.ensure_path_exists") as _:
         with patch(
-            "eir_auto_gp.preprocess.gwas_pre_selection.ensure_path_exists"
-        ) as mocked_get_pheno_names:
-            mocked_get_pheno_names.return_value = target_names
+            "eir_auto_gp.preprocess.gwas_pre_selection.get_covariate_names"
+        ) as mocked_get_covar_names:
+            mocked_get_covar_names.return_value = covariate_names
 
             result = get_plink_gwas_command(
                 base_path=base_path,
@@ -132,6 +134,7 @@ def test_get_plink_gwas_command():
                 covariate_names=covariate_names,
                 output_path=output_path,
                 ids_file=ids_file,
+                one_hot_mappings_file=None,
             )
 
     expected_result = [
@@ -145,7 +148,6 @@ def test_get_plink_gwas_command():
         "A",
         "B",
         "--glm",
-        "skip-invalid-pheno",
         "firth-fallback",
         "hide-covar",
         "omit-ref",
@@ -167,8 +169,16 @@ def test_get_plink_gwas_command():
 @pytest.mark.parametrize(
     "target_names,covariate_names,expected_result",
     [
-        (["A", "B"], ["C", "D"], ["A", "B"]),
-        (None, ["C", "D"], ["A", "B"]),
+        (
+            ["A", "B"],
+            ["C", "D"],
+            ["A", "B"],
+        ),
+        (
+            None,
+            ["C", "D"],
+            ["A", "B"],
+        ),
     ],
 )
 def test_get_pheno_names(target_names, covariate_names, expected_result):
@@ -182,3 +192,117 @@ def test_get_pheno_names(target_names, covariate_names, expected_result):
         )
 
     assert result == expected_result
+
+
+def mocked_read_csv_covariate(*args, **kwargs):
+    df_mock = pd.DataFrame(
+        {
+            "A": [1],
+            "B": [2],
+            "C": [3],
+            "D": [4],
+            "ID": [5],
+            "FID": [6],
+            "IID": [7],
+        }
+    )
+    return df_mock
+
+
+@pytest.mark.parametrize(
+    "target_names,covariate_names,expected_result",
+    [
+        (
+            ["A", "B"],
+            ["C", "D"],
+            ["C", "D"],
+        ),
+        (
+            ["A", "B"],
+            None,
+            [],
+        ),
+        (
+            ["A", "B"],
+            [],
+            [],
+        ),
+    ],
+)
+def test_get_covariate_names_basic(target_names, covariate_names, expected_result):
+    label_file_path = Path("label_file_path")
+
+    with patch("pandas.read_csv", side_effect=mocked_read_csv_covariate):
+        result = get_covariate_names(
+            label_file_path=label_file_path,
+            target_names=target_names,
+            covariate_names=covariate_names,
+            one_hot_mappings_file=None,
+        )
+
+    assert result == expected_result
+
+
+@pytest.fixture
+def mock_csv(tmp_path):
+    sample_csv = """
+    ID FID IID Age Gender
+    1 1 1 30 M
+    2 1 2 35 F
+    """
+
+    d = tmp_path / "sub"
+    d.mkdir(exist_ok=True)
+    p = d / "sample.csv"
+    p.write_text(sample_csv)
+    return p
+
+
+@pytest.fixture
+def mock_one_hot_mappings(tmp_path):
+    sample_one_hot_mappings = {
+        "Gender": [
+            "Gender_M",
+            "Gender_F",
+        ]
+    }
+
+    d = tmp_path / "sub"
+    d.mkdir(exist_ok=True)
+    p = d / "one_hot_mappings.json"
+    p.write_text(json.dumps(sample_one_hot_mappings))
+    return p
+
+
+def test_get_covariate_names_with_one_hot(mock_csv, mock_one_hot_mappings):
+    target_names = ["Age"]
+    covariate_names = ["Gender"]
+    result = get_covariate_names(
+        label_file_path=mock_csv,
+        target_names=target_names,
+        covariate_names=covariate_names,
+        one_hot_mappings_file=mock_one_hot_mappings,
+    )
+    assert sorted(result) == sorted(["Gender_M", "Gender_F"])
+
+
+def test_get_covariate_names_no_one_hot(mock_csv):
+    target_names = ["Age"]
+    covariate_names = ["Gender"]
+    result = get_covariate_names(
+        label_file_path=mock_csv,
+        target_names=target_names,
+        covariate_names=covariate_names,
+        one_hot_mappings_file=None,
+    )
+    assert result == ["Gender"]
+
+
+def test_get_covariate_names_no_inputs(mock_csv, mock_one_hot_mappings):
+    result = get_covariate_names(
+        label_file_path=mock_csv,
+        target_names=[],
+        covariate_names=[],
+        one_hot_mappings_file=mock_one_hot_mappings,
+    )
+    assert result == []

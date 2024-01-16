@@ -11,6 +11,17 @@ repos:
       - id: check-added-large-files
         args: ['--maxkb=1024']
 
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        args: ["--profile", "black", "--filter-files"]
+        name: Run isort
+        entry: isort
+        language: system
+        types: [ python ]
+        stages: [ commit ]
+
   - repo: local
     hooks:
       - id: flake8
@@ -26,9 +37,3 @@ repos:
         language: system
         types: [ python ]
         stages: [ push ]
-
-      - id: update-reqs
-        name: Update requirements.txt
-        entry: ./misc/update_reqs.sh
-        language: system
-        stages: [ commit ]

@@ -2,7 +2,7 @@ import json
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import Iterator, Dict, Sequence, Literal, Tuple
+from typing import Dict, Iterator, Literal, Sequence, Tuple
 
 import luigi
 import matplotlib.pyplot as plt
@@ -104,6 +104,9 @@ class GatherFeatureSelectionResults(luigi.Task):
             )
             output_path = output_folder / f"{target_name}_feature_selection.pdf"
             figure.savefig(output_path)
+
+            df_output_path = output_folder / f"{target_name}_feature_selection.csv"
+            df_combined.to_csv(path_or_buf=df_output_path)
 
     def output(self):
         output_folder = Path(self.analysis_config["analysis_output_folder"])
