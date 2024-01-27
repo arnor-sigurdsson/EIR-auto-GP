@@ -514,6 +514,7 @@ def _get_global_injections(
     memory_dataset = _get_memory_dataset(n_snps=n_snps, n_samples=n_samples)
     n_workers = _get_dataloader_workers(memory_dataset=memory_dataset)
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
+    early_stopping_buffer = max(early_stopping_buffer, 1000)
     sample_interval = min(2000, iter_per_epoch)
 
     injections = {

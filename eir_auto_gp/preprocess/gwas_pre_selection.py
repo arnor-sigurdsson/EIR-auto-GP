@@ -424,7 +424,11 @@ def _get_train_ids_file(filter_config: "GWASPreFilterConfig") -> Path:
 def prepare_gwas_label_file(
     label_file_path: str | Path, fam_file_path: str | Path, output_path: str | Path
 ) -> tuple[Path, Path]:
-    df = pd.read_csv(filepath_or_buffer=label_file_path, index_col=0, dtype={"ID": str})
+    df = pd.read_csv(
+        filepath_or_buffer=label_file_path,
+        index_col="ID",
+        dtype={"ID": str},
+    )
 
     df_fam = _read_fam(fam_path=fam_file_path)
 

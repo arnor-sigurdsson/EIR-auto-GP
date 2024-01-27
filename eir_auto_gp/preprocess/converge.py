@@ -313,7 +313,7 @@ def _gather_all_ids(
         eir.data_load.label_setup.gather_ids_from_data_source(data_source=genotype_path)
     )
     logger.info(
-        "Gathered %d IDs from genotype data: ", len(genotype_ids), genotype_path
+        "Gathered %d IDs from genotype data: %s", len(genotype_ids), genotype_path
     )
 
     label_file_ids = set(gather_ids_from_csv_file(file_path=label_file))
@@ -509,7 +509,7 @@ def get_batch_size(
     upper_bound: int = 64,
     lower_bound: int = 4,
 ) -> int:
-    batch_size = 2 ** int(math.log2(samples_per_epoch / 20))
+    batch_size = 2 ** int(math.log2(samples_per_epoch / 40))
 
     if batch_size > upper_bound:
         return upper_bound
