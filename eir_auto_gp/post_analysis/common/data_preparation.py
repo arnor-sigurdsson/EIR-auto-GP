@@ -15,6 +15,7 @@ from eir_auto_gp.modelling.dl_feature_selection import (
     get_dl_gwas_top_n_snp_list_df,
     get_dl_top_n_snp_list_df,
 )
+from eir_auto_gp.modelling.gwas_bo_feature_selection import get_gwas_top_n_snp_list_df
 
 logger = get_logger(name=__name__)
 
@@ -116,7 +117,7 @@ def get_subset_indices_and_names(
                 top_n_snps=top_n_snps,
             )
         case (None, pd.DataFrame()):
-            df_top_snps = _get_gwas_top_n_snp_list_df(
+            df_top_snps = get_gwas_top_n_snp_list_df(
                 df_gwas=df_gwas_attributions,
                 top_n_snps=top_n_snps,
             )
@@ -148,14 +149,6 @@ def validate_file_paths(dl_path: Optional[Path], gwas_path: Optional[Path]) -> N
             f"Neither {dl_path} nor {gwas_path} exist. "
             "Post-analysis requires at least one of these files to exist."
         )
-
-
-def _get_gwas_top_n_snp_list_df(df_gwas: pd.DataFrame, top_n_snps: int) -> pd.DataFrame:
-    df = df_gwas.sort_values(by="GWAS P-VALUE", ascending=True)
-    df_top_n = df.iloc[:top_n_snps, :]
-    df_top_n.index.name = "SNP"
-    df_top_n["SNP"] = df_top_n.index
-    return df_top_n
 
 
 def _read_gwas_attributions(gwas_attributions_path: Path) -> pd.DataFrame:

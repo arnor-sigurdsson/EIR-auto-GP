@@ -143,7 +143,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--feature_selection",
         default="gwas->dl",
-        choices=["dl", "gwas", "gwas->dl", "dl+gwas", None],
+        choices=["dl", "gwas", "gwas->dl", "dl+gwas", "gwas+bo", None],
         required=False,
         help="What kind of feature selection strategy to use for SNP selection:\n"
         "  - If None, no feature selection is performed.\n"

@@ -16,7 +16,7 @@ from aislib.misc_utils import ensure_path_exists
 from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_replace
 
 from eir_auto_gp.modelling.configs import AggregateConfig, get_aggregate_config
-from eir_auto_gp.modelling.dl_feature_selection import get_genotype_subset_snps_file
+from eir_auto_gp.modelling.feature_selection import get_genotype_subset_snps_file
 from eir_auto_gp.modelling.gwas_feature_selection import run_gwas_feature_selection
 from eir_auto_gp.preprocess.converge import (
     ParseDataWrapper,
@@ -365,12 +365,13 @@ def get_gwas_manual_subset_file(
 
     if "gwas" in feature_selection_tasks:
         if task == "train":
-            return run_gwas_feature_selection(
+            gwas_snps_to_keep_path = run_gwas_feature_selection(
                 genotype_data_path=genotype_data_path,
                 data_config=data_config,
                 modelling_config=modelling_config,
                 feature_selection_config=feature_selection_config,
             )
+            return gwas_snps_to_keep_path
         elif task == "test":
             fs_output_folder = Path(
                 feature_selection_config["feature_selection_output_folder"]

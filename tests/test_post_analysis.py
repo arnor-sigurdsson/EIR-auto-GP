@@ -26,7 +26,7 @@ def _get_test_modelling_cl_command(
     return base
 
 
-@pytest.mark.parametrize("feature_selection", ["dl", "gwas", "gwas->dl"])
+@pytest.mark.parametrize("feature_selection", ["dl", "gwas", "gwas->dl", "gwas+bo"])
 def test_post_analysis_classification(
     feature_selection: str,
     simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
@@ -62,7 +62,7 @@ def test_post_analysis_classification(
     )
 
 
-@pytest.mark.parametrize("feature_selection", ["dl", "gwas", "gwas->dl"])
+@pytest.mark.parametrize("feature_selection", ["dl", "gwas", "gwas->dl", "gwas+bo"])
 def test_post_analysis_regression(
     feature_selection: str,
     simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
