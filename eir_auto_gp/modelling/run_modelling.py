@@ -298,6 +298,7 @@ def build_injection_params(
         bim_file=bim_file,
         n_dl_feature_selection_setup_folds=n_act_folds,
         manual_subset_from_gwas=gwas_manual_subset_file,
+        gwas_p_value_threshold=feature_selection_config["gwas_p_value_threshold"],
     )
 
     base_output_folder = modelling_config["modelling_output_folder"]

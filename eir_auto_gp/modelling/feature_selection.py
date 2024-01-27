@@ -18,6 +18,7 @@ def get_genotype_subset_snps_file(
     feature_selection_approach: Literal["dl", "gwas", "gwas->dl", "dl+gwas", None],
     n_dl_feature_selection_setup_folds: int,
     manual_subset_from_gwas: Optional[str | Path],
+    gwas_p_value_threshold: Optional[float],
 ) -> Optional[Path]:
     match feature_selection_approach:
         case None:
@@ -31,6 +32,7 @@ def get_genotype_subset_snps_file(
                 folder_with_runs=folder_with_runs,
                 feature_selection_output_folder=feature_selection_output_folder,
                 gwas_output_folder=Path(manual_subset_from_gwas).parent,
+                gwas_p_value_threshold=gwas_p_value_threshold,
             )
 
             return computed_subset_file

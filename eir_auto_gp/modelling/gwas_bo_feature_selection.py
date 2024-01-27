@@ -19,6 +19,7 @@ def run_gwas_bo_feature_selection(
     folder_with_runs: Path,
     feature_selection_output_folder: Path,
     gwas_output_folder: Optional[Path],
+    gwas_p_value_threshold: Optional[float],
 ) -> Optional[Path]:
     fs_out_folder = feature_selection_output_folder
     subsets_out_folder = fs_out_folder / "dl_importance" / "snp_subsets"
@@ -39,6 +40,7 @@ def run_gwas_bo_feature_selection(
         folder_with_runs=folder_with_runs,
         feature_selection_output_folder=feature_selection_output_folder,
         fold=fold,
+        gwas_p_value_threshold=gwas_p_value_threshold,
     )
     logger.info("Top %d SNPs selected.", top_n)
 
@@ -56,16 +58,28 @@ def get_gwas_bo_auto_top_n(
     folder_with_runs: Path,
     feature_selection_output_folder: Path,
     fold: int,
+    gwas_p_value_threshold: Optional[float],
 ) -> Tuple[int, float]:
-    manual_fractions = _get_manual_gwas_bo_fractions(
+    max_fraction = _compute_max_fraction(
+        df_gwas=df_gwas,
+        gwas_p_value_threshold=gwas_p_value_threshold,
+    )
+
+    manual_fractions, manual_p_values = _get_manual_gwas_bo_fractions(
         df_gwas=df_gwas,
         min_snps_cutoff=1,
+        max_fraction=max_fraction,
     )
 
     if fold < len(manual_fractions):
         next_fraction = manual_fractions[fold]
+        logger.info(
+            "Next manual fraction for GWAS+BO: %f (p-value: %f)",
+            next_fraction,
+            manual_p_values[fold],
+        )
     else:
-        opt = Optimizer(dimensions=[(0.0, 1.0)])
+        opt = Optimizer(dimensions=[(0.0, max_fraction)])
         df_history = gather_fractions_and_performances(
             folder_with_runs=folder_with_runs,
             feature_selection_output_folder=feature_selection_output_folder,
@@ -76,20 +90,57 @@ def get_gwas_bo_auto_top_n(
             opt.tell([t.fraction], negated_performance)
 
         next_fraction = opt.ask()[0]
-        logger.info("Next fraction: %f", next_fraction)
+        logger.info("Next computed fraction for GWAS+BO: %f", next_fraction)
 
     top_n = int(next_fraction * len(df_gwas))
+    n_snps = len(df_gwas)
+
     if top_n < 16:
-        top_n = 16
-        next_fraction = top_n / len(df_gwas)
+        if n_snps >= 16:
+            top_n = 16
+            logger.info(
+                "Computed top_n for GWAS+BO %d is too small (< 16). Setting to 16.",
+                top_n,
+            )
+        else:
+            top_n = n_snps
+            logger.info(
+                "Dataset contains only %d SNPs, less than 16. Using all %d SNPs.",
+                n_snps,
+                top_n,
+            )
+
+        next_fraction = top_n / n_snps
 
     return top_n, next_fraction
+
+
+def _compute_max_fraction(
+    df_gwas: pd.DataFrame, gwas_p_value_threshold: Optional[float]
+) -> float:
+    if gwas_p_value_threshold is None:
+        return 1.0
+
+    df_subset = df_gwas[df_gwas["GWAS P-VALUE"] < gwas_p_value_threshold].copy()
+    n_snps = len(df_subset)
+    fraction = n_snps / len(df_gwas)
+
+    logger.info(
+        "Computed max fraction of SNPs with p-value < %f: %f for GWAS+BO.",
+        gwas_p_value_threshold,
+        fraction,
+    )
+
+    assert fraction > 0.0
+    return fraction
 
 
 def _get_manual_gwas_bo_fractions(
     df_gwas: pd.DataFrame,
     min_snps_cutoff: int,
-) -> list[float]:
+    max_fraction: float,
+) -> tuple[list[float], list[float]]:
+    p_values = []
     fractions = []
     for p in range(8, 2, -1):
         p_value = 10**-p
@@ -106,14 +157,24 @@ def _get_manual_gwas_bo_fractions(
             continue
 
         fraction = n_snps / len(df_gwas)
-        fractions.append(fraction)
+        if fraction > max_fraction:
+            logger.info(
+                "Skipping p-value for GWAS+BO %f due to %d SNPs being too many (> %f).",
+                p_value,
+                n_snps,
+                max_fraction,
+            )
+            continue
 
-    return fractions
+        fractions.append(fraction)
+        p_values.append(p_value)
+
+    return fractions, p_values
 
 
 def get_gwas_top_n_snp_list_df(df_gwas: pd.DataFrame, top_n_snps: int) -> pd.DataFrame:
     df = df_gwas.sort_values(by="GWAS P-VALUE", ascending=True)
-    df_top_n = df.iloc[:top_n_snps, :]
+    df_top_n = df.iloc[:top_n_snps, :].copy()
     df_top_n.index.name = "SNP"
     df_top_n["SNP"] = df_top_n.index
     return df_top_n
