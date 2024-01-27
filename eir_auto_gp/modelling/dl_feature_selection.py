@@ -350,7 +350,8 @@ def get_auto_top_n(
         )
 
         for t in df_history.itertuples():
-            opt.tell([t.fraction], t.best_val_performance)
+            negated_performance = -t.best_val_performance
+            opt.tell([t.fraction], negated_performance)
 
         next_fraction = opt.ask()[0]
 
