@@ -1,0 +1,6 @@
+eirautogp \
+--genotype_data_path eir_auto_gp_tutorials/01_basic_tutorial/data/penncath \
+--label_file_path eir_auto_gp_tutorials/01_basic_tutorial/data/penncath/penncath.csv \
+--global_output_folder eir_auto_gp_tutorials/tutorial_runs/03_feature_selection_data \
+--only_data \
+--freeze_validation_set

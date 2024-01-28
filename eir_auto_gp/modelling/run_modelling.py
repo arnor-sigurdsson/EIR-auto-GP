@@ -46,7 +46,7 @@ class RunModellingWrapper(luigi.Task):
                 modelling_config=self.modelling_config,
             )
 
-            cleanup_tmp_files(modelling_config=self.modelling_config)
+        cleanup_tmp_files(modelling_config=self.modelling_config)
 
     def output(self):
         return self.input()
@@ -428,7 +428,7 @@ def build_tmp_label_file(
 
     if prefix_name == "test":
         train_file_path = Path(tmp_dir) / "train_label_file.csv"
-        assert Path(train_file_path).exists()
+        assert Path(train_file_path).exists(), train_file_path
         df_train = pd.read_csv(train_file_path, usecols=["ID"])
         ids_train = set(df_train["ID"].tolist())
         ids_test = set(df["ID"].tolist())

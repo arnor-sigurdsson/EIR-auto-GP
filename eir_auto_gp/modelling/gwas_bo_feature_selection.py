@@ -22,13 +22,13 @@ def run_gwas_bo_feature_selection(
     gwas_p_value_threshold: Optional[float],
 ) -> Optional[Path]:
     fs_out_folder = feature_selection_output_folder
-    subsets_out_folder = fs_out_folder / "dl_importance" / "snp_subsets"
-    snp_subset_file = subsets_out_folder / f"dl_snps_{fold}.txt"
+    subsets_out_folder = fs_out_folder / "snp_importance" / "snp_subsets"
+    snp_subset_file = subsets_out_folder / f"chosen_snps_{fold}.txt"
 
     if snp_subset_file.exists():
         return snp_subset_file
 
-    fractions_file = subsets_out_folder / f"dl_snps_fraction_{fold}.txt"
+    fractions_file = subsets_out_folder / f"chosen_snps_fraction_{fold}.txt"
 
     assert gwas_output_folder is not None
     df_gwas = read_gwas_df(gwas_output_folder=gwas_output_folder)
@@ -71,15 +71,24 @@ def get_gwas_bo_auto_top_n(
         max_fraction=max_fraction,
     )
 
+    n_snps = len(df_gwas)
+
     if fold < len(manual_fractions):
         next_fraction = manual_fractions[fold]
         logger.info(
-            "Next manual fraction for GWAS+BO: %f (p-value: %f)",
+            "Next manual fraction for GWAS+BO: %f (p-value: %.2e)",
             next_fraction,
             manual_p_values[fold],
         )
     else:
-        opt = Optimizer(dimensions=[(0.0, max_fraction)])
+        threshold_snps = min(16, n_snps)
+        min_fraction = threshold_snps / n_snps
+        logger.debug("Setting minimum fraction to %.2e.", min_fraction)
+
+        opt = Optimizer(
+            dimensions=[(min_fraction, max_fraction, "log-uniform")],
+            n_initial_points=len(manual_fractions),
+        )
         df_history = gather_fractions_and_performances(
             folder_with_runs=folder_with_runs,
             feature_selection_output_folder=feature_selection_output_folder,
@@ -93,7 +102,6 @@ def get_gwas_bo_auto_top_n(
         logger.info("Next computed fraction for GWAS+BO: %f", next_fraction)
 
     top_n = int(next_fraction * len(df_gwas))
-    n_snps = len(df_gwas)
 
     if top_n < 16:
         if n_snps >= 16:

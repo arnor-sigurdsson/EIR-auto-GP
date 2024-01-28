@@ -38,7 +38,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
         "--genotype_processing_chunk_size",
         type=int,
         default=1000,
-        help="Chunk size for processing genotype data. Inreasing"
+        help="Chunk size for processing genotype data. Increasing"
         "this value will increase the memory usage, but will"
         "likely speed up the processing.",
     )
@@ -142,7 +142,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--feature_selection",
-        default="gwas->dl",
+        default="gwas+bo",
         choices=["dl", "gwas", "gwas->dl", "dl+gwas", "gwas+bo", None],
         required=False,
         help="What kind of feature selection strategy to use for SNP selection:\n"
@@ -154,7 +154,11 @@ def get_argument_parser() -> argparse.ArgumentParser:
         "  - If 'gwas->dl', feature selection is first performed using GWAS p-values,\n"
         "    and then the top SNPs are selected iteratively using the DL "
         "importance method,\n"
-        "    but only on the SNPs under the GWAS threshold.",
+        "    but only on the SNPs under the GWAS threshold.\n"
+        "  - If 'gwas+bo', feature selection is performed using a combination of\n"
+        "    GWAS p-values and Bayesian optimization. The upper bound of the fraction\n"
+        "    of SNPs to include is determined by the fraction corresponding to a\n"
+        "    computed one based on the gwas_p_value_threshold.",
     )
 
     parser.add_argument(
@@ -172,7 +176,8 @@ def get_argument_parser() -> argparse.ArgumentParser:
         type=float,
         required=False,
         default=1e-04,
-        help="GWAS p-value threshold for filtering if using 'gwas' or 'gwas->dl'\n"
+        help="GWAS p-value threshold for filtering if using "
+        "'gwas', 'gwas+bo' or 'gwas->dl'\n"
         "feature_selection options.",
     )
 

@@ -62,7 +62,7 @@ def build_data_paths(run_dir: Path) -> DataPaths:
         test_labels_path=data_dir / "tabular/final/labels_test.csv",
         snp_bim_path=data_dir / "genotype/processed/parsed_files/data_final.bim",
         dl_attribution_path=run_dir
-        / "feature_selection/dl_importance/dl_attributions.csv",
+        / "feature_selection/snp_importance/dl_attributions.csv",
         gwas_attribution_path=gwas_attributions,
         analysis_output_path=run_dir / "analysis/post_analysis/",
     )

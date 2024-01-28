@@ -26,12 +26,12 @@ def run_dl_bo_selection(
     manual_subset_from_gwas: Optional[str | Path],
 ) -> Optional[Path]:
     fs_out_folder = feature_selection_output_folder
-    subsets_out_folder = fs_out_folder / "dl_importance" / "snp_subsets"
-    snp_subset_file = subsets_out_folder / f"dl_snps_{fold}.txt"
+    subsets_out_folder = fs_out_folder / "snp_importance" / "snp_subsets"
+    snp_subset_file = subsets_out_folder / f"chosen_snps_{fold}.txt"
     if snp_subset_file.exists():
         return snp_subset_file
 
-    fractions_file = subsets_out_folder / f"dl_snps_fraction_{fold}.txt"
+    fractions_file = subsets_out_folder / f"chosen_snps_fraction_{fold}.txt"
     if fold < n_dl_feature_selection_setup_folds:
         gwas_snps_or_none = _handle_dl_feature_selection_options(
             bim_file=bim_file,
@@ -43,7 +43,7 @@ def run_dl_bo_selection(
 
     df_attributions = gather_eir_snp_attributions(folder_with_runs=folder_with_runs)
 
-    importance_file = fs_out_folder / "dl_importance" / "dl_attributions.csv"
+    importance_file = fs_out_folder / "snp_importance" / "dl_attributions.csv"
     ensure_path_exists(path=importance_file)
     df_attributions.to_csv(path_or_buf=importance_file)
 
@@ -83,12 +83,12 @@ def run_dl_plus_gwas_bo_selection(
     gwas_output_folder: Optional[Path],
 ) -> Optional[Path]:
     fs_out_folder = feature_selection_output_folder
-    subsets_out_folder = fs_out_folder / "dl_importance" / "snp_subsets"
-    snp_subset_file = subsets_out_folder / f"dl_snps_{fold}.txt"
+    subsets_out_folder = fs_out_folder / "snp_importance" / "snp_subsets"
+    snp_subset_file = subsets_out_folder / f"chosen_snps_{fold}.txt"
     if snp_subset_file.exists():
         return snp_subset_file
 
-    fractions_file = subsets_out_folder / f"dl_snps_fraction_{fold}.txt"
+    fractions_file = subsets_out_folder / f"chosen_snps_fraction_{fold}.txt"
     if fold < n_dl_feature_selection_setup_folds:
         _handle_dl_feature_selection_options(
             bim_file=bim_file,
@@ -105,7 +105,7 @@ def run_dl_plus_gwas_bo_selection(
 
     df_dl_attributions = gather_eir_snp_attributions(folder_with_runs=folder_with_runs)
 
-    importance_file = fs_out_folder / "dl_importance" / "dl_attributions.csv"
+    importance_file = fs_out_folder / "snp_importance" / "dl_attributions.csv"
     ensure_path_exists(path=importance_file)
     df_dl_attributions.to_csv(path_or_buf=importance_file)
 

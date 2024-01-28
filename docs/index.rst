@@ -29,6 +29,7 @@ Documentation
 
     quickstart
     tutorials/tutorial_index
+    understanding_eir_auto_gp/understanding_eir_auto_gp_index
     license
 
 Workflow Overview
