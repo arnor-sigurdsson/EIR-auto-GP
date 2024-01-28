@@ -1,0 +1,7 @@
+eir_auto_gp_tutorials/01_basic_tutorial/data
+├── penncath
+│   ├── penncath.bed
+│   ├── penncath.bim
+│   ├── penncath.csv
+│   └── penncath.fam
+└── penncath.zip

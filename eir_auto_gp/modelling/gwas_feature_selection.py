@@ -130,9 +130,6 @@ def maybe_prepare_plink_split_files(pre_split_folder: str) -> None:
     maybe_make_plink_test_ids_file(pre_split_folder=pre_split_folder)
 
 
-from pathlib import Path
-
-
 def maybe_make_plink_train_ids_file(pre_split_folder: str) -> None:
     pre_split_folder_path = Path(pre_split_folder)
 

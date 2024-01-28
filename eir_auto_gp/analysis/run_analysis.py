@@ -40,7 +40,11 @@ class RunAnalysisWrapper(luigi.WrapperTask):
             modelling_config=self.modelling_config,
             analysis_config=self.analysis_config,
         )
-        if self.feature_selection_config["feature_selection"] in ("dl", "gwas->dl"):
+        if self.feature_selection_config["feature_selection"] in (
+            "dl",
+            "gwas->dl",
+            "gwas+bo",
+        ):
             yield GatherFeatureSelectionResults(
                 folds=self.folds,
                 data_config=self.data_config,
@@ -151,7 +155,7 @@ def gather_fractions(feature_selection_folder: Path) -> pd.DataFrame:
     fractions = []
 
     for file in _iterdir_ignore_hidden(
-        path=feature_selection_folder / "dl_importance" / "snp_subsets"
+        path=feature_selection_folder / "snp_importance" / "snp_subsets"
     ):
         if "fraction" in file.stem:
             cur_fraction = float(file.read_text().strip())

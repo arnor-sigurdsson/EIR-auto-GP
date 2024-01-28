@@ -521,7 +521,7 @@ def get_batch_size(
     if batch_size <= 8:
         logger.warning(
             "Computed batch size based on number of training"
-            " samples per epoch (%d) "
+            " samples per epoch (%d)"
             " is very small (%d). This may cause issues with training."
             " This is likely due to a small number of samples in the dataset."
             " Consider increasing the number of samples in the dataset if possible.",

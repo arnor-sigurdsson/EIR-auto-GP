@@ -130,6 +130,12 @@ down to a manageable number.
     turn off the ``--do_test`` option, as the test set is only used for
     final model evaluation.
 
+.. note::
+    Here we are using the `gwas->dl` feature selection strategy,
+    but it might well be that using e.g. a purely GWAS based one,
+    such as the `gwas+bo` is faster and/or more accurate.
+
+
 Now running this will produce a pretty crazy amount of output
 to the terminal, but don't worry, we'll go through it all.
 Assuming that everything went well, we should have a new folder in our

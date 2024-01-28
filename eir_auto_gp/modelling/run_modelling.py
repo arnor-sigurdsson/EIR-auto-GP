@@ -16,7 +16,7 @@ from aislib.misc_utils import ensure_path_exists
 from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_replace
 
 from eir_auto_gp.modelling.configs import AggregateConfig, get_aggregate_config
-from eir_auto_gp.modelling.dl_feature_selection import get_genotype_subset_snps_file
+from eir_auto_gp.modelling.feature_selection import get_genotype_subset_snps_file
 from eir_auto_gp.modelling.gwas_feature_selection import run_gwas_feature_selection
 from eir_auto_gp.preprocess.converge import (
     ParseDataWrapper,
@@ -46,7 +46,7 @@ class RunModellingWrapper(luigi.Task):
                 modelling_config=self.modelling_config,
             )
 
-            cleanup_tmp_files(modelling_config=self.modelling_config)
+        cleanup_tmp_files(modelling_config=self.modelling_config)
 
     def output(self):
         return self.input()
@@ -298,6 +298,7 @@ def build_injection_params(
         bim_file=bim_file,
         n_dl_feature_selection_setup_folds=n_act_folds,
         manual_subset_from_gwas=gwas_manual_subset_file,
+        gwas_p_value_threshold=feature_selection_config["gwas_p_value_threshold"],
     )
 
     base_output_folder = modelling_config["modelling_output_folder"]
@@ -365,12 +366,13 @@ def get_gwas_manual_subset_file(
 
     if "gwas" in feature_selection_tasks:
         if task == "train":
-            return run_gwas_feature_selection(
+            gwas_snps_to_keep_path = run_gwas_feature_selection(
                 genotype_data_path=genotype_data_path,
                 data_config=data_config,
                 modelling_config=modelling_config,
                 feature_selection_config=feature_selection_config,
             )
+            return gwas_snps_to_keep_path
         elif task == "test":
             fs_output_folder = Path(
                 feature_selection_config["feature_selection_output_folder"]
@@ -426,7 +428,7 @@ def build_tmp_label_file(
 
     if prefix_name == "test":
         train_file_path = Path(tmp_dir) / "train_label_file.csv"
-        assert Path(train_file_path).exists()
+        assert Path(train_file_path).exists(), train_file_path
         df_train = pd.read_csv(train_file_path, usecols=["ID"])
         ids_train = set(df_train["ID"].tolist())
         ids_test = set(df["ID"].tolist())

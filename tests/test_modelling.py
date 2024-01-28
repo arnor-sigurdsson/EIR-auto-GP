@@ -24,6 +24,7 @@ def _get_test_cl_commands() -> list[str]:
     feature_selections = [
         "",
         "--feature_selection gwas ",
+        "--feature_selection gwas+bo ",
         "--feature_selection dl --n_dl_feature_selection_setup_folds 1 ",
         "--feature_selection gwas->dl --n_dl_feature_selection_setup_folds 1 ",
         "--feature_selection dl+gwas --n_dl_feature_selection_setup_folds 1 ",

@@ -6,3 +6,4 @@ Using EIR-auto-GP
 
     a_using_eir_auto_gp/01_basic_tutorial.rst
     a_using_eir_auto_gp/02_multi_tutorial.rst
+    a_using_eir_auto_gp/03_feature_selection_tutorial.rst

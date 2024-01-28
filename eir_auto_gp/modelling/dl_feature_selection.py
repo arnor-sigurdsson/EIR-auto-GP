@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Iterator, Literal, Optional, Tuple
+from typing import Iterator, Optional, Tuple
 
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists
@@ -8,55 +8,13 @@ from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 from eir.visualization.interpretation_visualization import plot_snp_manhattan_plots
 from skopt import Optimizer
 
+from eir_auto_gp.modelling.feature_selection_utils import (
+    gather_fractions_and_performances,
+    read_gwas_df,
+)
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
-
-
-def get_genotype_subset_snps_file(
-    fold: int,
-    folder_with_runs: Path,
-    feature_selection_output_folder: Path,
-    bim_file: str | Path,
-    feature_selection_approach: Literal["dl", "gwas", "gwas->dl", "dl+gwas", None],
-    n_dl_feature_selection_setup_folds: int,
-    manual_subset_from_gwas: Optional[str | Path],
-) -> Optional[Path]:
-    match feature_selection_approach:
-        case None:
-            return None
-        case "gwas":
-            return manual_subset_from_gwas
-        case "dl" | "gwas->dl":
-            if feature_selection_approach == "gwas->dl":
-                assert manual_subset_from_gwas is not None
-
-            computed_subset_file = run_dl_bo_selection(
-                fold=fold,
-                folder_with_runs=folder_with_runs,
-                feature_selection_output_folder=feature_selection_output_folder,
-                bim_file=bim_file,
-                n_dl_feature_selection_setup_folds=n_dl_feature_selection_setup_folds,
-                manual_subset_from_gwas=manual_subset_from_gwas,
-            )
-            return computed_subset_file
-        case "dl+gwas":
-            if fold > n_dl_feature_selection_setup_folds:
-                assert manual_subset_from_gwas is not None
-
-            gwas_output_folder = manual_subset_from_gwas.parent
-            computed_subset_file = run_dl_plus_gwas_bo_selection(
-                fold=fold,
-                folder_with_runs=folder_with_runs,
-                feature_selection_output_folder=feature_selection_output_folder,
-                gwas_output_folder=gwas_output_folder,
-                bim_file=bim_file,
-                n_dl_feature_selection_setup_folds=n_dl_feature_selection_setup_folds,
-            )
-            return computed_subset_file
-
-        case _:
-            raise ValueError()
 
 
 def run_dl_bo_selection(
@@ -68,12 +26,12 @@ def run_dl_bo_selection(
     manual_subset_from_gwas: Optional[str | Path],
 ) -> Optional[Path]:
     fs_out_folder = feature_selection_output_folder
-    subsets_out_folder = fs_out_folder / "dl_importance" / "snp_subsets"
-    snp_subset_file = subsets_out_folder / f"dl_snps_{fold}.txt"
+    subsets_out_folder = fs_out_folder / "snp_importance" / "snp_subsets"
+    snp_subset_file = subsets_out_folder / f"chosen_snps_{fold}.txt"
     if snp_subset_file.exists():
         return snp_subset_file
 
-    fractions_file = subsets_out_folder / f"dl_snps_fraction_{fold}.txt"
+    fractions_file = subsets_out_folder / f"chosen_snps_fraction_{fold}.txt"
     if fold < n_dl_feature_selection_setup_folds:
         gwas_snps_or_none = _handle_dl_feature_selection_options(
             bim_file=bim_file,
@@ -85,7 +43,7 @@ def run_dl_bo_selection(
 
     df_attributions = gather_eir_snp_attributions(folder_with_runs=folder_with_runs)
 
-    importance_file = fs_out_folder / "dl_importance" / "dl_attributions.csv"
+    importance_file = fs_out_folder / "snp_importance" / "dl_attributions.csv"
     ensure_path_exists(path=importance_file)
     df_attributions.to_csv(path_or_buf=importance_file)
 
@@ -125,12 +83,12 @@ def run_dl_plus_gwas_bo_selection(
     gwas_output_folder: Optional[Path],
 ) -> Optional[Path]:
     fs_out_folder = feature_selection_output_folder
-    subsets_out_folder = fs_out_folder / "dl_importance" / "snp_subsets"
-    snp_subset_file = subsets_out_folder / f"dl_snps_{fold}.txt"
+    subsets_out_folder = fs_out_folder / "snp_importance" / "snp_subsets"
+    snp_subset_file = subsets_out_folder / f"chosen_snps_{fold}.txt"
     if snp_subset_file.exists():
         return snp_subset_file
 
-    fractions_file = subsets_out_folder / f"dl_snps_fraction_{fold}.txt"
+    fractions_file = subsets_out_folder / f"chosen_snps_fraction_{fold}.txt"
     if fold < n_dl_feature_selection_setup_folds:
         _handle_dl_feature_selection_options(
             bim_file=bim_file,
@@ -141,13 +99,13 @@ def run_dl_plus_gwas_bo_selection(
         return None
 
     assert gwas_output_folder is not None
-    df_gwas = _read_gwas_df(gwas_output_folder=gwas_output_folder)
+    df_gwas = read_gwas_df(gwas_output_folder=gwas_output_folder)
     df_gwas = df_gwas.rename(columns={"P": "GWAS P-VALUE"})
     df_gwas = df_gwas[["GWAS P-VALUE"]]
 
     df_dl_attributions = gather_eir_snp_attributions(folder_with_runs=folder_with_runs)
 
-    importance_file = fs_out_folder / "dl_importance" / "dl_attributions.csv"
+    importance_file = fs_out_folder / "snp_importance" / "dl_attributions.csv"
     ensure_path_exists(path=importance_file)
     df_dl_attributions.to_csv(path_or_buf=importance_file)
 
@@ -173,23 +131,6 @@ def run_dl_plus_gwas_bo_selection(
     fractions_file.write_text(str(fraction))
 
     return snp_subset_file
-
-
-def _read_gwas_df(gwas_output_folder: Path) -> pd.DataFrame:
-    dfs = []
-    for gwas_file in gwas_output_folder.iterdir():
-        if "logistic" not in gwas_file.name and "linear" not in gwas_file.name:
-            continue
-
-        df_gwas = pd.read_csv(filepath_or_buffer=gwas_file, sep="\t")
-        df_gwas = df_gwas.rename(columns={"ID": "VAR_ID"})
-        df_gwas = df_gwas.set_index("VAR_ID")
-        dfs.append(df_gwas)
-
-    assert len(dfs) == 1
-    df_gwas = dfs[0]
-
-    return df_gwas
 
 
 def _handle_dl_feature_selection_options(
@@ -324,12 +265,6 @@ def _get_attribution_iterator(
             yield df_cur, aggregate_column
 
 
-def _get_snps_in_bim_file(bim_file_path: str | Path) -> list[str]:
-    with open(bim_file_path, "r") as f:
-        snps = [line.split()[1] for line in f]
-    return snps
-
-
 def get_auto_top_n(
     df_attributions: pd.DataFrame,
     folder_with_runs: Path,
@@ -344,7 +279,7 @@ def get_auto_top_n(
         next_fraction = manual_fractions[fold]
     else:
         opt = Optimizer(dimensions=[(0.0, 1.0)])
-        df_history = _gather_fractions_and_performances(
+        df_history = gather_fractions_and_performances(
             folder_with_runs=folder_with_runs,
             feature_selection_output_folder=feature_selection_output_folder,
         )
@@ -363,6 +298,12 @@ def get_auto_top_n(
     return top_n, next_fraction
 
 
+def _get_snps_in_bim_file(bim_file_path: str | Path) -> list[str]:
+    with open(bim_file_path, "r") as f:
+        snps = [line.split()[1] for line in f]
+    return snps
+
+
 def _get_manual_fractions(total_n_snps: int, min_snps_cutoff: int) -> list[float]:
     base = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.2]
 
@@ -373,53 +314,3 @@ def _get_manual_fractions(total_n_snps: int, min_snps_cutoff: int) -> list[float
             manual_fractions.append(i)
 
     return manual_fractions
-
-
-def _gather_fractions_and_performances(
-    folder_with_runs: Path, feature_selection_output_folder: Path
-) -> pd.DataFrame:
-    df_val_performances = _gather_best_val_performances(
-        folder_with_runs=folder_with_runs
-    )
-    df_snp_fractions = _get_snp_fractions(
-        feature_selection_output_folder=feature_selection_output_folder
-    )
-
-    df = df_val_performances.merge(df_snp_fractions, left_index=True, right_index=True)
-
-    df = df.sort_index()
-
-    return df
-
-
-def _gather_best_val_performances(folder_with_runs: Path) -> pd.DataFrame:
-    results = {}
-    for fold in _iterdir_ignore_hidden(path=folder_with_runs):
-        if not (fold / "completed_train.txt").exists():
-            continue
-
-        df_val = pd.read_csv(filepath_or_buffer=fold / "validation_average_history.log")
-        best_performance = df_val["perf-average"].max()
-        fold_as_int = int(fold.stem.split("_")[-1])
-        results[fold_as_int] = best_performance
-
-    df = pd.DataFrame.from_dict(
-        results, orient="index", columns=["best_val_performance"]
-    )
-    return df
-
-
-def _get_snp_fractions(feature_selection_output_folder: Path) -> pd.DataFrame:
-    results = {}
-    for f in _iterdir_ignore_hidden(
-        path=feature_selection_output_folder / "dl_importance" / "snp_subsets"
-    ):
-        if "_fraction" not in f.name:
-            continue
-
-        fold_as_int = int(f.stem.split("_")[-1])
-        fraction = f.read_text()
-        results[fold_as_int] = float(fraction)
-
-    df = pd.DataFrame.from_dict(results, orient="index", columns=["fraction"])
-    return df

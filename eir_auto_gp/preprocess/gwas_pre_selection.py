@@ -477,7 +477,8 @@ def _prepare_df_columns_for_gwas(
                 one_hot_mappings[column] = list(df[column].unique())
             else:
                 logger.debug(
-                    "Integer Column %s has %d unique values, not one-hot encoding.",
+                    "Integer Column %s has %d unique values, not one-hot encoding. "
+                    "Only one hot encoding columns with 2 < n(unique) < 10.",
                     column,
                     n_unique,
                 )
