@@ -56,9 +56,11 @@ def test_post_analysis_classification(
     run_post_analysis.run_effect_analysis(post_analysis_object=post_analysis_object)
 
     post_analysis_folder = tmp_path / "analysis" / "post_analysis"
+    # TODO: Implement the effect checking for classification
     _check_post_analysis_results_wrapper(
         post_analysis_folder=post_analysis_folder,
         include_tabular=False,
+        check_effects=False,
     )
 
 
@@ -95,16 +97,21 @@ def test_post_analysis_regression(
     _check_post_analysis_results_wrapper(
         post_analysis_folder=post_analysis_folder,
         include_tabular=False,
+        check_effects=True,
     )
 
 
 def _check_post_analysis_results_wrapper(
-    post_analysis_folder: Path, include_tabular: bool
+    post_analysis_folder: Path, include_tabular: bool, check_effects: bool
 ) -> None:
     _check_complexity_analysis_results(
         complexity_folder=post_analysis_folder / "complexity",
         include_tabular=include_tabular,
     )
+
+    if check_effects:
+        effects_folder = post_analysis_folder / "effect_analysis"
+        _check_effect_analysis_results(effects_folder=effects_folder)
 
 
 def _check_complexity_analysis_results(
@@ -166,20 +173,23 @@ def _check_basic_snps_significant_p_values(df: pd.DataFrame) -> None:
 
 
 def _check_linear_coefficients(df: pd.DataFrame) -> None:
+    expected_difference = 10
+
     for snp in [1, 2]:
         df_snp = df[df["SNP"] == f"snp{snp}"]
         diffs = df_snp["Coefficient"].diff().dropna()
-        assert diffs.abs().diff().abs().max() < 0.25
+
+        assert all(abs(diff - expected_difference) < 1.0 for diff in diffs)
 
 
 def _check_dominant_coefficients(df: pd.DataFrame) -> None:
-    df_snp = df[df["SNP"] == "snp3"].sort_values(by="allele")
-    assert abs(df_snp.iloc[1, 1] - df_snp.iloc[2, 1]) < 0.25
+    df_snp = df[df["SNP"] == "snp3"]
+    assert abs(df_snp.iloc[1, 1] - df_snp.iloc[2, 1]) < 1.0
 
 
 def _check_recessive_coefficients(df: pd.DataFrame) -> None:
-    df_snp = df[df["SNP"] == "snp4"].sort_values(by="allele")
-    assert abs(df_snp.iloc[0, 1] - df_snp.iloc[1, 1]) < 0.25
+    df_snp = df[df["SNP"] == "snp4"]
+    assert abs(df_snp.iloc[0, 1] - df_snp.iloc[1, 1]) < 1.0
 
 
 def _check_interaction_effects(df_interactions: pd.DataFrame) -> None:

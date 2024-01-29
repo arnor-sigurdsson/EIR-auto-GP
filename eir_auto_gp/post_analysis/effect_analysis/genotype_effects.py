@@ -169,10 +169,8 @@ def build_df_from_basic_results(
     df_linear = pd.read_html(io=html_buffer, header=0, index_col=0)[0]
     df_linear.index.name = "allele"
 
-    df_linear_total = compute_total_effect(df=df_linear)
-
     df_linear_renamed = _rename_linear_regression_index(
-        df_results=df_linear_total,
+        df_results=df_linear,
         allele_maps=allele_maps,
         snp=snp,
     )
@@ -189,38 +187,26 @@ def build_df_from_basic_results(
     return df_linear_column_renamed
 
 
-def compute_total_effect(
-    df: pd.DataFrame,
-) -> pd.DataFrame:
-    intercept = df.loc["Intercept", "coef"]
-
-    for index in df.index.drop("Intercept"):
-        df.loc[index, "coef"] += intercept
-        df.loc[index, "[0.025"] += intercept
-        df.loc[index, "0.975]"] += intercept
-
-    return df
-
-
 def _rename_linear_regression_index(
     df_results: pd.DataFrame, allele_maps: dict[str, dict[str, str]], snp: str
 ) -> pd.DataFrame:
     snp_allele_map = allele_maps[snp]
     cur_mapping = {}
     for index in df_results.index:
-        if index != "Intercept":
-            assert snp in index, f"{snp} not in {index} of {df_results}"
-        if "Intercept" in index:
+        if index == "Intercept":
             key = "REF"
+            cur_allele = snp_allele_map[key]
+            cur_mapping[index] = f"{snp} {cur_allele} (Intercept)"
         elif "[T.1]" in index:
             key = "HET"
+            cur_allele = snp_allele_map[key]
+            cur_mapping[index] = f"{snp} {cur_allele}"
         elif "[T.2]" in index:
             key = "ALT"
+            cur_allele = snp_allele_map[key]
+            cur_mapping[index] = f"{snp} {cur_allele}"
         else:
-            raise ValueError()
-
-        cur_allele = snp_allele_map[key]
-        cur_mapping[index] = f"{snp} {cur_allele}"
+            raise ValueError(f"Unexpected index format: {index}")
 
     df_results = df_results.rename(index=cur_mapping)
 

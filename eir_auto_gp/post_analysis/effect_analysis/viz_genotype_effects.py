@@ -3,8 +3,10 @@ from typing import Dict, Iterable
 
 import numpy as np
 import pandas as pd
-from aislib.misc_utils import ensure_path_exists
+from aislib.misc_utils import ensure_path_exists, get_logger
 from matplotlib import pyplot as plt
+
+logger = get_logger(name=__name__)
 
 
 def get_snp_allele_maps(
@@ -37,34 +39,30 @@ def plot_top_snps(
 ) -> None:
     ensure_path_exists(path=output_dir, is_folder=True)
 
-    index_df = df.index.to_frame(index=False)
-    index_df[["SNP", "Genotype"]] = index_df["allele"].str.split(" ", expand=True)
-    df.reset_index(drop=True, inplace=True)
-    df[["SNP", "Genotype"]] = index_df[["SNP", "Genotype"]]
-    df.set_index(keys=["SNP", "Genotype"], inplace=True)
-
-    snp_diff = df.groupby(level=0)["Coefficient"].apply(lambda x: np.abs(x - x.iloc[0]))
-
-    snp_strength = snp_diff.groupby(level=0).sum()
-
-    top_snps = snp_strength.nlargest(top_n).index
+    df_allele_effects = _parse_df_allele_effects(df_allele_effects=df)
+    top_snps = _get_snps_with_strongest_effects(
+        df_allele_effects=df_allele_effects,
+        top_n=top_n,
+    )
 
     for snp in top_snps:
         df_snp = df.loc[snp]
 
-        if np.any(df_snp["p_value"] > p_value_threshold):
+        df_total_effect = _compute_total_effect(df=df_snp)
+
+        if np.any(df_total_effect["p_value"] > p_value_threshold):
             continue
 
-        if len(df_snp) < 3:
+        if len(df_total_effect) < 3:
             continue
 
         plt.figure()
         plt.errorbar(
-            x=df_snp.index.get_level_values("Genotype"),
-            y=df_snp["Coefficient"],
+            x=df_total_effect.index.get_level_values("Genotype"),
+            y=df_total_effect["Coefficient"],
             yerr=[
-                abs(df_snp["Coefficient"] - df_snp["0.025 CI"]),
-                abs(df_snp["0.975 CI"] - df_snp["Coefficient"]),
+                abs(df_total_effect["Coefficient"] - df_total_effect["0.025 CI"]),
+                abs(df_total_effect["0.975 CI"] - df_total_effect["Coefficient"]),
             ],
             fmt="o",
             capsize=5,
@@ -72,7 +70,57 @@ def plot_top_snps(
 
         plt.title(f"SNP: {snp}")
         plt.xlabel("Genotype")
-        plt.ylabel("Effect Size")
+        plt.ylabel("Total Effect Size")
         plt.grid(True)
 
         plt.savefig(output_dir / f"{snp}.pdf")
+
+
+def _parse_df_allele_effects(df_allele_effects: pd.DataFrame) -> pd.DataFrame:
+    index_df = _get_index_df(df_allele_effects=df_allele_effects)
+
+    df_allele_effects.reset_index(drop=True, inplace=True)
+
+    cols = ["SNP", "Genotype", "Is_Intercept"]
+    df_allele_effects[cols] = index_df[cols]
+    df_allele_effects.set_index(keys=["SNP", "Genotype"], inplace=True)
+
+    return df_allele_effects
+
+
+def _get_index_df(df_allele_effects: pd.DataFrame) -> pd.DataFrame:
+    index_df = df_allele_effects.index.to_frame(index=False)
+    index_df["Is_Intercept"] = index_df["allele"].str.contains("Intercept")
+    index_df["allele"] = index_df["allele"].str.replace(" (Intercept)", "")
+    index_df[["SNP", "Genotype"]] = index_df["allele"].str.split(" ", expand=True)
+
+    return index_df
+
+
+def _get_snps_with_strongest_effects(
+    df_allele_effects: pd.DataFrame, top_n: int
+) -> pd.DataFrame:
+    df_no_intercepts = df_allele_effects[~df_allele_effects["Is_Intercept"]]
+    snp_strength = df_no_intercepts.groupby(level=0)["Coefficient"].apply(
+        lambda x: np.abs(x).sum()
+    )
+
+    top_snps = snp_strength.nlargest(top_n).index
+
+    return top_snps
+
+
+def _compute_total_effect(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
+    row_intercept = df[df["Is_Intercept"]]
+    assert len(row_intercept) == 1
+    intercept_value = row_intercept["Coefficient"].item()
+    intercept_index = row_intercept.index
+
+    for index in df.index.drop(intercept_index):
+        df.loc[index, "Coefficient"] += intercept_value
+        df.loc[index, "0.025 CI"] += intercept_value
+        df.loc[index, "0.975 CI"] += intercept_value
+
+    return df

@@ -44,3 +44,6 @@ build-backend = "poetry.core.masonry.api"
 eirautogp = "eir_auto_gp.run:main"
 eirautogwas = "eir_auto_gp.preprocess.gwas_pre_selection:main"
 eirautopostanalysis = "eir_auto_gp.post_analysis.run_post_analysis:main"
+
+[tool.isort]
+profile = "black"
