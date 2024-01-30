@@ -73,6 +73,8 @@ def plot_top_snps(
         plt.ylabel("Total Effect Size")
         plt.grid(True)
 
+        plt.tight_layout()
+
         plt.savefig(output_dir / f"{snp}.pdf")
 
 

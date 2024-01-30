@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Callable
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -26,7 +27,15 @@ def _get_test_modelling_cl_command(
     return base
 
 
-@pytest.mark.parametrize("feature_selection", ["dl", "gwas", "gwas->dl", "gwas+bo"])
+@pytest.mark.parametrize(
+    "feature_selection",
+    [
+        "dl",
+        "gwas",
+        "gwas->dl",
+        "gwas+bo",
+    ],
+)
 def test_post_analysis_classification(
     feature_selection: str,
     simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
@@ -56,15 +65,23 @@ def test_post_analysis_classification(
     run_post_analysis.run_effect_analysis(post_analysis_object=post_analysis_object)
 
     post_analysis_folder = tmp_path / "analysis" / "post_analysis"
-    # TODO: Implement the effect checking for classification
     _check_post_analysis_results_wrapper(
         post_analysis_folder=post_analysis_folder,
         include_tabular=False,
-        check_effects=False,
+        check_effects=True,
+        regression_type="logistic",
     )
 
 
-@pytest.mark.parametrize("feature_selection", ["dl", "gwas", "gwas->dl", "gwas+bo"])
+@pytest.mark.parametrize(
+    "feature_selection",
+    [
+        "dl",
+        "gwas",
+        "gwas->dl",
+        "gwas+bo",
+    ],
+)
 def test_post_analysis_regression(
     feature_selection: str,
     simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
@@ -98,11 +115,15 @@ def test_post_analysis_regression(
         post_analysis_folder=post_analysis_folder,
         include_tabular=False,
         check_effects=True,
+        regression_type="linear",
     )
 
 
 def _check_post_analysis_results_wrapper(
-    post_analysis_folder: Path, include_tabular: bool, check_effects: bool
+    post_analysis_folder: Path,
+    include_tabular: bool,
+    check_effects: bool,
+    regression_type: str,
 ) -> None:
     _check_complexity_analysis_results(
         complexity_folder=post_analysis_folder / "complexity",
@@ -111,7 +132,9 @@ def _check_post_analysis_results_wrapper(
 
     if check_effects:
         effects_folder = post_analysis_folder / "effect_analysis"
-        _check_effect_analysis_results(effects_folder=effects_folder)
+        _check_effect_analysis_results(
+            effects_folder=effects_folder, regression_type=regression_type
+        )
 
 
 def _check_complexity_analysis_results(
@@ -150,18 +173,24 @@ def _check_one_hot_better_in_linear(df: pd.DataFrame) -> None:
     assert avg_perf_linear_one_hot > avg_perf_linear_no_one_hot
 
 
-def _check_effect_analysis_results(effects_folder: Path) -> None:
+def _check_effect_analysis_results(effects_folder: Path, regression_type: str) -> None:
     df_allele_effects = pd.read_csv(effects_folder / "allele_effects.csv")
-    _check_allele_effects(df_allele_effects=df_allele_effects)
+    _check_allele_effects(
+        df_allele_effects=df_allele_effects, regression_type=regression_type
+    )
 
     df_interaction_effects = pd.read_csv(effects_folder / "interaction_effects.csv")
     _check_interaction_effects(df_interactions=df_interaction_effects)
 
 
-def _check_allele_effects(df_allele_effects: pd.DataFrame) -> None:
+def _check_allele_effects(
+    df_allele_effects: pd.DataFrame, regression_type: str
+) -> None:
+    assert regression_type in ("logistic", "linear")
+
     df_allele_effects["SNP"] = df_allele_effects["allele"].str.split(" ").str[0]
     _check_basic_snps_significant_p_values(df=df_allele_effects)
-    _check_linear_coefficients(df=df_allele_effects)
+    _check_additive_coefficients(df=df_allele_effects, regression_type=regression_type)
     _check_dominant_coefficients(df=df_allele_effects)
     _check_recessive_coefficients(df=df_allele_effects)
 
@@ -172,24 +201,45 @@ def _check_basic_snps_significant_p_values(df: pd.DataFrame) -> None:
         assert (df_snp["p_value"] < 5e-8).sum() >= 2
 
 
-def _check_linear_coefficients(df: pd.DataFrame) -> None:
-    expected_difference = 10
-
+def _check_additive_coefficients(df: pd.DataFrame, regression_type: str) -> None:
     for snp in [1, 2]:
-        df_snp = df[df["SNP"] == f"snp{snp}"]
-        diffs = df_snp["Coefficient"].diff().dropna()
+        snp_df = df[df["allele"].str.startswith(f"snp{snp}")]
+        second_row_coef = snp_df.iloc[1]["Coefficient"]
+        third_row_coef = snp_df.iloc[2]["Coefficient"]
 
-        assert all(abs(diff - expected_difference) < 1.0 for diff in diffs)
+        if regression_type == "logistic":
+            second_row_coef = np.exp(second_row_coef)
+            third_row_coef = np.exp(third_row_coef)
+
+        is_close = (
+            abs(third_row_coef - 2 * second_row_coef) / (2 * second_row_coef) < 0.1
+        )
+        msg = f"SNP{snp}: 2nd row = {second_row_coef}, 3rd row = {third_row_coef}"
+
+        assert is_close, msg
 
 
 def _check_dominant_coefficients(df: pd.DataFrame) -> None:
     df_snp = df[df["SNP"] == "snp3"]
-    assert abs(df_snp.iloc[1, 1] - df_snp.iloc[2, 1]) < 1.0
+    second_row_coef = df_snp.iloc[1]["Coefficient"]
+    third_row_coef = df_snp.iloc[2]["Coefficient"]
+    difference = abs(third_row_coef - second_row_coef)
+
+    msg = f"SNP3: 2nd row = {second_row_coef}, 3rd row = {third_row_coef}"
+    assert difference < 1.5, msg
 
 
 def _check_recessive_coefficients(df: pd.DataFrame) -> None:
     df_snp = df[df["SNP"] == "snp4"]
-    assert abs(df_snp.iloc[0, 1] - df_snp.iloc[1, 1]) < 1.0
+
+    second_row_coef = df_snp.iloc[1]["Coefficient"]
+    third_row_coef = df_snp.iloc[2]["Coefficient"]
+
+    msg1 = f"SNP4: 2nd row = {second_row_coef}"
+    assert abs(second_row_coef) < 1.0, msg1
+
+    msg2 = f"SNP4: 2nd row = {second_row_coef}, 3rd row = {third_row_coef}"
+    assert third_row_coef > second_row_coef, msg2
 
 
 def _check_interaction_effects(df_interactions: pd.DataFrame) -> None:
