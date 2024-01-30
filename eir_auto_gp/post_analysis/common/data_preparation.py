@@ -130,15 +130,53 @@ def get_subset_indices_and_names(
         case _:
             raise ValueError("Both DL and GWAS attributions are None.")
 
-    top_snps_list = df_top_snps["SNP"].tolist()
-    _check_bim(df_bim=df_bim, top_snps_list=top_snps_list)
+    top_snps_list_importance_order = df_top_snps["SNP"].tolist()
+    top_snps_list_ordered = _ensure_alignment_of_top_snps_with_genetic_position(
+        df_bim=df_bim, top_snps_list=top_snps_list_importance_order
+    )
+
+    _check_bim(df_bim=df_bim, top_snps_list=top_snps_list_ordered)
+
+    _ensure_all_snps_present(df_bim=df_bim, top_snps_list=top_snps_list_ordered)
 
     subset_indices = eir_setup_omics._setup_snp_subset_indices(
         df_bim=df_bim,
-        snps_to_subset=top_snps_list,
+        snps_to_subset=top_snps_list_ordered,
     )
 
-    return subset_indices, top_snps_list
+    _ensure_order_of_snps_matches(
+        df_bim=df_bim,
+        subset_indices=subset_indices,
+        top_snps_list=top_snps_list_ordered,
+    )
+
+    return subset_indices, top_snps_list_ordered
+
+
+def _ensure_all_snps_present(df_bim: pd.DataFrame, top_snps_list: list[str]) -> None:
+    assert all(
+        snp in df_bim["VAR_ID"].values for snp in top_snps_list
+    ), "All top SNPs should be present in df_bim"
+
+
+def _ensure_order_of_snps_matches(
+    df_bim: pd.DataFrame, subset_indices: np.ndarray, top_snps_list: list[str]
+) -> None:
+    sorted_snps_in_subset = df_bim.loc[subset_indices, "VAR_ID"].tolist()
+    assert (
+        sorted_snps_in_subset == top_snps_list
+    ), "The order of SNPs in subset_indices does not match top_snps_list"
+
+
+def _ensure_alignment_of_top_snps_with_genetic_position(
+    df_bim: pd.DataFrame, top_snps_list: list[str]
+) -> list[str]:
+    snp_to_position = dict(zip(df_bim["VAR_ID"], df_bim.index))
+    top_snps_list_sorted = sorted(
+        top_snps_list, key=lambda x: snp_to_position.get(x, float("inf"))
+    )
+
+    return top_snps_list_sorted
 
 
 def validate_file_paths(dl_path: Optional[Path], gwas_path: Optional[Path]) -> None:

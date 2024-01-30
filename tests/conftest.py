@@ -58,7 +58,10 @@ def simulate_genetic_data(
     recessive_factor = 20
 
     latent_phenotype = np.zeros(n_individuals)
-    latent_phenotype += additive_factor * df_snp[causal_snps].sum(axis=1)
+
+    latent_phenotype += additive_factor * df_snp[causal_snps[0]]
+    latent_phenotype += additive_factor * df_snp[causal_snps[1]]
+
     latent_phenotype += (
         df_snp[list(interaction_pair)].product(axis=1) * interaction_factor
     )

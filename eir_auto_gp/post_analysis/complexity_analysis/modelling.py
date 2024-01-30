@@ -193,7 +193,7 @@ def evaluate_model_performance(
     elif task_type == "regression":
         pcc = eir_metrics.calc_pcc(outputs=y_score, labels=y_true)
         r2 = eir_metrics.calc_r2(outputs=y_score, labels=y_true)
-        rmse = metrics.mean_squared_error(y_true=y_true, y_pred=y_score, squared=False)
+        rmse = metrics.root_mean_squared_error(y_true=y_true, y_pred=y_score)
         performance = {
             "pcc": pcc,
             "r2": r2,
