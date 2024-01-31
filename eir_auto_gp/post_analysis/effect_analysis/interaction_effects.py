@@ -137,14 +137,6 @@ def _compute_interaction_snp_effect_wrapper(
 
     p_value = _extract_p_value_from_interaction_results(results=result)
     if p_value > p_threshold:
-        logger.debug(
-            "Interaction between '%s' and '%s' has p value '%f' above "
-            "threshold '%f'. Skipping.",
-            snp_1,
-            snp_2,
-            p_value,
-            p_threshold,
-        )
         return None
 
     try:
