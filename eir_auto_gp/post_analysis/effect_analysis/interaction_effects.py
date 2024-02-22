@@ -254,7 +254,7 @@ def build_df_from_interaction_results(
         df_results=df_linear_renamed, allele_maps=allele_maps, snp=snp_2
     )
 
-    df_linear_renamed["KEY"] = f"{snp_1}:{snp_2}"
+    df_linear_renamed["KEY"] = f"{snp_1}--:--{snp_2}"
 
     df_linear_column_renamed = df_linear_renamed.rename(
         columns={

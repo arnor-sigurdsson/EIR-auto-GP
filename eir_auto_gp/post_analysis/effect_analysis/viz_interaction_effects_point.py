@@ -56,7 +56,6 @@ def run_grouped_interaction_analysis(
             target_name=target_name,
             allele_maps=allele_maps,
         )
-        all_results.append(df_results)
 
         fig = plot_snp_coefficients_as_points(
             df_results=df_results,
@@ -64,6 +63,8 @@ def run_grouped_interaction_analysis(
             snp1_name=snp1,
             snp2_name=snp2,
         )
+
+        all_results.append(df_results)
 
         output_path = output_folder / "figures" / f"{snp1}_{snp2}_interaction.pdf"
         ensure_path_exists(path=output_path)
@@ -92,7 +93,9 @@ def _get_snp_pairs_to_check(
         ascending=False,
     ).head(top_n)
 
-    return df_interactions_top["KEY"].str.split(":", expand=True).to_numpy().tolist()
+    return (
+        df_interactions_top["KEY"].str.split("--:--", expand=True).to_numpy().tolist()
+    )
 
 
 def prepare_genotype_data(
@@ -145,7 +148,8 @@ def fit_models_for_combinations(
                         "CI_lower": conf_int[0],
                         "CI_upper": conf_int[1],
                         "P_value": p_value,
-                        "KEY": f"{snp1}:{snp2}",
+                        "KEY": f"{snp1}--:--{snp2}",
+                        "n": len(subset),
                     }
                 )
 
