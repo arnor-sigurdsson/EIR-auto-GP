@@ -269,7 +269,11 @@ def _get_interaction_graph_figure(
         font_size=8,
     )
 
-    weights = scale_weights(graph=graph, df_target=df_target, trait=trait)
+    weights = scale_weights(
+        graph=graph,
+        df_target=df_target,
+        trait=trait,
+    )
     nx.draw_networkx_edges(
         G=graph,
         pos=pos,
@@ -309,12 +313,21 @@ def scale_weights(
     target_range = df_target[trait].max() - target_min
 
     weights = [
-        (abs(graph[u][v]["weight"]) - target_min) / target_range
+        ((abs(graph[u][v]["weight"]) - target_min) / target_range) * scaling_factor
         for u, v in graph.edges()
     ]
 
-    weights = [i * scaling_factor for i in weights]
-    weights = [i if i < max_threshold else max_threshold for i in weights]
+    max_weight = max(weights)
+    if max_weight > max_threshold:
+        weights = [weight * (max_threshold / max_weight) for weight in weights]
+
+    min_weight = min(weights)
+    if min_weight < 0:
+        weights = [weight - min_weight for weight in weights]
+
+    assert all(
+        0 <= weight <= max_threshold for weight in weights
+    ), "Weights out of bounds"
 
     return weights
 
