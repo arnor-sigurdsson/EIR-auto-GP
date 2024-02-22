@@ -85,6 +85,7 @@ def plot_top_snps(
         plt.tight_layout()
 
         plt.savefig(output_dir / f"{snp}.pdf")
+        plt.close()
 
 
 def _parse_df_allele_effects(df_allele_effects: pd.DataFrame) -> pd.DataFrame:

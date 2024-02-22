@@ -133,7 +133,8 @@ def _check_post_analysis_results_wrapper(
     if check_effects:
         effects_folder = post_analysis_folder / "effect_analysis"
         _check_effect_analysis_results(
-            effects_folder=effects_folder, regression_type=regression_type
+            effects_folder=effects_folder,
+            regression_type=regression_type,
         )
 
 
@@ -174,12 +175,16 @@ def _check_one_hot_better_in_linear(df: pd.DataFrame) -> None:
 
 
 def _check_effect_analysis_results(effects_folder: Path, regression_type: str) -> None:
-    df_allele_effects = pd.read_csv(effects_folder / "allele_effects.csv")
+    df_allele_effects = pd.read_csv(
+        effects_folder / "allele_effects" / "allele_effects.csv"
+    )
     _check_allele_effects(
         df_allele_effects=df_allele_effects, regression_type=regression_type
     )
 
-    df_interaction_effects = pd.read_csv(effects_folder / "interaction_effects.csv")
+    df_interaction_effects = pd.read_csv(
+        effects_folder / "interaction_effects" / "interaction_effects.csv"
+    )
     _check_interaction_effects(df_interactions=df_interaction_effects)
 
 
