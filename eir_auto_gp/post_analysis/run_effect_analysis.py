@@ -33,9 +33,9 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
         one_hot_encode=False,
     )
 
-    output_root = (
-        post_analysis_object.data_paths.analysis_output_path / "effect_analysis"
-    )
+    pao = post_analysis_object
+
+    output_root = pao.data_paths.analysis_output_path / "effect_analysis"
     ensure_path_exists(path=output_root, is_folder=True)
 
     effects_output = output_root / "allele_effects"
@@ -43,15 +43,15 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
     df_allele_effects = get_allele_effects(
         df_genotype=mro_genotype.input_train,
         df_target=mro_genotype.target_train,
-        bim_file=post_analysis_object.data_paths.snp_bim_path,
-        target_type=post_analysis_object.experiment_info.target_type,
+        bim_file=pao.data_paths.snp_bim_path,
+        target_type=pao.experiment_info.target_type,
     )
     df_allele_effects.to_csv(effects_output / "allele_effects.csv")
 
     plot_top_snps(
         df=df_allele_effects,
         p_value_threshold=0.05,
-        top_n=10,
+        top_n=pao.top_n_genotype_snps_effects_to_plot,
         output_dir=effects_output / "figures",
     )
 
@@ -60,8 +60,10 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
     df_interaction_effects = get_interaction_effects(
         df_genotype=mro_genotype.input_train,
         df_target=mro_genotype.target_train,
-        bim_file=post_analysis_object.data_paths.snp_bim_path,
-        target_type=post_analysis_object.experiment_info.target_type,
+        bim_file=pao.data_paths.snp_bim_path,
+        target_type=pao.experiment_info.target_type,
+        allow_within_chr_interaction=pao.allow_within_chr_interaction,
+        min_interaction_pair_distance=pao.min_interaction_pair_distance,
     )
     df_interaction_effects.to_csv(interaction_output / "interaction_effects.csv")
 
@@ -69,18 +71,18 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
         trait_name = mro_genotype.target_train.columns[0]
         generate_interaction_snp_graph_figure(
             df_interaction_effects=df_interaction_effects,
-            bim_file_path=post_analysis_object.data_paths.snp_bim_path,
+            bim_file_path=pao.data_paths.snp_bim_path,
             df_target=mro_genotype.target_train,
             trait=trait_name,
             plot_output_root=interaction_output,
-            top_n_snps=10,
+            top_n_snps=pao.top_n_interaction_pairs,
         )
 
         run_grouped_interaction_analysis(
             df_genotype=mro_genotype.input_train,
             df_target=mro_genotype.target_train,
             df_interaction_effects=df_interaction_effects,
-            top_n_snps=10,
-            bim_file=post_analysis_object.data_paths.snp_bim_path,
+            top_n_snps=pao.top_n_interaction_pairs,
+            bim_file=pao.data_paths.snp_bim_path,
             output_folder=output_root / "grouped_interaction_analysis",
         )

@@ -19,6 +19,10 @@ class PostAnalysisObject:
     data_paths: DataPaths
     experiment_info: ExperimentInfo
     modelling_data: SplitModelData
+    top_n_genotype_snps_effects_to_plot: int
+    top_n_interaction_pairs: int
+    allow_within_chr_interaction: bool
+    min_interaction_pair_distance: int
 
 
 def build_post_analysis_object(cl_args: argparse.Namespace) -> PostAnalysisObject:
@@ -39,6 +43,10 @@ def build_post_analysis_object(cl_args: argparse.Namespace) -> PostAnalysisObjec
         data_paths=data_paths,
         experiment_info=experiment_info,
         modelling_data=modelling_data,
+        top_n_genotype_snps_effects_to_plot=cl_args.top_n_genotype_snps_effects_to_plot,
+        top_n_interaction_pairs=cl_args.top_n_interaction_pairs,
+        allow_within_chr_interaction=cl_args.allow_within_chr_interaction,
+        min_interaction_pair_distance=cl_args.min_interaction_pair_distance,
     )
 
     return complexity_object
@@ -63,6 +71,42 @@ def get_argument_parser() -> argparse.ArgumentParser:
         type=int,
         default=128,
         help="Number of SNPs to use for the analysis.",
+    )
+
+    parser.add_argument(
+        "--top_n_genotype_snps_effects_to_plot",
+        type=int,
+        default=10,
+        help="Number of interaction pairs to use for the analysis.",
+    )
+
+    parser.add_argument(
+        "--top_n_interaction_pairs",
+        type=int,
+        default=10,
+        help="Number of interaction pairs to use for the analysis.",
+    )
+
+    group = parser.add_mutually_exclusive_group(required=False)
+    group.add_argument(
+        "--allow_within_chr_interaction",
+        action="store_true",
+        default=True,
+        help="Allows within chromosome interactions. This is the default behavior.",
+    )
+    group.add_argument(
+        "--disallow_within_chr_interaction",
+        dest="allow_within_chr_interaction",
+        action="store_false",
+        help="Disallows within chromosome interactions. "
+        "Include this flag to override the default behavior.",
+    )
+
+    parser.add_argument(
+        "--min_interaction_pair_distance",
+        type=int,
+        default=0,
+        help="Minimum distance between interaction pairs if they are within chr.",
     )
 
     return parser
