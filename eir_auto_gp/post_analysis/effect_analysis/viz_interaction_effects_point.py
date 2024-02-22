@@ -5,12 +5,14 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import statsmodels.formula.api as smf
-from aislib.misc_utils import ensure_path_exists
+from aislib.misc_utils import ensure_path_exists, get_logger
 
 from eir_auto_gp.post_analysis.effect_analysis.interaction_effects import (
     get_snp_allele_maps,
     read_bim,
 )
+
+logger = get_logger(name=__name__)
 
 
 def run_grouped_interaction_analysis(
@@ -39,6 +41,10 @@ def run_grouped_interaction_analysis(
         df_interaction_effects=df_interaction_effects,
         top_n=top_n_snps,
     )
+
+    if not snps_to_check:
+        logger.info("No SNP pairs to check for grouped interaction analysis.")
+        return
 
     all_results = []
 
