@@ -96,6 +96,7 @@ def train_and_evaluate_linear(
             cv=5,
             random_state=0,
             max_iter=1000,
+            class_weight="balanced",
         )
     else:
         model = ElasticNetCV(
@@ -208,25 +209,30 @@ def evaluate_model_performance(
 def get_xgboost_params(task_type: str, num_classes: int) -> Dict[str, Any]:
     assert task_type in {"classification", "regression"}
 
+    params = {
+        "eta": 0.03,
+        "max_depth": 6,
+        "subsample": 0.7,
+        "colsample_bytree": 0.7,
+        "min_child_weight": 4,
+        "lambda": 1,
+        "alpha": 0.5,
+        "booster": "gbtree",
+    }
+
     if task_type == "classification":
-        params = {
-            "eta": 0.02,
-            "max_depth": 7,
-            "objective": "multi:softprob",
-            "subsample": 0.5,
-            "booster": "gbtree",
-            "num_class": num_classes,
-        }
+        params.update(
+            {
+                "objective": "multi:softprob",
+                "num_class": num_classes,
+            }
+        )
     elif task_type == "regression":
-        params = {
-            "eta": 0.02,
-            "max_depth": 7,
-            "objective": "reg:squarederror",
-            "subsample": 0.5,
-            "booster": "gbtree",
-        }
-    else:
-        raise ValueError()
+        params.update(
+            {
+                "objective": "reg:squarederror",
+            }
+        )
 
     return params
 
