@@ -9,8 +9,11 @@ from eir_auto_gp.post_analysis.effect_analysis.interaction_effects import (
     get_interaction_effects,
 )
 from eir_auto_gp.post_analysis.effect_analysis.viz_genotype_effects import plot_top_snps
-from eir_auto_gp.post_analysis.effect_analysis.viz_interaction_effects import (
+from eir_auto_gp.post_analysis.effect_analysis.viz_interaction_effects_graph import (
     generate_interaction_snp_graph_figure,
+)
+from eir_auto_gp.post_analysis.effect_analysis.viz_interaction_effects_point import (
+    run_grouped_interaction_analysis,
 )
 from eir_auto_gp.post_analysis.run_complexity_analysis import (
     convert_split_data_to_model_ready_object,
@@ -35,36 +38,49 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
     )
     ensure_path_exists(path=output_root, is_folder=True)
 
+    effects_output = output_root / "allele_effects"
+    ensure_path_exists(path=effects_output, is_folder=True)
     df_allele_effects = get_allele_effects(
         df_genotype=mro_genotype.input_train,
         df_target=mro_genotype.target_train,
         bim_file=post_analysis_object.data_paths.snp_bim_path,
         target_type=post_analysis_object.experiment_info.target_type,
     )
-    df_allele_effects.to_csv(output_root / "allele_effects.csv")
+    df_allele_effects.to_csv(effects_output / "allele_effects.csv")
 
     plot_top_snps(
         df=df_allele_effects,
         p_value_threshold=0.05,
         top_n=10,
-        output_dir=output_root / "top_snps",
+        output_dir=effects_output / "figures",
     )
 
+    interaction_output = output_root / "interaction_effects"
+    ensure_path_exists(path=interaction_output, is_folder=True)
     df_interaction_effects = get_interaction_effects(
         df_genotype=mro_genotype.input_train,
         df_target=mro_genotype.target_train,
         bim_file=post_analysis_object.data_paths.snp_bim_path,
         target_type=post_analysis_object.experiment_info.target_type,
     )
-    df_interaction_effects.to_csv(output_root / "interaction_effects.csv")
+    df_interaction_effects.to_csv(interaction_output / "interaction_effects.csv")
 
     if len(df_interaction_effects) > 0:
         trait_name = mro_genotype.target_train.columns[0]
         generate_interaction_snp_graph_figure(
-            df=df_interaction_effects,
+            df_interaction_effects=df_interaction_effects,
             bim_file_path=post_analysis_object.data_paths.snp_bim_path,
             df_target=mro_genotype.target_train,
             trait=trait_name,
-            plot_output_root=output_root / "interaction_graphs",
+            plot_output_root=interaction_output,
             top_n_snps=10,
+        )
+
+        run_grouped_interaction_analysis(
+            df_genotype=mro_genotype.input_train,
+            df_target=mro_genotype.target_train,
+            df_interaction_effects=df_interaction_effects,
+            top_n_snps=10,
+            bim_file=post_analysis_object.data_paths.snp_bim_path,
+            output_folder=output_root / "grouped_interaction_analysis",
         )

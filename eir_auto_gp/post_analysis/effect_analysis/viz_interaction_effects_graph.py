@@ -14,7 +14,7 @@ from matplotlib import pyplot as plt
 
 
 def generate_interaction_snp_graph_figure(
-    df: pd.DataFrame,
+    df_interaction_effects: pd.DataFrame,
     bim_file_path: Path,
     plot_output_root: Path,
     df_target: pd.DataFrame,
@@ -22,10 +22,10 @@ def generate_interaction_snp_graph_figure(
     trait: Optional[str] = None,
 ) -> None:
     train_interaction_info = _extract_cluster_info_from_interaction_df(
-        df_interactions=df, bim_file_path=bim_file_path
+        df_interactions=df_interaction_effects, bim_file_path=bim_file_path
     )
-    df_interaction_coefficients = _build_interaction_coefficient_df(
-        df=df, snps=train_interaction_info.snps
+    df_interaction_coefficients = build_interaction_coefficient_df(
+        df_interaction_effects=df_interaction_effects, snps=train_interaction_info.snps
     )
 
     df_interaction_coefficients = filter_df_interactions_for_top_n_snps(
@@ -50,14 +50,14 @@ def generate_interaction_snp_graph_figure(
         df_target=df_target,
     )
 
-    cur_output_path = plot_output_root / "snp_interactions.pdf"
+    cur_output_path = plot_output_root / "figures" / "snp_interactions.pdf"
     ensure_path_exists(path=cur_output_path)
 
     cur_fig.savefig(cur_output_path, bbox_inches="tight")
 
 
-def _build_interaction_coefficient_df(
-    df: pd.DataFrame, snps: list[str]
+def build_interaction_coefficient_df(
+    df_interaction_effects: pd.DataFrame, snps: list[str]
 ) -> pd.DataFrame:
     array = np.zeros((len(snps), len(snps)))
 
@@ -66,8 +66,10 @@ def _build_interaction_coefficient_df(
             if snp_1 == snp_2:
                 continue
 
-            mask = (df["KEY"].str.contains(snp_1)) & (df["KEY"].str.contains(snp_2))
-            df_slice = df[mask]
+            mask = (df_interaction_effects["KEY"].str.contains(snp_1)) & (
+                df_interaction_effects["KEY"].str.contains(snp_2)
+            )
+            df_slice = df_interaction_effects[mask]
 
             if len(df_slice) == 0:
                 continue
@@ -76,9 +78,9 @@ def _build_interaction_coefficient_df(
 
             array[row_idx, column_idx] = cur_coefficient
 
-    df = pd.DataFrame(array, columns=snps, index=snps)
+    df_interaction_effects = pd.DataFrame(array, columns=snps, index=snps)
 
-    return df
+    return df_interaction_effects
 
 
 def _get_snp_interactions_from_coefficients(
