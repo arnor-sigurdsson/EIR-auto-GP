@@ -132,18 +132,19 @@ def fit_models_for_combinations(
     allele_maps: dict[str, dict[str, str]],
 ):
     results = []
+    allele_order = ["REF", "HET", "ALT"]
 
-    for genotype1 in df[snp1].unique():
-        for genotype2 in df[snp2].unique():
+    for allele1 in allele_order:
+        genotype1 = allele_maps[snp1].get(allele1)
+        if genotype1 is None:
+            continue
+
+        for allele2 in allele_order:
+            genotype2 = allele_maps[snp2].get(allele2)
+            if genotype2 is None:
+                continue
+
             subset = df[(df[snp1] == genotype1) & (df[snp2] == genotype2)]
-
-            snp1_expected_values = allele_maps[snp1].values()
-            snp2_expected_values = allele_maps[snp2].values()
-
-            subset = subset[
-                subset[snp1].isin(snp1_expected_values)
-                & subset[snp2].isin(snp2_expected_values)
-            ].copy()
 
             if not subset.empty:
                 model = smf.ols(f"{target_name} ~ 1", data=subset).fit()
@@ -163,7 +164,7 @@ def fit_models_for_combinations(
                 )
             else:
                 logger.warning(
-                    "No data for snp1: %s, snp2: %s, genotype1: %s, genotype2: %s",
+                    "No data for SNP1: %s, SNP2: %s, genotype1: %s, genotype2: %s",
                     snp1,
                     snp2,
                     genotype1,
