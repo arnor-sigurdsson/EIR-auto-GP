@@ -241,7 +241,7 @@ def _get_interaction_graph_figure(
 
         pos = new_pos
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(10, 8))
 
     cmap = plt.get_cmap("tab20")
     node_color = [cmap(node_color_map[i]) for i in graph.nodes()]
@@ -298,6 +298,7 @@ def _get_interaction_graph_figure(
     ax.set_title(trait)
 
     plt.axis("off")
+    plt.tight_layout()
 
     return fig
 

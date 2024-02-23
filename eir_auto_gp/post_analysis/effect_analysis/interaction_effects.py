@@ -247,11 +247,19 @@ def build_df_from_interaction_results(
     df_linear.index = df_linear.index.str.replace(r"'", "", regex=True)
 
     df_linear_renamed = _rename_interaction_regression_index(
-        df_results=df_linear, allele_maps=allele_maps, snp=snp_1
+        df_results=df_linear,
+        allele_maps=allele_maps,
+        snp=snp_1,
     )
 
     df_linear_renamed = _rename_interaction_regression_index(
-        df_results=df_linear_renamed, allele_maps=allele_maps, snp=snp_2
+        df_results=df_linear_renamed,
+        allele_maps=allele_maps,
+        snp=snp_2,
+    )
+
+    df_linear_renamed = df_linear_renamed.rename(
+        {f"{snp_1}:{snp_2}": f"{snp_1}--:--{snp_2}"}
     )
 
     df_linear_renamed["KEY"] = f"{snp_1}--:--{snp_2}"
