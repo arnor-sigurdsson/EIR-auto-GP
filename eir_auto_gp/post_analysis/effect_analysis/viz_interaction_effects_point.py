@@ -161,6 +161,14 @@ def fit_models_for_combinations(
                         "n": len(subset),
                     }
                 )
+            else:
+                logger.warning(
+                    "No data for snp1: %s, snp2: %s, genotype1: %s, genotype2: %s",
+                    snp1,
+                    snp2,
+                    genotype1,
+                    genotype2,
+                )
 
     return pd.DataFrame(results)
 
