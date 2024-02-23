@@ -64,6 +64,13 @@ def run_grouped_interaction_analysis(
             snp2_name=snp2,
         )
 
+        df_results = df_results.rename(
+            columns={
+                f"{snp1}_genotype": "SNP1_genotype",
+                f"{snp2}_genotype": "SNP2_genotype",
+            }
+        )
+
         all_results.append(df_results)
 
         output_path = output_folder / "figures" / f"{snp1}_{snp2}_interaction.pdf"
