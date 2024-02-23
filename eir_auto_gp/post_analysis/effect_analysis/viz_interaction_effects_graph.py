@@ -308,6 +308,7 @@ def scale_weights(
     trait: str,
     scaling_factor: float = 100.0,
     max_threshold: float = 18.0,
+    min_threshold: float = 1.0,
 ) -> list[float]:
     target_min = df_target[trait].min()
     target_range = df_target[trait].max() - target_min
@@ -321,12 +322,10 @@ def scale_weights(
     if max_weight > max_threshold:
         weights = [weight * (max_threshold / max_weight) for weight in weights]
 
-    min_weight = min(weights)
-    if min_weight < 0:
-        weights = [weight - min_weight for weight in weights]
+    weights = [max(weight, min_threshold) for weight in weights]
 
     assert all(
-        0 <= weight <= max_threshold for weight in weights
+        min_threshold <= weight <= max_threshold for weight in weights
     ), "Weights out of bounds"
 
     return weights
