@@ -248,9 +248,11 @@ def _check_recessive_coefficients(df: pd.DataFrame) -> None:
 
 
 def _check_interaction_effects(df_interactions: pd.DataFrame) -> None:
-    df_interaction_terms = df_interactions[df_interactions["allele"].str.contains(":")]
+    df_interaction_terms = df_interactions[
+        df_interactions["allele"].str.contains("--:--")
+    ]
     max_interaction_coefficient = df_interaction_terms.loc[
         df_interaction_terms["Coefficient"].idxmax(),
         "KEY",
     ]
-    assert max_interaction_coefficient == "snp5:snp6"
+    assert max_interaction_coefficient == "snp5--:--snp6"
