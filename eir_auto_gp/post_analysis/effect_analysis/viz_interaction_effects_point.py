@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -37,18 +38,18 @@ def run_grouped_interaction_analysis(
 
     df_combined = pd.concat(objs=[df_target, df_genotype_prepared], axis=1)
 
-    snps_to_check = _get_snp_pairs_to_check(
+    all_snp_pairs = _get_snp_pairs_to_check(
+        df_interaction_effects=df_interaction_effects, top_n=None
+    )
+
+    snps_to_plot = _get_snp_pairs_to_check(
         df_interaction_effects=df_interaction_effects,
         top_n=top_n_snps,
     )
 
-    if not snps_to_check:
-        logger.info("No SNP pairs to check for grouped interaction analysis.")
-        return
-
     all_results = []
 
-    for snp1, snp2 in snps_to_check:
+    for snp1, snp2 in all_snp_pairs:
         df_results = fit_models_for_combinations(
             df=df_combined,
             snp1=snp1,
@@ -57,12 +58,17 @@ def run_grouped_interaction_analysis(
             allele_maps=allele_maps,
         )
 
-        fig = plot_snp_coefficients_as_points(
-            df_results=df_results,
-            allele_maps=allele_maps,
-            snp1_name=snp1,
-            snp2_name=snp2,
-        )
+        if [snp1, snp2] in snps_to_plot:
+            output_path = output_folder / "figures" / f"{snp1}_{snp2}_interaction.pdf"
+            ensure_path_exists(path=output_path)
+            fig = plot_snp_coefficients_as_points(
+                df_results=df_results,
+                allele_maps=allele_maps,
+                snp1_name=snp1,
+                snp2_name=snp2,
+            )
+
+            fig.savefig(output_path)
 
         df_results = df_results.rename(
             columns={
@@ -72,11 +78,6 @@ def run_grouped_interaction_analysis(
         )
 
         all_results.append(df_results)
-
-        output_path = output_folder / "figures" / f"{snp1}_{snp2}_interaction.pdf"
-        ensure_path_exists(path=output_path)
-
-        fig.savefig(output_path)
 
     df_all_results = pd.concat(all_results)
 
@@ -88,21 +89,22 @@ def run_grouped_interaction_analysis(
 
 def _get_snp_pairs_to_check(
     df_interaction_effects: pd.DataFrame,
-    top_n: int,
+    top_n: Optional[int],
 ) -> list[list[str, str]]:
     interaction_keys = df_interaction_effects["KEY"].unique()
 
     df_ie = df_interaction_effects
     df_interactions = df_ie[df_ie.index.isin(interaction_keys)]
 
-    df_interactions_top = df_interactions.sort_values(
-        "Coefficient",
-        ascending=False,
-    ).head(top_n)
+    df_to_check = df_interactions.copy()
 
-    return (
-        df_interactions_top["KEY"].str.split("--:--", expand=True).to_numpy().tolist()
-    )
+    if top_n is not None:
+        df_to_check = df_interactions.sort_values(
+            "Coefficient",
+            ascending=False,
+        ).head(top_n)
+
+    return df_to_check["KEY"].str.split("--:--", expand=True).to_numpy().tolist()
 
 
 def prepare_genotype_data(
