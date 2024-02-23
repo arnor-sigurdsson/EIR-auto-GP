@@ -151,7 +151,7 @@ def fit_models_for_combinations(
                     {
                         f"{snp1}_genotype": genotype1,
                         f"{snp2}_genotype": genotype2,
-                        "Coefficient": model.params["Intercept"],
+                        "Value": model.params["Intercept"],
                         "CI_lower": conf_int[0],
                         "CI_upper": conf_int[1],
                         "P_value": p_value,
@@ -200,7 +200,7 @@ def plot_snp_coefficients_as_points(
 
             if not subset.empty:
                 row = subset.iloc[0]
-                y = row["Coefficient"]
+                y = row["Value"]
                 ci_lower = row["CI_lower"]
                 ci_upper = row["CI_upper"]
                 x = i + j * 0.1
@@ -222,7 +222,7 @@ def plot_snp_coefficients_as_points(
     ax.set_xticklabels(genotype_order_snp1)
 
     ax.set_xlabel(snp1_name + " Genotype")
-    ax.set_ylabel("Coefficient")
+    ax.set_ylabel("Value")
     ax.set_title(f"Effect Sizes for {snp1_name} and {snp2_name} Genotypes")
 
     handles, labels = ax.get_legend_handles_labels()
