@@ -23,6 +23,7 @@ class PostAnalysisObject:
     top_n_interaction_pairs: int
     allow_within_chr_interaction: bool
     min_interaction_pair_distance: int
+    sets_for_effect_analysis: list[str]
 
 
 def build_post_analysis_object(cl_args: argparse.Namespace) -> PostAnalysisObject:
@@ -39,6 +40,8 @@ def build_post_analysis_object(cl_args: argparse.Namespace) -> PostAnalysisObjec
         top_snps=cl_args.top_n_snps,
     )
 
+    sets_for_effect_analysis = cl_args.sets_for_effect_analysis.split(",")
+
     complexity_object = PostAnalysisObject(
         data_paths=data_paths,
         experiment_info=experiment_info,
@@ -47,6 +50,7 @@ def build_post_analysis_object(cl_args: argparse.Namespace) -> PostAnalysisObjec
         top_n_interaction_pairs=cl_args.top_n_interaction_pairs,
         allow_within_chr_interaction=cl_args.allow_within_chr_interaction,
         min_interaction_pair_distance=cl_args.min_interaction_pair_distance,
+        sets_for_effect_analysis=sets_for_effect_analysis,
     )
 
     return complexity_object
@@ -107,6 +111,15 @@ def get_argument_parser() -> argparse.ArgumentParser:
         type=int,
         default=0,
         help="Minimum distance between interaction pairs if they are within chr.",
+    )
+
+    parser.add_argument(
+        "--sets_for_effect_analysis",
+        type=str,
+        default="train",
+        help="What parts of the data to use for the effect analysis. "
+        "Options: 'train', 'test', 'validation', or a comma separated "
+        "list of these.",
     )
 
     return parser
