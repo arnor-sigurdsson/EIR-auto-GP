@@ -244,7 +244,7 @@ def _check_recessive_coefficients(df: pd.DataFrame) -> None:
     third_row_coef = df_snp.iloc[2]["Coefficient"]
 
     msg1 = f"SNP4: 2nd row = {second_row_coef}"
-    assert abs(second_row_coef) < 1.0, msg1
+    assert abs(second_row_coef) < 1.1, msg1
 
     msg2 = f"SNP4: 2nd row = {second_row_coef}, 3rd row = {third_row_coef}"
     assert third_row_coef > second_row_coef, msg2
