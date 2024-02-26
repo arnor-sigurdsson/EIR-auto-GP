@@ -133,6 +133,7 @@ def fit_models_for_combinations(
 ):
     results = []
     allele_order = ["REF", "HET", "ALT"]
+    total_samples = len(df)
 
     for allele1 in allele_order:
         genotype1 = allele_maps[snp1].get(allele1)
@@ -150,6 +151,7 @@ def fit_models_for_combinations(
                 model = smf.ols(f"{target_name} ~ 1", data=subset).fit()
                 conf_int = model.conf_int().loc["Intercept"]
                 p_value = model.pvalues["Intercept"]
+                combination_freq = len(subset) / total_samples
                 results.append(
                     {
                         f"{snp1}_genotype": genotype1,
@@ -160,6 +162,7 @@ def fit_models_for_combinations(
                         "P_value": p_value,
                         "KEY": f"{snp1}--:--{snp2}",
                         "n": len(subset),
+                        "Combination_freq": combination_freq,
                     }
                 )
             else:
