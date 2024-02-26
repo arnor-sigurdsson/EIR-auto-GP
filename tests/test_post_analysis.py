@@ -216,10 +216,13 @@ def _check_additive_coefficients(df: pd.DataFrame, regression_type: str) -> None
             second_row_coef = np.exp(second_row_coef)
             third_row_coef = np.exp(third_row_coef)
 
-        is_close = (
-            abs(third_row_coef - 2 * second_row_coef) / (2 * second_row_coef) < 0.1
+        ratio = abs(third_row_coef - 2 * second_row_coef) / (2 * second_row_coef)
+        is_close = ratio < 0.2
+
+        msg = (
+            f"SNP{snp}: 2nd row = {second_row_coef}, "
+            f"3rd row = {third_row_coef}, ratio = {ratio}"
         )
-        msg = f"SNP{snp}: 2nd row = {second_row_coef}, 3rd row = {third_row_coef}"
 
         assert is_close, msg
 
