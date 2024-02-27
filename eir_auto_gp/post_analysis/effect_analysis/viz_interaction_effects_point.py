@@ -86,6 +86,23 @@ def run_grouped_interaction_analysis(
         index=False,
     )
 
+    all_snps = set([snp for pair in all_snp_pairs for snp in pair])
+    snp_frequencies = []
+
+    for snp in all_snps:
+        cur_freq = calculate_snp_genotype_frequencies(
+            df=df_genotype_prepared,
+            snp=snp,
+            genotype_maps=allele_maps,
+        )
+        snp_frequencies.append(cur_freq)
+
+    df_snp_frequencies = pd.concat(snp_frequencies)
+    df_snp_frequencies.to_csv(
+        output_folder / "snp_frequencies.csv",
+        index=False,
+    )
+
 
 def _get_snp_pairs_to_check(
     df_interaction_effects: pd.DataFrame,
@@ -256,3 +273,56 @@ def plot_snp_coefficients_as_points(
     plt.tight_layout()
 
     return fig
+
+
+def calculate_snp_genotype_frequencies(
+    df: pd.DataFrame,
+    snp: str,
+    genotype_maps: dict[str, dict[str, str]],
+) -> pd.DataFrame:
+    results = []
+    total_samples = len(df)
+
+    for genotype_label, genotype in genotype_maps[snp].items():
+        count = df[snp].value_counts(dropna=False).get(genotype, 0)
+        frequency = count / total_samples if total_samples > 0 else 0
+        results.append(
+            {
+                "SNP": snp,
+                "Genotype": genotype,
+                "Genotype_Label": genotype_label,
+                "Count": count,
+                "Frequency": frequency,
+            }
+        )
+
+    all_genotypes = set(df[snp].unique())
+    known_genotypes = set(genotype_maps[snp].values())
+    additional_genotypes = all_genotypes - known_genotypes - {float("nan")}
+
+    for genotype in additional_genotypes:
+        count = df[snp].value_counts(dropna=False).get(genotype, 0)
+        frequency = count / total_samples if total_samples > 0 else 0
+        results.append(
+            {
+                "SNP": snp,
+                "Genotype": genotype,
+                "Genotype_Label": "Other/Unknown",
+                "Count": count,
+                "Frequency": frequency,
+            }
+        )
+
+    missing_count = df[snp].isna().sum()
+    if missing_count > 0:
+        results.append(
+            {
+                "SNP": snp,
+                "Genotype": "Missing",
+                "Genotype_Label": "Missing",
+                "Count": missing_count,
+                "Frequency": missing_count / total_samples,
+            }
+        )
+
+    return pd.DataFrame(results)
