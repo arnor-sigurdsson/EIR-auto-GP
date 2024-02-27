@@ -93,19 +93,27 @@ def train_and_evaluate_linear(
 
     if target_type == "classification":
         model = LogisticRegressionCV(
-            cv=5,
+            cv=10,
             random_state=0,
             max_iter=1000,
             class_weight="balanced",
+            scoring="roc_auc",
+            solver="saga",
+            penalty="elasticnet",
+            Cs=10,
+            l1_ratios=[0.1, 0.5, 0.7, 0.9, 0.95, 0.99],
+            n_jobs=-1,
         )
     else:
         model = ElasticNetCV(
-            eps=1e-7,
-            cv=5,
-            random_state=0,
             l1_ratio=[0.1, 0.5, 0.7, 0.9, 0.95, 0.99],
-            tol=1e-03,
-            selection="random",
+            eps=1e-5,
+            n_alphas=100,
+            cv=10,
+            tol=1e-4,
+            selection="cyclic",
+            random_state=0,
+            n_jobs=-1,
         )
 
     model.fit(X=x_train, y=y_train.ravel())
