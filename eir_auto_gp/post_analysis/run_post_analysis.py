@@ -2,6 +2,8 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
+from aislib.misc_utils import ensure_path_exists
+
 from eir_auto_gp.post_analysis.common.data_preparation import (
     DataPaths,
     ExperimentInfo,
@@ -10,7 +12,10 @@ from eir_auto_gp.post_analysis.common.data_preparation import (
     extract_experiment_info_from_config,
     set_up_split_model_data,
 )
-from eir_auto_gp.post_analysis.run_complexity_analysis import run_complexity_analysis
+from eir_auto_gp.post_analysis.run_complexity_analysis import (
+    convert_split_data_to_model_ready_object,
+    run_complexity_analysis,
+)
 from eir_auto_gp.post_analysis.run_effect_analysis import run_effect_analysis
 
 
@@ -122,14 +127,50 @@ def get_argument_parser() -> argparse.ArgumentParser:
         "list of these.",
     )
 
+    parser.add_argument(
+        "--save_data",
+        action="store_true",
+        default=False,
+        help="Save the data (genotype and tabular) used for the post analysis.",
+    )
+
     return parser
 
 
 def run_all():
     cl_args = get_cl_args()
     post_analysis_object = build_post_analysis_object(cl_args=cl_args)
+
+    if cl_args.save_data:
+        _save_data(post_analysis_object=post_analysis_object)
+
     run_complexity_analysis(post_analysis_object=post_analysis_object)
     run_effect_analysis(post_analysis_object=post_analysis_object)
+
+
+def _save_data(post_analysis_object: PostAnalysisObject) -> None:
+    mro = convert_split_data_to_model_ready_object(
+        split_model_data=post_analysis_object.modelling_data,
+        include_genotype=True,
+        include_tabular=True,
+        one_hot_encode=False,
+    )
+
+    output_folder = (
+        post_analysis_object.data_paths.analysis_output_path / "post_analysis_data"
+    )
+    ensure_path_exists(path=output_folder, is_folder=True)
+
+    train_input_and_target = mro.input_train.join(mro.target_train)
+    train_input_and_target.to_csv(output_folder / "train_input_and_target.csv")
+
+    val_input_and_target = mro.input_val.join(mro.target_val)
+    val_input_and_target.to_csv(output_folder / "val_input_and_target.csv")
+
+    test_input_and_target = mro.input_test.join(mro.target_test)
+    test_input_and_target.to_csv(output_folder / "test_input_and_target.csv")
+
+    return None
 
 
 def main():
