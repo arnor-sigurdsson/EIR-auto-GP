@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Callable, Generator
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from aislib.misc_utils import ensure_path_exists
+from aislib.misc_utils import ensure_path_exists, get_logger
 
 from eir_auto_gp.post_analysis.run_complexity_analysis import (
     ModelReadyObject,
@@ -16,6 +16,8 @@ from eir_auto_gp.post_analysis.run_complexity_analysis import (
 
 if TYPE_CHECKING:
     from eir_auto_gp.post_analysis.run_post_analysis import PostAnalysisObject
+
+logger = get_logger(name=__name__)
 
 
 @dataclass
@@ -233,7 +235,9 @@ def get_step_training_iterator(
     any_tabular = len(ei.all_input_columns) > 0
 
     # 1
+    tabular_feature_importance = None
     if any_tabular:
+        logger.info("Running iterative complexity analysis: tabular only")
         mro_tabular = convert_split_data_to_model_ready_object(
             split_model_data=post_analysis_object.modelling_data,
             include_genotype=False,
@@ -243,7 +247,14 @@ def get_step_training_iterator(
 
         yield mro_tabular, "Tabular"
 
+        tabular_results = train_and_evaluate_linear(
+            modelling_data=mro_tabular,
+            target_type=ei.target_type,
+        )
+        tabular_feature_importance = tabular_results.feature_importance
+
     # 2
+    logger.info("Running iterative complexity analysis: genotype only")
     mro_genotype = convert_split_data_to_model_ready_object(
         split_model_data=post_analysis_object.modelling_data,
         include_genotype=True,
@@ -255,6 +266,7 @@ def get_step_training_iterator(
 
     # 3
     if any_tabular:
+        logger.info("Running iterative complexity analysis: genotype + tabular")
         mro_genotype_tabular = convert_split_data_to_model_ready_object(
             split_model_data=post_analysis_object.modelling_data,
             include_genotype=True,
@@ -265,6 +277,7 @@ def get_step_training_iterator(
         yield mro_genotype_tabular, "Genotype + Tabular"
 
     # 4
+    logger.info("Running iterative complexity analysis: one-hot encoding")
     one_hot_iterator = _get_one_hot_iterator(
         post_analysis_object=post_analysis_object,
         df_allele_effects=step_information_objects.allele_effects,
@@ -276,6 +289,7 @@ def get_step_training_iterator(
         yield mro, model_type
 
     # 5
+    logger.info("Running iterative complexity analysis: all one-hot encoding")
     mro_all_oh = convert_split_data_to_model_ready_object(
         split_model_data=post_analysis_object.modelling_data,
         include_genotype=True,
@@ -284,29 +298,40 @@ def get_step_training_iterator(
     )
 
     yield mro_all_oh, "+ All OH"
+    running_mro = mro_all_oh
 
     # 6
     if any_tabular:
-        txt_iterator = get_txt_iterator(
+        logger.info("Running iterative complexity analysis: tabular x tabular")
+        txt_iterator, _, _ = get_txt_iterator(
             post_analysis_object=post_analysis_object,
             top_n=max_interaction_exe,
         )
 
-        for mro, model_type in txt_iterator:
-            yield mro, model_type
+        for mro_txt, model_type in txt_iterator:
+            yield mro_txt, model_type
+            running_mro = mro_txt
 
     # 7
     if any_tabular:
-        gxt_iterator = get_gxt_iterator(
+        logger.info("Running iterative complexity analysis: genotype x tabular")
+        assert tabular_feature_importance is not None
+        gxt_iterator, _, _ = get_gxt_iterator(
+            running_mro=running_mro,
             post_analysis_object=post_analysis_object,
             top_n=max_interaction_gxe,
+            step_information_objects=step_information_objects,
+            tabular_feature_importance=tabular_feature_importance,
         )
 
-        for mro, model_type in gxt_iterator:
-            yield mro, model_type
+        for mro_gxt, model_type in gxt_iterator:
+            yield mro_gxt, model_type
+            running_mro = mro_gxt
 
     # 8
+    logger.info("Running iterative complexity analysis: genotype x genotype")
     gxg_iterator = get_gxg_iterator(
+        running_mro=running_mro,
         post_analysis_object=post_analysis_object,
         interaction_effects_df=step_information_objects.interaction_effects,
         top_n=max_interaction_gxg,
@@ -376,11 +401,25 @@ def _find_non_additive_snps(df: pd.DataFrame, n: int) -> pd.DataFrame:
 def get_txt_iterator(
     post_analysis_object: "PostAnalysisObject",
     top_n: int,
-) -> Generator:
+) -> tuple[Generator, pd.DataFrame, ModelReadyObject]:
     pao = post_analysis_object
 
     target_type = pao.experiment_info.target_type
     tabular_columns = pao.experiment_info.all_input_columns
+
+    mro_txt_search = convert_split_data_to_model_ready_object(
+        split_model_data=pao.modelling_data,
+        include_genotype=False,
+        include_tabular=True,
+        one_hot_encode=False,
+    )
+
+    txt_candidates = _find_txt_candidates(
+        model_ready_object=mro_txt_search,
+        tabular_columns=tabular_columns,
+        target_type=target_type,
+        top_n=top_n,
+    )
 
     mro = convert_split_data_to_model_ready_object(
         split_model_data=pao.modelling_data,
@@ -389,29 +428,33 @@ def get_txt_iterator(
         one_hot_encode=True,
     )
 
-    txt_candidates = _find_txt_candidates(
-        model_ready_object=mro,
-        tabular_columns=tabular_columns,
-        target_type=target_type,
-        top_n=top_n,
+    logger.debug(
+        "Top %d TxT candidates: %s", top_n, txt_candidates["interaction"].tolist()
     )
 
-    for idx, row in txt_candidates.iterrows():
-        col1, col2 = row["interaction"].split("_x_")
+    def generator():
+        nonlocal mro
+        cur_mro = mro
+        for idx, row in txt_candidates.iterrows():
+            col1, col2 = row["interaction"].split("_x_")
 
-        def add_interaction(
-            inputs: pd.DataFrame, targets: pd.DataFrame
-        ) -> tuple[pd.DataFrame, pd.DataFrame]:
-            interaction_term = f"{col1}_x_{col2}"
-            inputs[interaction_term] = inputs[col1] * inputs[col2]
-            return inputs, targets
+            def add_interaction(
+                inputs: pd.DataFrame, targets: pd.DataFrame
+            ) -> tuple[pd.DataFrame, pd.DataFrame]:
+                col1_name = f"COVAR_{col1}"
+                col2_name = f"COVAR_{col2}"
+                interaction_term = f"{col1_name}_x_{col2_name}"
+                inputs[interaction_term] = inputs[col1_name] * inputs[col2_name]
+                return inputs, targets
 
-        modified_mro = _merge_operate_and_split(
-            model_ready_object=mro,
-            function=add_interaction,
-        )
+            cur_mro = _merge_operate_and_split(
+                model_ready_object=cur_mro,
+                function=add_interaction,
+            )
 
-        yield modified_mro, f"+ TxT {col1}_x_{col2}"
+            yield cur_mro, f"+ TxT {col1}_x_{col2}"
+
+    return generator(), txt_candidates, mro
 
 
 def _find_txt_candidates(
@@ -420,16 +463,30 @@ def _find_txt_candidates(
     target_type: str,
     top_n: int,
 ) -> pd.DataFrame:
+    """
+    TODO: Possibly make this just return the top_n feature important ones from
+          the linear model only trained on tabular.
+    """
     results = []
     mro = model_ready_object
+
+    logger.debug(
+        "Searching for top TxT candidates among %d tabular columns, "
+        "testing %d combinations",
+        len(tabular_columns),
+        len(tabular_columns) * (len(tabular_columns) - 1) / 2,
+    )
 
     for col1, col2 in combinations(iterable=tabular_columns, r=2):
 
         def add_interaction(
-            inputs: pd.DataFrame, targets: pd.DataFrame
+            inputs: pd.DataFrame,
+            targets: pd.DataFrame,
         ) -> tuple[pd.DataFrame, pd.DataFrame]:
-            interaction_term = f"{col1}_x_{col2}"
-            inputs[interaction_term] = inputs[col1] * inputs[col2]
+            col1_name = f"COVAR_{col1}"
+            col2_name = f"COVAR_{col2}"
+            interaction_term = f"{col1_name}_x_{col2_name}"
+            inputs[interaction_term] = inputs[col1_name] * inputs[col2_name]
             return inputs, targets
 
         modified_mro = _merge_operate_and_split(
@@ -453,62 +510,199 @@ def _find_txt_candidates(
 
 
 def get_gxt_iterator(
+    running_mro: ModelReadyObject,
     post_analysis_object: "PostAnalysisObject",
+    step_information_objects: StepInformationObjects,
+    tabular_feature_importance: pd.DataFrame,
     top_n: int,
-) -> Generator:
+) -> tuple[Generator, pd.DataFrame, ModelReadyObject]:
     pao = post_analysis_object
     target_type = pao.experiment_info.target_type
-    snp_columns = pao.modelling_data.train.df_genotype_input.columns
-    tabular_columns = pao.experiment_info.all_input_columns
 
-    mro = convert_split_data_to_model_ready_object(
+    mro_search = convert_split_data_to_model_ready_object(
         split_model_data=pao.modelling_data,
         include_genotype=True,
         include_tabular=True,
-        one_hot_encode=True,
+        one_hot_encode=False,
+    )
+    genotype_columns = pao.modelling_data.train.df_genotype_input.columns.tolist()
+    gxt_candidates = _find_gxt_candidates(
+        model_ready_object=mro_search,
+        target_type=target_type,
+        genotype_columns=genotype_columns,
+        top_n=top_n,
+        df_allele_effects=step_information_objects.allele_effects,
+        df_tabular_feature_importance=tabular_feature_importance,
     )
 
-    gxt_candidates = _find_gxt_candidates(
-        model_ready_object=mro,
-        snp_columns=snp_columns,
-        tabular_columns=tabular_columns,
-        target_type=target_type,
+    logger.debug(
+        "Top %d GxT candidates: %s", top_n, gxt_candidates["interaction"].tolist()
+    )
+
+    def generator():
+        nonlocal running_mro
+
+        for idx, row in gxt_candidates.iterrows():
+            snp_column, tab_column = row["interaction"].split("_x_")
+
+            def add_interaction(
+                inputs: pd.DataFrame, targets: pd.DataFrame
+            ) -> tuple[pd.DataFrame, pd.DataFrame]:
+                snp_column_additive = (
+                    inputs[f"{snp_column}_0"] * 0
+                    + inputs[f"{snp_column}_1"] * 1
+                    + inputs[f"{snp_column}_2"] * 2
+                )
+
+                interaction_term = f"{snp_column}_x_{tab_column}"
+
+                inputs[interaction_term] = snp_column_additive * inputs[tab_column]
+
+                return inputs, targets
+
+            running_mro = _merge_operate_and_split(
+                model_ready_object=running_mro,
+                function=add_interaction,
+            )
+
+            yield running_mro, f"+ GxT {snp_column}_x_{tab_column}"
+
+    return generator(), gxt_candidates, running_mro
+
+
+def _find_gxt_candidates(
+    model_ready_object: ModelReadyObject,
+    target_type: str,
+    top_n: int,
+    genotype_columns: list[str],
+    df_allele_effects: pd.DataFrame,
+    df_tabular_feature_importance: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Here we assume we are operating on additive encodings.
+
+    TODO: Possibly we can skip the filtering there below, this is likely just an
+          issue when manual doing partial runs with top_n_snps being different
+          from the original run and the current iterative complexity run.
+    """
+    results = []
+    mro = model_ready_object
+
+    df_allele_effects_filtered = df_allele_effects[
+        df_allele_effects["KEY"].isin(genotype_columns)
+    ]
+
+    top_snp_candidates = _find_top_snp_candidates(
+        df_allele_effects=df_allele_effects_filtered,
         top_n=top_n,
     )
 
-    for idx, row in gxt_candidates.iterrows():
-        snp_column, tab_column = row["interaction"].split("_x_")
+    top_tabular_columns = df_tabular_feature_importance.head(top_n)["Feature"].tolist()
 
-        def add_interaction(
-            inputs: pd.DataFrame, targets: pd.DataFrame
-        ) -> tuple[pd.DataFrame, pd.DataFrame]:
-            interaction_term = f"{snp_column}_x_{tab_column}"
-            inputs[interaction_term] = inputs[snp_column] * inputs[tab_column]
-            return inputs, targets
+    logger.debug(
+        "Estimated n(TxG) combinations: %d for top %d SNPs: %s x top %d tabular: %s",
+        len(top_snp_candidates) * len(top_tabular_columns),
+        len(top_snp_candidates),
+        top_snp_candidates,
+        len(top_tabular_columns),
+        top_tabular_columns,
+    )
 
-        modified_mro = _merge_operate_and_split(
-            model_ready_object=mro,
-            function=add_interaction,
-        )
+    for snp_column in top_snp_candidates:
+        for tab_column in top_tabular_columns:
 
-        yield modified_mro, f"+ GxT {snp_column}_x_{tab_column}"
+            def add_interaction(
+                inputs: pd.DataFrame, targets: pd.DataFrame
+            ) -> tuple[pd.DataFrame, pd.DataFrame]:
+                interaction_values = inputs[snp_column] * inputs[tab_column]
+
+                interaction_name = f"{snp_column}_x_{tab_column}"
+                inputs[interaction_name] = interaction_values
+                return inputs, targets
+
+            modified_mro = _merge_operate_and_split(
+                model_ready_object=mro,
+                function=add_interaction,
+            )
+
+            train_eval_results = train_and_evaluate_linear(
+                modelling_data=modified_mro,
+                target_type=target_type,
+            )
+            df_performance = train_eval_results.performance
+            df_performance["interaction"] = f"{snp_column}_x_{tab_column}"
+
+            results.append(df_performance)
+
+    df_results = pd.concat(results)
+    metric = "r2" if target_type == "regression" else "mcc"
+    return df_results.sort_values(by=metric, ascending=False).head(top_n)
+
+
+def _find_top_snp_candidates(df_allele_effects: pd.DataFrame, top_n: int) -> list[str]:
+    snp_effects_total = {}
+
+    for snp, group in df_allele_effects.groupby("KEY"):
+        snp_effects_total[snp] = group["Coefficient"].abs().sum()
+
+    snp_effects_total_df = pd.DataFrame(
+        snp_effects_total.items(), columns=["KEY", "Total_Effect"]
+    )
+
+    top_snps_list = (
+        snp_effects_total_df.sort_values(by="Total_Effect", ascending=False)
+        .head(top_n)["KEY"]
+        .tolist()
+    )
+
+    return top_snps_list
 
 
 def get_gxg_iterator(
+    running_mro: ModelReadyObject,
     post_analysis_object: "PostAnalysisObject",
     interaction_effects_df: pd.DataFrame,
     top_n: int,
 ) -> Generator:
+    """
+    TODO: Possibly we can skip the filtering there below, this is likely just an
+          issue when manual doing partial runs with top_n_snps being different
+          from the original run and the current iterative complexity run.
+    """
+    mro = running_mro
     pao = post_analysis_object
-    mro = convert_split_data_to_model_ready_object(
-        split_model_data=pao.modelling_data,
-        include_genotype=True,
-        include_tabular=True,
-        one_hot_encode=True,
+
+    genotype_columns = pao.modelling_data.train.df_genotype_input.columns.tolist()
+
+    if len(interaction_effects_df) == 0:
+        logger.warning(
+            "No interaction effects found between SNPs in the genotype"
+            " columns, skipping."
+        )
+        return
+
+    interaction_effects_df["SNP1"] = (
+        interaction_effects_df["KEY"].str.split("--:--").str[0]
+    )
+    interaction_effects_df["SNP2"] = (
+        interaction_effects_df["KEY"].str.split("--:--").str[1]
     )
 
+    interaction_effects_df_filtered = interaction_effects_df[
+        (interaction_effects_df["SNP1"].isin(genotype_columns))
+        & (interaction_effects_df["SNP2"].isin(genotype_columns))
+    ].copy()
+
+    if len(interaction_effects_df_filtered) == 0:
+        logger.warning(
+            "No interaction effects found between SNPs in the genotype"
+            " columns, skipping."
+        )
+        return
+
     top_gxg_candidates = _find_top_gxg_candidates(
-        interaction_effects_df=interaction_effects_df, top_n=top_n
+        interaction_effects_df=interaction_effects_df_filtered,
+        top_n=top_n,
     )
 
     for idx, row in top_gxg_candidates.iterrows():
@@ -561,48 +755,12 @@ def _find_top_gxg_candidates(
     return top_interactions[["KEY", "Coefficient"]]
 
 
-def _find_gxt_candidates(
-    model_ready_object: ModelReadyObject,
-    snp_columns: list[str],
-    tabular_columns: list[str],
-    target_type: str,
-    top_n: int,
-) -> pd.DataFrame:
-    results = []
-    mro = model_ready_object
-
-    for snp_column in snp_columns:
-        for tab_column in tabular_columns:
-
-            def add_interaction(
-                inputs: pd.DataFrame, targets: pd.DataFrame
-            ) -> tuple[pd.DataFrame, pd.DataFrame]:
-                interaction_term = f"{snp_column}_x_{tab_column}"
-                inputs[interaction_term] = inputs[snp_column] * inputs[tab_column]
-                return inputs, targets
-
-            modified_mro = _merge_operate_and_split(
-                model_ready_object=mro,
-                function=add_interaction,
-            )
-
-            train_eval_results = train_and_evaluate_linear(
-                modelling_data=modified_mro,
-                target_type=target_type,
-            )
-            df_performance = train_eval_results.performance
-            df_performance["interaction"] = f"{snp_column}_x_{tab_column}"
-
-            results.append(df_performance)
-
-    df_results = pd.concat(results)
-    metric = "r2" if target_type == "regression" else "mcc"
-    return df_results.sort_values(by=metric, ascending=False).head(top_n)
-
-
 def _merge_operate_and_split(
     model_ready_object: ModelReadyObject,
-    function: Callable[[pd.DataFrame, pd.DataFrame], tuple[pd.DataFrame, pd.DataFrame]],
+    function: Callable[
+        [pd.DataFrame, pd.DataFrame],
+        tuple[pd.DataFrame, pd.DataFrame],
+    ],
 ) -> ModelReadyObject:
     df_all_inputs = pd.concat(
         (
