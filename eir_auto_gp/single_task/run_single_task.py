@@ -10,9 +10,9 @@ import luigi
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists
 
-from eir_auto_gp.analysis.run_analysis import RunAnalysisWrapper
 from eir_auto_gp.preprocess.converge import ParseDataWrapper
 from eir_auto_gp.preprocess.gwas_pre_selection import validate_geno_data_path
+from eir_auto_gp.single_task.analysis.run_analysis import RunAnalysisWrapper
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)

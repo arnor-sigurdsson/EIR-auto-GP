@@ -15,13 +15,20 @@ import yaml
 from aislib.misc_utils import ensure_path_exists
 from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_replace
 
-from eir_auto_gp.modelling.configs import AggregateConfig, get_aggregate_config
-from eir_auto_gp.modelling.feature_selection import get_genotype_subset_snps_file
-from eir_auto_gp.modelling.gwas_feature_selection import run_gwas_feature_selection
 from eir_auto_gp.preprocess.converge import (
     ParseDataWrapper,
     get_batch_size,
     get_dynamic_valid_size,
+)
+from eir_auto_gp.single_task.modelling.configs import (
+    AggregateConfig,
+    get_aggregate_config,
+)
+from eir_auto_gp.single_task.modelling.feature_selection import (
+    get_genotype_subset_snps_file,
+)
+from eir_auto_gp.single_task.modelling.gwas_feature_selection import (
+    run_gwas_feature_selection,
 )
 from eir_auto_gp.utils.utils import get_logger
 

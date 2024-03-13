@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 
-from eir_auto_gp.run import get_argument_parser, run
+from eir_auto_gp.single_task.run_single_task import get_argument_parser, run
 
 
 def _get_test_cl_commands() -> list[str]:

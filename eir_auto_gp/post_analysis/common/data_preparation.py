@@ -11,11 +11,13 @@ from eir.setup.input_setup_modules import setup_omics as eir_setup_omics
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
-from eir_auto_gp.modelling.dl_feature_selection import (
+from eir_auto_gp.single_task.modelling.dl_feature_selection import (
     get_dl_gwas_top_n_snp_list_df,
     get_dl_top_n_snp_list_df,
 )
-from eir_auto_gp.modelling.gwas_bo_feature_selection import get_gwas_top_n_snp_list_df
+from eir_auto_gp.single_task.modelling.gwas_bo_feature_selection import (
+    get_gwas_top_n_snp_list_df,
+)
 
 logger = get_logger(name=__name__)
 

@@ -41,7 +41,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-eirautogp = "eir_auto_gp.run:main"
+eirautogp = "eir_auto_gp.single_task.run_single_task:main"
 eirautogwas = "eir_auto_gp.preprocess.gwas_pre_selection:main"
 eirautopostanalysis = "eir_auto_gp.post_analysis.run_post_analysis:main"
 

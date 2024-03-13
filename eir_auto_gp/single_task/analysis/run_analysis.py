@@ -13,7 +13,7 @@ from eir.experiment_io.experiment_io import load_serialized_train_experiment
 from eir.train_utils.metrics import al_metric_record_dict
 from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 
-from eir_auto_gp.modelling.run_modelling import RunModellingWrapper
+from eir_auto_gp.single_task.modelling.run_modelling import RunModellingWrapper
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)

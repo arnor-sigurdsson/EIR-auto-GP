@@ -5,7 +5,7 @@ import pandas as pd
 from aislib.misc_utils import ensure_path_exists
 from skopt import Optimizer
 
-from eir_auto_gp.modelling.feature_selection_utils import (
+from eir_auto_gp.single_task.modelling.feature_selection_utils import (
     gather_fractions_and_performances,
     read_gwas_df,
 )
