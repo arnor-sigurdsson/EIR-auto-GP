@@ -150,15 +150,17 @@ def train_and_evaluate_linear(
 
     feature_names = modelling_data.input_train.columns.tolist()
     if target_type == "classification":
+        coef = model.coef_[0]
         feature_importance = abs(model.coef_[0])
     else:
+        coef = model.coef_
         feature_importance = abs(model.coef_)
 
     df_feature_importance = pd.DataFrame(
         {
             "Feature": feature_names,
             "Importance": feature_importance,
-            "Coef": model.coef_,
+            "Coef": coef,
         }
     ).sort_values(by="Importance", ascending=False)
 
