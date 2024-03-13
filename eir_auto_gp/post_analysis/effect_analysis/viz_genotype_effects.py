@@ -53,12 +53,15 @@ def plot_top_snps(
         if np.any(df_total_effect["p_value"] > p_value_threshold):
             logger.debug(
                 "SNP '%s' has p-value > %f. Skipping allele plot.",
+                snp,
+                p_value_threshold,
             )
             continue
 
         if len(df_total_effect) < 3:
             logger.debug(
                 "SNP '%s' has less than 3 genotypes. Skipping allele plot.",
+                snp,
             )
             continue
 
@@ -82,6 +85,7 @@ def plot_top_snps(
         plt.tight_layout()
 
         plt.savefig(output_dir / f"{snp}.pdf")
+        plt.close()
 
 
 def _parse_df_allele_effects(df_allele_effects: pd.DataFrame) -> pd.DataFrame:

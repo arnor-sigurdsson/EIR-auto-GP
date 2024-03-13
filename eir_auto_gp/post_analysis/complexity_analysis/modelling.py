@@ -1,7 +1,7 @@
 import warnings
 from dataclasses import dataclass
 from itertools import product
-from typing import TYPE_CHECKING, Any, Dict, Generator
+from typing import TYPE_CHECKING, Any, Dict, Generator, Optional
 
 import numpy as np
 import pandas as pd
@@ -23,6 +23,7 @@ class TrainEvalResults:
     df_predictions: pd.DataFrame
     df_predictions_raw: pd.DataFrame
     performance: pd.DataFrame
+    feature_importance: Optional[pd.DataFrame]
 
 
 def train_and_evaluate_xboost(
@@ -72,10 +73,16 @@ def train_and_evaluate_xboost(
         y_score=y_score,
     )
 
+    feature_importance = pd.DataFrame(
+        data=trained_model.get_score(importance_type="gain").items(),
+        columns=["Feature", "Importance"],
+    )
+
     results = TrainEvalResults(
         df_predictions=df_predictions,
         df_predictions_raw=df_predictions_raw,
         performance=df_performance,
+        feature_importance=feature_importance,
     )
 
     return results
@@ -84,6 +91,7 @@ def train_and_evaluate_xboost(
 def train_and_evaluate_linear(
     modelling_data: "ModelReadyObject",
     target_type: str,
+    custom_coef_init: Optional[dict[str, float]] = None,
 ) -> TrainEvalResults:
     if target_type not in ["classification", "regression"]:
         raise ValueError("target_type must be 'classification' or 'regression'")
@@ -93,19 +101,27 @@ def train_and_evaluate_linear(
 
     if target_type == "classification":
         model = LogisticRegressionCV(
-            cv=5,
+            cv=10,
             random_state=0,
             max_iter=1000,
             class_weight="balanced",
+            scoring="roc_auc",
+            solver="saga",
+            penalty="elasticnet",
+            Cs=10,
+            l1_ratios=[0.1, 0.5, 0.7, 0.9, 0.95, 0.99],
+            n_jobs=-1,
         )
     else:
         model = ElasticNetCV(
-            eps=1e-7,
-            cv=5,
-            random_state=0,
             l1_ratio=[0.1, 0.5, 0.7, 0.9, 0.95, 0.99],
-            tol=1e-03,
-            selection="random",
+            eps=1e-5,
+            n_alphas=100,
+            cv=10,
+            tol=1e-4,
+            selection="cyclic",
+            random_state=0,
+            n_jobs=-1,
         )
 
     model.fit(X=x_train, y=y_train.ravel())
@@ -132,10 +148,27 @@ def train_and_evaluate_linear(
     )
     df_performance = pd.DataFrame.from_dict(data=performance, orient="index").T
 
+    feature_names = modelling_data.input_train.columns.tolist()
+    if target_type == "classification":
+        coef = model.coef_[0]
+        feature_importance = abs(model.coef_[0])
+    else:
+        coef = model.coef_
+        feature_importance = abs(model.coef_)
+
+    df_feature_importance = pd.DataFrame(
+        {
+            "Feature": feature_names,
+            "Importance": feature_importance,
+            "Coef": coef,
+        }
+    ).sort_values(by="Importance", ascending=False)
+
     results = TrainEvalResults(
         df_predictions=df_predictions,
         df_predictions_raw=df_predictions_raw,
         performance=df_performance,
+        feature_importance=df_feature_importance,
     )
 
     return results

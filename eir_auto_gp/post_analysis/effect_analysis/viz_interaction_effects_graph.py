@@ -14,7 +14,7 @@ from matplotlib import pyplot as plt
 
 
 def generate_interaction_snp_graph_figure(
-    df: pd.DataFrame,
+    df_interaction_effects: pd.DataFrame,
     bim_file_path: Path,
     plot_output_root: Path,
     df_target: pd.DataFrame,
@@ -22,10 +22,10 @@ def generate_interaction_snp_graph_figure(
     trait: Optional[str] = None,
 ) -> None:
     train_interaction_info = _extract_cluster_info_from_interaction_df(
-        df_interactions=df, bim_file_path=bim_file_path
+        df_interactions=df_interaction_effects, bim_file_path=bim_file_path
     )
-    df_interaction_coefficients = _build_interaction_coefficient_df(
-        df=df, snps=train_interaction_info.snps
+    df_interaction_coefficients = build_interaction_coefficient_df(
+        df_interaction_effects=df_interaction_effects, snps=train_interaction_info.snps
     )
 
     df_interaction_coefficients = filter_df_interactions_for_top_n_snps(
@@ -50,14 +50,14 @@ def generate_interaction_snp_graph_figure(
         df_target=df_target,
     )
 
-    cur_output_path = plot_output_root / "snp_interactions.pdf"
+    cur_output_path = plot_output_root / "figures" / "snp_interactions.pdf"
     ensure_path_exists(path=cur_output_path)
 
     cur_fig.savefig(cur_output_path, bbox_inches="tight")
 
 
-def _build_interaction_coefficient_df(
-    df: pd.DataFrame, snps: list[str]
+def build_interaction_coefficient_df(
+    df_interaction_effects: pd.DataFrame, snps: list[str]
 ) -> pd.DataFrame:
     array = np.zeros((len(snps), len(snps)))
 
@@ -66,8 +66,10 @@ def _build_interaction_coefficient_df(
             if snp_1 == snp_2:
                 continue
 
-            mask = (df["KEY"].str.contains(snp_1)) & (df["KEY"].str.contains(snp_2))
-            df_slice = df[mask]
+            mask = (df_interaction_effects["KEY"].str.contains(snp_1)) & (
+                df_interaction_effects["KEY"].str.contains(snp_2)
+            )
+            df_slice = df_interaction_effects[mask]
 
             if len(df_slice) == 0:
                 continue
@@ -76,9 +78,9 @@ def _build_interaction_coefficient_df(
 
             array[row_idx, column_idx] = cur_coefficient
 
-    df = pd.DataFrame(array, columns=snps, index=snps)
+    df_interaction_effects = pd.DataFrame(array, columns=snps, index=snps)
 
-    return df
+    return df_interaction_effects
 
 
 def _get_snp_interactions_from_coefficients(
@@ -239,7 +241,7 @@ def _get_interaction_graph_figure(
 
         pos = new_pos
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(10, 8))
 
     cmap = plt.get_cmap("tab20")
     node_color = [cmap(node_color_map[i]) for i in graph.nodes()]
@@ -267,7 +269,11 @@ def _get_interaction_graph_figure(
         font_size=8,
     )
 
-    weights = scale_weights(graph=graph, df_target=df_target, trait=trait)
+    weights = scale_weights(
+        graph=graph,
+        df_target=df_target,
+        trait=trait,
+    )
     nx.draw_networkx_edges(
         G=graph,
         pos=pos,
@@ -292,6 +298,7 @@ def _get_interaction_graph_figure(
     ax.set_title(trait)
 
     plt.axis("off")
+    plt.tight_layout()
 
     return fig
 
@@ -302,17 +309,25 @@ def scale_weights(
     trait: str,
     scaling_factor: float = 100.0,
     max_threshold: float = 18.0,
+    min_threshold: float = 1.0,
 ) -> list[float]:
     target_min = df_target[trait].min()
     target_range = df_target[trait].max() - target_min
 
     weights = [
-        (abs(graph[u][v]["weight"]) - target_min) / target_range
+        ((abs(graph[u][v]["weight"]) - target_min) / target_range) * scaling_factor
         for u, v in graph.edges()
     ]
 
-    weights = [i * scaling_factor for i in weights]
-    weights = [i if i < max_threshold else max_threshold for i in weights]
+    max_weight = max(weights)
+    if max_weight > max_threshold:
+        weights = [weight * (max_threshold / max_weight) for weight in weights]
+
+    weights = [max(weight, min_threshold) for weight in weights]
+
+    assert all(
+        min_threshold <= weight <= max_threshold for weight in weights
+    ), "Weights out of bounds"
 
     return weights
 

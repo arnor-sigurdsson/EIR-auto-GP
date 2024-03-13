@@ -88,6 +88,12 @@ def _compute_single_snp_effect_wrapper(
     df_cur = df[[target_name, snp]]
     df_cur_no_na = df_cur[df_cur[snp] != -1]
 
+    n_per_group_dict = df_cur_no_na[snp].value_counts().to_dict()
+    n_per_group_dict = {
+        key: n_per_group_dict.get(idx, 0)
+        for idx, key in enumerate(["REF", "HET", "ALT"])
+    }
+
     fit_func = get_statsmodels_fit_function(target_type=model)
 
     try:
@@ -114,6 +120,7 @@ def _compute_single_snp_effect_wrapper(
         results=result,
         allele_maps=allele_maps,
         snp=snp,
+        n_per_group_dict=n_per_group_dict,
     )
 
     return df_result
@@ -163,6 +170,7 @@ def build_df_from_basic_results(
     results: LikelihoodModelResults,
     allele_maps: dict[str, dict[str, str]],
     snp: str,
+    n_per_group_dict: dict[str, int],
 ) -> pd.DataFrame:
     results_as_html = results.summary().tables[1].as_html()
     html_buffer = StringIO(results_as_html)
@@ -174,6 +182,7 @@ def build_df_from_basic_results(
         allele_maps=allele_maps,
         snp=snp,
     )
+    df_linear_renamed["n"] = df_linear_renamed["Label"].map(n_per_group_dict)
 
     df_linear_column_renamed = df_linear_renamed.rename(
         columns={
@@ -184,30 +193,39 @@ def build_df_from_basic_results(
         }
     )
 
+    df_linear_column_renamed["KEY"] = snp
+
     return df_linear_column_renamed
 
 
 def _rename_linear_regression_index(
     df_results: pd.DataFrame, allele_maps: dict[str, dict[str, str]], snp: str
 ) -> pd.DataFrame:
+    df_results_copy = df_results.copy()
+
     snp_allele_map = allele_maps[snp]
     cur_mapping = {}
+    labels = []
     for index in df_results.index:
         if index == "Intercept":
             key = "REF"
             cur_allele = snp_allele_map[key]
             cur_mapping[index] = f"{snp} {cur_allele} (Intercept)"
+            labels.append(key)
         elif "[T.1]" in index:
             key = "HET"
             cur_allele = snp_allele_map[key]
             cur_mapping[index] = f"{snp} {cur_allele}"
+            labels.append(key)
         elif "[T.2]" in index:
             key = "ALT"
             cur_allele = snp_allele_map[key]
             cur_mapping[index] = f"{snp} {cur_allele}"
+            labels.append(key)
         else:
             raise ValueError(f"Unexpected index format: {index}")
 
-    df_results = df_results.rename(index=cur_mapping)
+    df_results_copy = df_results_copy.rename(index=cur_mapping)
+    df_results_copy["Label"] = labels
 
-    return df_results
+    return df_results_copy

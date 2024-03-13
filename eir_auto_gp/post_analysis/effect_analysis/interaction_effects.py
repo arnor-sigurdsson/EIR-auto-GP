@@ -27,6 +27,8 @@ def get_interaction_effects(
     df_target: pd.DataFrame,
     bim_file: Path,
     target_type: str,
+    allow_within_chr_interaction: bool,
+    min_interaction_pair_distance: int,
 ) -> pd.DataFrame:
     target_name = df_target.columns[0]
     df_combined = pd.concat(objs=[df_target, df_genotype], axis=1)
@@ -41,6 +43,9 @@ def get_interaction_effects(
         allele_maps=allele_maps,
         target_type=target_type,
         p_threshold="auto",
+        df_bim=df_bim,
+        allow_within_chr_interaction=allow_within_chr_interaction,
+        min_interaction_pair_distance=min_interaction_pair_distance,
     )
 
     return df_results
@@ -51,6 +56,9 @@ def compute_interactions(
     target_name: str,
     allele_maps: dict[str, dict[str, str]],
     target_type: str,
+    df_bim: pd.DataFrame,
+    allow_within_chr_interaction: bool,
+    min_interaction_pair_distance: int,
     p_threshold: str | float = "auto",
 ) -> pd.DataFrame:
     logger.info(
@@ -69,7 +77,12 @@ def compute_interactions(
             len(snps),
         )
 
-    snp_iter = combinations(iterable=snps, r=2)
+    snp_iter = filter_snp_pairs(
+        df_bim=df_bim,
+        snps=snps,
+        allow_within_chr_interaction=allow_within_chr_interaction,
+        min_interaction_pair_distance=min_interaction_pair_distance,
+    )
 
     parallel_worker = Parallel(n_jobs=-1)
     all_results = parallel_worker(
@@ -90,6 +103,49 @@ def compute_interactions(
         return pd.DataFrame()
 
     return pd.concat(all_results)
+
+
+def filter_snp_pairs(
+    df_bim: pd.DataFrame,
+    snps: list[str],
+    allow_within_chr_interaction: bool,
+    min_interaction_pair_distance: int,
+) -> list[tuple[str, str]]:
+    snp_to_chr = df_bim.set_index("VAR_ID")["CHR_CODE"].to_dict()
+    snp_to_pos = df_bim.set_index("VAR_ID")["BP_COORD"].to_dict()
+
+    total_pairs = 0
+    filtered_within_chr = 0
+    accepted_pairs = 0
+
+    filtered_pairs = []
+    for snp_1, snp_2 in combinations(iterable=snps, r=2):
+        total_pairs += 1
+        chr_1, chr_2 = snp_to_chr.get(snp_1), snp_to_chr.get(snp_2)
+        pos_1, pos_2 = snp_to_pos.get(snp_1), snp_to_pos.get(snp_2)
+
+        if chr_1 == chr_2:
+            over_min_distance = abs(pos_1 - pos_2) >= min_interaction_pair_distance
+            if allow_within_chr_interaction and over_min_distance:
+                filtered_pairs.append((snp_1, snp_2))
+                accepted_pairs += 1
+            else:
+                filtered_within_chr += 1
+        else:
+            filtered_pairs.append((snp_1, snp_2))
+            accepted_pairs += 1
+
+    logger.info("Filtering SNP pairs for interaction effects.")
+    logger.info(f"Total SNP pairs considered: {total_pairs}")
+    logger.info(
+        f"SNP pairs filtered out due to being on the same chromosome "
+        f"but not meeting the distance criteria: {filtered_within_chr}"
+    )
+    logger.info(
+        f"SNP pairs accepted (both within and between chromosomes): {accepted_pairs}"
+    )
+
+    return filtered_pairs
 
 
 def _compute_interaction_snp_effect_wrapper(
@@ -191,14 +247,22 @@ def build_df_from_interaction_results(
     df_linear.index = df_linear.index.str.replace(r"'", "", regex=True)
 
     df_linear_renamed = _rename_interaction_regression_index(
-        df_results=df_linear, allele_maps=allele_maps, snp=snp_1
+        df_results=df_linear,
+        allele_maps=allele_maps,
+        snp=snp_1,
     )
 
     df_linear_renamed = _rename_interaction_regression_index(
-        df_results=df_linear_renamed, allele_maps=allele_maps, snp=snp_2
+        df_results=df_linear_renamed,
+        allele_maps=allele_maps,
+        snp=snp_2,
     )
 
-    df_linear_renamed["KEY"] = f"{snp_1}:{snp_2}"
+    df_linear_renamed = df_linear_renamed.rename(
+        {f"{snp_1}:{snp_2}": f"{snp_1}--:--{snp_2}"}
+    )
+
+    df_linear_renamed["KEY"] = f"{snp_1}--:--{snp_2}"
 
     df_linear_column_renamed = df_linear_renamed.rename(
         columns={

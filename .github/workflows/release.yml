@@ -26,9 +26,9 @@ jobs:
       - name: Download and extract plink2
         run: |
           if [[ "${{ matrix.os }}" == "ubuntu-20.04" ]]; then
-            curl -LJO https://s3.amazonaws.com/plink2-assets/plink2_linux_avx2_20240205.zip
+            curl -LJO https://s3.amazonaws.com/plink2-assets/alpha5/plink2_linux_avx2_20240105.zip
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            curl -LJO https://s3.amazonaws.com/plink2-assets/plink2_mac_20240205.zip
+            curl -LJO https://s3.amazonaws.com/plink2-assets/alpha5/plink2_mac_20240105.zip
           fi
           unzip plink2_*.zip
           rm plink2_*.zip
@@ -92,4 +92,3 @@ jobs:
       - run: pip install poetry==1.7.1
       - run: poetry build
       - run: poetry publish --username=__token__ --password=${{ secrets.PYPI_TOKEN }}
-

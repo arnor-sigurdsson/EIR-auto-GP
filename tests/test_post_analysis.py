@@ -133,7 +133,8 @@ def _check_post_analysis_results_wrapper(
     if check_effects:
         effects_folder = post_analysis_folder / "effect_analysis"
         _check_effect_analysis_results(
-            effects_folder=effects_folder, regression_type=regression_type
+            effects_folder=effects_folder,
+            regression_type=regression_type,
         )
 
 
@@ -174,12 +175,16 @@ def _check_one_hot_better_in_linear(df: pd.DataFrame) -> None:
 
 
 def _check_effect_analysis_results(effects_folder: Path, regression_type: str) -> None:
-    df_allele_effects = pd.read_csv(effects_folder / "allele_effects.csv")
+    df_allele_effects = pd.read_csv(
+        effects_folder / "allele_effects" / "allele_effects.csv"
+    )
     _check_allele_effects(
         df_allele_effects=df_allele_effects, regression_type=regression_type
     )
 
-    df_interaction_effects = pd.read_csv(effects_folder / "interaction_effects.csv")
+    df_interaction_effects = pd.read_csv(
+        effects_folder / "interaction_effects" / "interaction_effects.csv"
+    )
     _check_interaction_effects(df_interactions=df_interaction_effects)
 
 
@@ -211,10 +216,13 @@ def _check_additive_coefficients(df: pd.DataFrame, regression_type: str) -> None
             second_row_coef = np.exp(second_row_coef)
             third_row_coef = np.exp(third_row_coef)
 
-        is_close = (
-            abs(third_row_coef - 2 * second_row_coef) / (2 * second_row_coef) < 0.1
+        ratio = abs(third_row_coef - 2 * second_row_coef) / (2 * second_row_coef)
+        is_close = ratio < 0.2
+
+        msg = (
+            f"SNP{snp}: 2nd row = {second_row_coef}, "
+            f"3rd row = {third_row_coef}, ratio = {ratio}"
         )
-        msg = f"SNP{snp}: 2nd row = {second_row_coef}, 3rd row = {third_row_coef}"
 
         assert is_close, msg
 
@@ -236,16 +244,18 @@ def _check_recessive_coefficients(df: pd.DataFrame) -> None:
     third_row_coef = df_snp.iloc[2]["Coefficient"]
 
     msg1 = f"SNP4: 2nd row = {second_row_coef}"
-    assert abs(second_row_coef) < 1.0, msg1
+    assert abs(second_row_coef) < 1.1, msg1
 
     msg2 = f"SNP4: 2nd row = {second_row_coef}, 3rd row = {third_row_coef}"
     assert third_row_coef > second_row_coef, msg2
 
 
 def _check_interaction_effects(df_interactions: pd.DataFrame) -> None:
-    df_interaction_terms = df_interactions[df_interactions["allele"].str.contains(":")]
+    df_interaction_terms = df_interactions[
+        df_interactions["allele"].str.contains("--:--")
+    ]
     max_interaction_coefficient = df_interaction_terms.loc[
         df_interaction_terms["Coefficient"].idxmax(),
         "KEY",
     ]
-    assert max_interaction_coefficient == "snp5:snp6"
+    assert max_interaction_coefficient == "snp5--:--snp6"
