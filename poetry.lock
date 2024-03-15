@@ -1259,7 +1259,7 @@ uvicorn = "^0.28.0"
 
 [package.source]
 type = "git"
-url = "git@github.com:arnor-sigurdsson/EIR.git"
+url = "https://github.com/arnor-sigurdsson/EIR.git"
 reference = "9e1dff473b4c08af0fd60617b3711d8ac1081daf"
 resolved_reference = "9e1dff473b4c08af0fd60617b3711d8ac1081daf"
 
@@ -6840,4 +6840,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11.0,<3.12"
-content-hash = "6414b502644370b8298337b4b423ba809d2b80d43baba32e1428074a66daa32a"
+content-hash = "dd3d8563d43a4178cf20ee26211b61975eb00760e02c264f1706a2d53b7f407e"
