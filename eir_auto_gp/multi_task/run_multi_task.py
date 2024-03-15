@@ -66,28 +66,6 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--data_output_folder",
-        type=str,
-        required=False,
-        help="Folder to save the processed data in and also to read the data from"
-        "if it already exists.",
-    )
-
-    parser.add_argument(
-        "--modelling_output_folder",
-        type=str,
-        required=False,
-        help="Folder to save modelling results in.",
-    )
-
-    parser.add_argument(
-        "--analysis_output_folder",
-        type=str,
-        required=False,
-        help="Folder to save analysis results in.",
-    )
-
-    parser.add_argument(
         "--output_name",
         type=str,
         default="genotype",
@@ -325,10 +303,7 @@ def store_experiment_config(
 ) -> None:
     config_dict = vars(cl_args)
 
-    if cl_args.global_output_folder is None:
-        output_folder = Path(cl_args.modelling_output_folder).parent
-    else:
-        output_folder = Path(cl_args.global_output_folder)
+    output_folder = Path(cl_args.global_output_folder)
 
     ensure_path_exists(path=output_folder, is_folder=True)
     output_path = output_folder / "config.json"
@@ -350,24 +325,10 @@ def parse_output_folders(cl_args: argparse.Namespace) -> argparse.Namespace:
         cl_args_copy.modelling_output_folder = gof + "/modelling"
         cl_args_copy.analysis_output_folder = gof + "/analysis"
     else:
-        if not cl_args_copy.data_output_folder:
-            raise ValueError(
-                "Missing data output folder. "
-                "Either a global output folder or a "
-                "data output folder must be provided."
-            )
-        if not cl_args_copy.modelling_output_folder:
-            raise ValueError(
-                "Missing modelling output folder. "
-                "Either a global output folder or a "
-                "modelling output folder must be provided."
-            )
-        if not cl_args_copy.analysis_output_folder:
-            raise ValueError(
-                "Missing analysis output folder. "
-                "Either a global output folder or a "
-                "analysis output folder must be provided."
-            )
+        raise ValueError(
+            "Global output folder must be specified. "
+            "Please specify the --global_output_folder parameter."
+        )
 
     return cl_args_copy
 

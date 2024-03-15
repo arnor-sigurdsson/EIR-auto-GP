@@ -138,7 +138,8 @@ class TestSingleRun(luigi.Task):
 
 
 def get_testing_string_from_config_folder(
-    config_folder: Path, train_run_folder: Path
+    config_folder: Path,
+    train_run_folder: Path,
 ) -> str:
     base_string = "eirpredict"
     globals_string = " --global_configs "
@@ -159,7 +160,7 @@ def get_testing_string_from_config_folder(
     saved_models = list((train_run_folder / "saved_models").iterdir())
     assert len(saved_models) == 1, "Expected only one saved model."
 
-    final_string += f" --model_path {saved_models[0]} --evaluate"
+    final_string += f" --model_path {saved_models[0]}"
 
     test_output_folder = train_run_folder / "test_set_predictions"
     ensure_path_exists(path=test_output_folder, is_folder=True)
@@ -201,7 +202,7 @@ class TrainSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"],
         )
 
-        base_aggregate_config = get_aggregate_config()
+        base_aggregate_config = get_aggregate_config(output_head="linear")
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
             build_configs(

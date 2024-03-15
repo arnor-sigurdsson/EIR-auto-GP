@@ -103,7 +103,26 @@ def get_base_fusion_config() -> Dict[str, Any]:
     return base
 
 
-def get_base_output_config() -> Dict[str, Any]:
+def get_base_output_config(output_head: str = "mlp") -> Dict[str, Any]:
+    if output_head == "mlp":
+        head_config = {
+            "model_type": "mlp_residual",
+            "model_init_config": {
+                "rb_do": 0.2,
+                "fc_do": 0.2,
+                "fc_task_dim": 512,
+                "layers": [2],
+                "stochastic_depth_p": 0.2,
+                "final_layer_type": "linear",
+            },
+        }
+    elif output_head == "linear":
+        head_config = {
+            "model_type": "linear",
+        }
+    else:
+        raise ValueError(f"Output head {output_head} not recognized.")
+
     base = {
         "output_info": {
             "output_name": "eir_auto_gp",
@@ -114,17 +133,7 @@ def get_base_output_config() -> Dict[str, Any]:
             "target_con_columns": ["FILL"],
             "target_cat_columns": ["FILL"],
         },
-        "model_config": {
-            "model_type": "mlp_residual",
-            "model_init_config": {
-                "rb_do": 0.2,
-                "fc_do": 0.2,
-                "fc_task_dim": 512,
-                "layers": [2],
-                "stochastic_depth_p": 0.2,
-                "final_layer_type": "linear",
-            },
-        },
+        "model_config": head_config,
     }
     return base
 
@@ -138,12 +147,12 @@ class AggregateConfig:
     output_config: Dict[str, Any]
 
 
-def get_aggregate_config() -> AggregateConfig:
+def get_aggregate_config(output_head: str = "mlp") -> AggregateConfig:
     global_config = get_base_global_config()
     input_genotype_config = get_base_input_genotype_config()
     input_tabular_config = get_base_tabular_input_config()
     fusion_config = get_base_fusion_config()
-    output_config = get_base_output_config()
+    output_config = get_base_output_config(output_head=output_head)
 
     return AggregateConfig(
         global_config,

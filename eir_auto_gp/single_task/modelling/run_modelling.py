@@ -151,7 +151,8 @@ class TestSingleRun(luigi.Task):
 
 
 def get_testing_string_from_config_folder(
-    config_folder: Path, train_run_folder: Path
+    config_folder: Path,
+    train_run_folder: Path,
 ) -> str:
     base_string = "eirpredict"
     globals_string = " --global_configs "
