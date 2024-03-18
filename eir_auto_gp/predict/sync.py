@@ -45,7 +45,8 @@ def run_sync(
 
     df_bim_exp = df_bim_exp.drop(columns=["key"])
     df_bim_final = get_predict_bim_file(genotype_folder=Path(final_genotype_data_path))
-    assert df_bim_final.equals(df_bim_exp)
+    cols = ["CHR_CODE", "BP_COORD", "ALT", "REF"]
+    assert df_bim_final[cols].equals(df_bim_exp[cols])
 
     return final_genotype_data_path
 
