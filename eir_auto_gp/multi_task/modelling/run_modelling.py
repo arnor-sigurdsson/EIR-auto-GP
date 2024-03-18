@@ -1,16 +1,12 @@
 import os
 import subprocess
 from dataclasses import dataclass, fields
-from functools import lru_cache
 from pathlib import Path
-from statistics import mean
 from tempfile import TemporaryDirectory
-from typing import Any, Dict, Iterable, Literal, Optional, Sequence
+from typing import Any, Dict, Iterable, Literal, Optional
 
 import luigi
 import pandas as pd
-import psutil
-import torch
 import yaml
 from aislib.misc_utils import ensure_path_exists
 from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_replace
@@ -23,6 +19,15 @@ from eir_auto_gp.preprocess.converge import (
     ParseDataWrapper,
     get_batch_size,
     get_dynamic_valid_size,
+)
+from eir_auto_gp.single_task.modelling.run_modelling import (
+    get_bim_path,
+    get_dataloader_workers,
+    get_device,
+    get_memory_dataset,
+    get_num_iter_per_epoch,
+    get_samples_per_epoch,
+    lines_in_file,
 )
 from eir_auto_gp.utils.utils import get_logger
 
@@ -429,9 +434,9 @@ def _get_global_injections(
     mixing_candidates = [0.0]
     cur_mixing = mixing_candidates[fold % len(mixing_candidates)]
 
-    device = _get_device()
-    memory_dataset = _get_memory_dataset(n_snps=n_snps, n_samples=n_samples)
-    n_workers = _get_dataloader_workers(memory_dataset=memory_dataset)
+    device = get_device()
+    memory_dataset = get_memory_dataset(n_snps=n_snps, n_samples=n_samples)
+    n_workers = get_dataloader_workers(memory_dataset=memory_dataset)
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
     early_stopping_buffer = max(early_stopping_buffer, 1000)
     sample_interval = min(2000, iter_per_epoch)
@@ -452,66 +457,6 @@ def _get_global_injections(
     }
 
     return injections
-
-
-def _get_memory_dataset(n_snps: int, n_samples: int) -> bool:
-    available_memory = psutil.virtual_memory().available
-    upper_bound = 0.6 * available_memory
-
-    # 4 for one-hot encoding
-    total_size = n_snps * n_samples * 4
-
-    percent = total_size / available_memory
-    if total_size < upper_bound:
-        logger.info(
-            "Estimated dataset size %.4f GB is %.4f%% of available memory %.4f GB, "
-            "using memory dataset.",
-            total_size / 1e9,
-            percent * 100,
-            available_memory / 1e9,
-        )
-        return True
-
-    logger.info(
-        "Estimated dataset size %.4f GB is %.4f%% of available memory %.4f GB, "
-        "using disk dataset.",
-        total_size / 1e9,
-        percent * 100,
-        available_memory / 1e9,
-    )
-    return False
-
-
-def _get_device() -> str:
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
-    if device == "cpu":
-        logger.warning(
-            "Using CPU as no CUDA device found, "
-            "this might be much slower than using a CUDA device."
-        )
-    elif device == "cuda:0":
-        logger.info("Using CUDA device 0 for modelling.")
-
-    return device
-
-
-def _get_dataloader_workers(memory_dataset: bool) -> int:
-    if memory_dataset:
-        return 0
-
-    n_cores = os.cpu_count()
-    n_workers = int(0.8 * n_cores / 2)
-
-    if n_workers <= 2:
-        n_workers = 0
-
-    logger.info(
-        "Using %d workers for data loading based on %d available cores.",
-        n_workers,
-        n_cores,
-    )
-    return n_workers
 
 
 def _get_genotype_injections(
@@ -583,11 +528,11 @@ def _get_all_dynamic_injections(
         batch_size=batch_size,
         valid_size=valid_size,
     )
-    bim_path = _get_bim_path(genotype_data_path=genotype_data_path)
+    bim_path = get_bim_path(genotype_data_path=genotype_data_path)
 
-    n_snps = _lines_in_file(file_path=bim_path)
+    n_snps = lines_in_file(file_path=bim_path)
 
-    n_samples = _lines_in_file(file_path=mip.label_file_path) - 1
+    n_samples = lines_in_file(file_path=mip.label_file_path) - 1
 
     injections = {
         "global_config": _get_global_injections(
@@ -619,66 +564,3 @@ def _get_all_dynamic_injections(
         )
 
     return injections
-
-
-@lru_cache()
-def _lines_in_file(file_path: str | Path) -> int:
-    with open(file_path, "r") as f:
-        num_lines = sum(1 for _ in f)
-    return num_lines
-
-
-def _get_bim_path(genotype_data_path: str) -> str:
-    bim_files = [i for i in Path(genotype_data_path).glob("*.bim")]
-    assert len(bim_files) == 1, bim_files
-
-    path = bim_files[0]
-    assert path.exists(), f".bim file not found at {path}"
-    return str(path)
-
-
-def get_samples_per_epoch(model_injection_params: ModelInjectionParams) -> int:
-    mip = model_injection_params
-
-    if not mip.weighted_sampling_columns:
-        num_samples = _lines_in_file(file_path=mip.label_file_path) - 1
-        return num_samples
-
-    logger.info(
-        "Setting up weighted sampling for categorical output columns: %s.",
-        mip.output_cat_columns,
-    )
-    label_counts = get_column_label_counts(
-        label_file_path=mip.label_file_path, output_cat_columns=mip.output_cat_columns
-    )
-
-    mean_per_target = (min(i.values()) for i in label_counts.values())
-    mean_all_outputs = int(mean(mean_per_target))
-
-    return mean_all_outputs
-
-
-def get_column_label_counts(
-    label_file_path: str | Path, output_cat_columns: Sequence[str]
-) -> Dict[str, Dict[str, int]]:
-    columns = ["ID"] + list(output_cat_columns)
-    df = pd.read_csv(label_file_path, index_col=["ID"], usecols=columns)
-
-    label_counts = {}
-
-    for col in output_cat_columns:
-        label_counts[col] = df[col].value_counts().to_dict()
-
-    return label_counts
-
-
-def get_num_iter_per_epoch(
-    num_samples_per_epoch: int, batch_size: int, valid_size: int
-) -> int:
-    iter_per_epoch = (num_samples_per_epoch - valid_size) // batch_size
-    iter_per_epoch = max(50, iter_per_epoch)
-    return iter_per_epoch
-
-
-if __name__ == "__main__":
-    luigi.build([RunModellingWrapper()], local_scheduler=True)

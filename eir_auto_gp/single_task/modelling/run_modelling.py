@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 from dataclasses import dataclass, fields
 from functools import lru_cache
@@ -294,7 +295,7 @@ def build_injection_params(
         modelling_config=modelling_config,
     )
 
-    bim_file = _get_bim_path(genotype_data_path=genotype_data_path)
+    bim_file = get_bim_path(genotype_data_path=genotype_data_path)
     n_act_folds = feature_selection_config["n_dl_feature_selection_setup_folds"]
     snp_subset_file = get_genotype_subset_snps_file(
         fold=fold,
@@ -520,9 +521,9 @@ def _get_global_injections(
     mixing_candidates = [0.0]
     cur_mixing = mixing_candidates[fold % len(mixing_candidates)]
 
-    device = _get_device()
-    memory_dataset = _get_memory_dataset(n_snps=n_snps, n_samples=n_samples)
-    n_workers = _get_dataloader_workers(memory_dataset=memory_dataset)
+    device = get_device()
+    memory_dataset = get_memory_dataset(n_snps=n_snps, n_samples=n_samples)
+    n_workers = get_dataloader_workers(memory_dataset=memory_dataset)
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
     early_stopping_buffer = max(early_stopping_buffer, 1000)
     sample_interval = min(2000, iter_per_epoch)
@@ -546,8 +547,44 @@ def _get_global_injections(
     return injections
 
 
-def _get_memory_dataset(n_snps: int, n_samples: int) -> bool:
-    available_memory = psutil.virtual_memory().available
+def _maybe_get_slurm_job_memory() -> Optional[int]:
+    job_id = os.getenv("SLURM_JOB_ID")
+    if job_id:
+        try:
+            output = subprocess.check_output(
+                [
+                    "scontrol",
+                    "show",
+                    "job",
+                    job_id,
+                ]
+            ).decode("utf-8")
+            match = re.search(r"mem=(\d+)([MG])", output)
+            if match:
+                mem_value, unit = match.groups()
+                mem_value = int(mem_value)
+                if unit == "G":
+                    return int(mem_value * 1e9)
+                elif unit == "M":
+                    return int(mem_value * 1e6)
+        except Exception as e:
+            logger.error(
+                f"Could not fetch SLURM job memory: {e}. Assuming non-SLURM job."
+            )
+    else:
+        logger.info(
+            "Not running in a SLURM environment or "
+            "SLURM_JOB_ID not set. Using system's available memory."
+        )
+
+    return None
+
+
+def get_memory_dataset(n_snps: int, n_samples: int) -> bool:
+    slurm_memory = _maybe_get_slurm_job_memory()
+    available_memory = (
+        slurm_memory if slurm_memory is not None else psutil.virtual_memory().available
+    )
     upper_bound = 0.6 * available_memory
 
     # 4 for one-hot encoding
@@ -574,7 +611,7 @@ def _get_memory_dataset(n_snps: int, n_samples: int) -> bool:
     return False
 
 
-def _get_device() -> str:
+def get_device() -> str:
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
     if device == "cpu":
@@ -588,21 +625,64 @@ def _get_device() -> str:
     return device
 
 
-def _get_dataloader_workers(memory_dataset: bool) -> int:
+def _maybe_get_slurm_job_cores() -> Optional[int]:
+    job_id = os.getenv("SLURM_JOB_ID")
+    if job_id:
+        try:
+            output = subprocess.check_output(
+                [
+                    "scontrol",
+                    "show",
+                    "job",
+                    job_id,
+                ]
+            ).decode("utf-8")
+            match = re.search(r"NumCPUs=(\d+)", output)
+            if match:
+                return int(match.group(1))
+        except Exception as e:
+            logger.info(
+                f"Could not fetch SLURM job core count: {e}. "
+                f"Assuming non-SLURM environment."
+            )
+    else:
+        logger.info(
+            "Not running in a SLURM environment or SLURM_JOB_ID not set. "
+            "Using system's CPU count."
+        )
+
+    return None
+
+
+def get_dataloader_workers(memory_dataset: bool) -> int:
     if memory_dataset:
+        logger.info(
+            "Dataset is loaded into memory; "
+            "using 0 workers to avoid unnecessary multiprocessing overhead."
+        )
         return 0
 
-    n_cores = os.cpu_count()
+    slurm_cores = _maybe_get_slurm_job_cores()
+    n_cores = slurm_cores if slurm_cores is not None else os.cpu_count() or 1
+
     n_workers = int(0.8 * n_cores / 2)
 
     if n_workers <= 2:
+        logger.info(
+            "Based on available cores, "
+            "fewer than 2 workers were calculated; "
+            "setting workers to 0 to avoid overhead."
+        )
         n_workers = 0
+    else:
+        n_workers = min(16, n_workers)
 
     logger.info(
         "Using %d workers for data loading based on %d available cores.",
         n_workers,
         n_cores,
     )
+
     return n_workers
 
 
@@ -679,13 +759,13 @@ def _get_all_dynamic_injections(
         batch_size=batch_size,
         valid_size=valid_size,
     )
-    bim_path = _get_bim_path(genotype_data_path=genotype_data_path)
+    bim_path = get_bim_path(genotype_data_path=genotype_data_path)
 
-    n_snps = _lines_in_file(file_path=bim_path)
+    n_snps = lines_in_file(file_path=bim_path)
     if mip.genotype_subset_snps_file is not None:
-        n_snps = _lines_in_file(file_path=mip.genotype_subset_snps_file)
+        n_snps = lines_in_file(file_path=mip.genotype_subset_snps_file)
 
-    n_samples = _lines_in_file(file_path=mip.label_file_path) - 1
+    n_samples = lines_in_file(file_path=mip.label_file_path) - 1
 
     injections = {
         "global_config": _get_global_injections(
@@ -722,13 +802,13 @@ def _get_all_dynamic_injections(
 
 
 @lru_cache()
-def _lines_in_file(file_path: str | Path) -> int:
+def lines_in_file(file_path: str | Path) -> int:
     with open(file_path, "r") as f:
         num_lines = sum(1 for _ in f)
     return num_lines
 
 
-def _get_bim_path(genotype_data_path: str) -> str:
+def get_bim_path(genotype_data_path: str) -> str:
     bim_files = [i for i in Path(genotype_data_path).glob("*.bim")]
     assert len(bim_files) == 1, bim_files
 
@@ -741,7 +821,7 @@ def get_samples_per_epoch(model_injection_params: ModelInjectionParams) -> int:
     mip = model_injection_params
 
     if not mip.weighted_sampling_columns:
-        num_samples = _lines_in_file(file_path=mip.label_file_path) - 1
+        num_samples = lines_in_file(file_path=mip.label_file_path) - 1
         return num_samples
 
     logger.info(

@@ -15,7 +15,7 @@ from eir_auto_gp.preprocess.gwas_pre_selection import (
     get_plink_gwas_command,
     run_gwas_pre_filter_wrapper,
 )
-from eir_auto_gp.single_task.modelling.run_modelling import _lines_in_file
+from eir_auto_gp.single_task.modelling.run_modelling import lines_in_file
 
 
 def _get_test_cl_commands() -> list[str]:
@@ -58,8 +58,8 @@ def test_run_gwas_pre_selection(command: str, tmp_path: Path) -> None:
         assert (output_folder / expected_file).exists()
 
     orig_snps_file = Path("tests/test_data/penncath.bim")
-    n_orig_snps = _lines_in_file(file_path=orig_snps_file)
-    n_gwas_snps = _lines_in_file(file_path=output_folder / "penncath.bim")
+    n_orig_snps = lines_in_file(file_path=orig_snps_file)
+    n_gwas_snps = lines_in_file(file_path=output_folder / "penncath.bim")
     assert n_gwas_snps < n_orig_snps
 
     df_gwas = pd.read_csv(output_folder / "gwas_label_file.csv", sep="\t")
