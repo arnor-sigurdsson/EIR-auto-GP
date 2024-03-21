@@ -13,7 +13,7 @@ def get_base_global_config() -> Dict[str, Any]:
         "batch_size": "FILL",
         "sample_interval": "FILL",
         "save_evaluation_sample_results": False,
-        "lr": 0.0002,
+        "lr": 0.00001,
         "lr_plateau_patience": 4,
         "gradient_clipping": 1.0,
         "valid_size": "FILL",
@@ -53,9 +53,9 @@ def get_base_input_genotype_config() -> Dict[str, Any]:
             "model_type": "genome-local-net",
             "model_init_config": {
                 "rb_do": 0.1,
-                "channel_exp_base": 2,
-                "kernel_width": 16,
-                "first_kernel_expansion": -4,
+                "channel_exp_base": 3,
+                "kernel_width": "FILL",
+                "first_kernel_expansion": "FILL",
                 "l1": 0.0,
                 "cutoff": 4096,
                 "attention_inclusion_cutoff": 256,
@@ -89,17 +89,33 @@ def get_base_tabular_input_config() -> Dict[str, Any]:
     return base
 
 
-def get_base_fusion_config() -> Dict[str, Any]:
-    base = {
-        "model_config": {
-            "fc_do": 0.1,
-            "fc_task_dim": 512,
-            "layers": [2],
-            "rb_do": 0.1,
-            "stochastic_depth_p": 0.1,
-        },
-        "model_type": "default",
-    }
+def get_base_fusion_config(model_type: str = "mlp-residual") -> Dict[str, Any]:
+    if model_type == "mlp-residual":
+        base = {
+            "model_config": {
+                "fc_do": 0.1,
+                "fc_task_dim": 512,
+                "layers": [4],
+                "rb_do": 0.1,
+                "stochastic_depth_p": 0.1,
+            },
+            "model_type": "mlp-residual",
+        }
+    elif model_type == "mgmoe":
+        base = {
+            "model_config": {
+                "fc_do": 0.1,
+                "fc_task_dim": 512,
+                "layers": [4],
+                "rb_do": 0.1,
+                "stochastic_depth_p": 0.1,
+                "mg_num_experts": 8,
+            },
+            "model_type": "mgmoe",
+        }
+    else:
+        raise ValueError()
+
     return base
 
 
@@ -147,17 +163,20 @@ class AggregateConfig:
     output_config: Dict[str, Any]
 
 
-def get_aggregate_config(output_head: str = "mlp") -> AggregateConfig:
+def get_aggregate_config(
+    output_head: str = "mlp",
+    fusion_type: str = "mlp-residual",
+) -> AggregateConfig:
     global_config = get_base_global_config()
     input_genotype_config = get_base_input_genotype_config()
     input_tabular_config = get_base_tabular_input_config()
-    fusion_config = get_base_fusion_config()
+    fusion_config = get_base_fusion_config(model_type=fusion_type)
     output_config = get_base_output_config(output_head=output_head)
 
     return AggregateConfig(
-        global_config,
-        input_genotype_config,
-        input_tabular_config,
-        fusion_config,
-        output_config,
+        global_config=global_config,
+        input_genotype_config=input_genotype_config,
+        input_tabular_config=input_tabular_config,
+        fusion_config=fusion_config,
+        output_config=output_config,
     )

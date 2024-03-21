@@ -17,7 +17,7 @@ def run_sync(
     df_bim_exp = get_experiment_bim_file(experiment_folder=experiment_folder)
     df_bim_prd = get_predict_bim_file(genotype_folder=genotype_data_path)
 
-    cols = ["CHR_CODE", "BP_COORD"]
+    cols = ["CHR_CODE", "BP_COORD", "ALT", "REF"]
     df_bim_prd["key"] = df_bim_prd[cols].astype(str).agg("-".join, axis=1)
     df_bim_exp["key"] = df_bim_exp[cols].astype(str).agg("-".join, axis=1)
 
@@ -36,19 +36,25 @@ def run_sync(
     to_add = df_bim_exp[~df_bim_exp["key"].isin(df_bim_prd["key"])]
     df_add = df_bim_exp.loc[to_add.index]
 
-    final_genotype_data_path = add_missing_snps(
+    added_genotype_data = add_missing_snps(
         df_add=df_add,
         genotype_data_path=filtered_genotype_data_path,
         genotype_base_name=genotype_base_name,
         output_folder=output_folder,
     )
 
+    reordered_genotype_data = update_and_reorder(
+        genotype_input_folder=added_genotype_data,
+        df_exp_bim=df_bim_exp,
+        output_folder=output_folder,
+    )
+
     df_bim_exp = df_bim_exp.drop(columns=["key"])
-    df_bim_final = get_predict_bim_file(genotype_folder=Path(final_genotype_data_path))
+    df_bim_final = get_predict_bim_file(genotype_folder=Path(reordered_genotype_data))
     cols = ["CHR_CODE", "BP_COORD", "ALT", "REF"]
     assert df_bim_final[cols].equals(df_bim_exp[cols])
 
-    return final_genotype_data_path
+    return str(reordered_genotype_data)
 
 
 def check_genotype_folder(genotype_folder: Path) -> str:
@@ -173,3 +179,116 @@ def get_predict_bim_file(genotype_folder: Path) -> pd.DataFrame:
     df_bim_predict = read_bim(bim_file_path=str(bim_file))
 
     return df_bim_predict
+
+
+def update_and_reorder(
+    genotype_input_folder: str,
+    df_exp_bim: pd.DataFrame,
+    output_folder: Path,
+) -> Path:
+    genotype_input_path = Path(genotype_input_folder)
+    output_path = Path(output_folder, "reordered_genotype_data")
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    bim_files = [i for i in genotype_input_path.iterdir() if i.suffix == ".bim"]
+    assert len(bim_files) == 1, "There should be exactly one .bim file in the folder."
+    bim_file = bim_files[0]
+    df_bim_original = read_bim(bim_file_path=str(bim_file))
+    df_bim = df_bim_original.copy()
+
+    mapping = df_exp_bim.set_index(
+        [
+            "CHR_CODE",
+            "BP_COORD",
+            "ALT",
+            "REF",
+        ]
+    )["VAR_ID"].to_dict()
+
+    df_bim["VAR_ID"] = df_bim.apply(
+        lambda row: mapping.get(
+            (row["CHR_CODE"], row["BP_COORD"], row["ALT"], row["REF"]), row["VAR_ID"]
+        ),
+        axis=1,
+    )
+    df_bim.to_csv(bim_file, sep="\t", header=False, index=False)
+
+    merged_output_path = create_and_merge_dummy_fileset(
+        genotype_input_folder=genotype_input_folder,
+        df_exp_bim=df_exp_bim,
+        output_folder=output_path,
+    )
+
+    df_bim_original.to_csv(bim_file, sep="\t", header=False, index=False)
+
+    return merged_output_path
+
+
+def create_and_merge_dummy_fileset(
+    genotype_input_folder: str, df_exp_bim: pd.DataFrame, output_folder: Path
+) -> Path:
+    genotype_input_path = Path(genotype_input_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+
+    base_name = check_genotype_folder(genotype_folder=Path(genotype_input_folder))
+    num_snps = len(df_exp_bim)
+
+    dummy_path = output_folder / "dummy_genotype_data"
+    dummy_path.mkdir(exist_ok=True, parents=True)
+    dummy_command = [
+        "plink2",
+        "--dummy",
+        "1",
+        str(num_snps),
+        "1",
+        "--out",
+        str(dummy_path / "dummy_dataset"),
+        "--make-bed",
+    ]
+    subprocess.run(dummy_command, check=True)
+
+    bim_file_path = dummy_path / "dummy_dataset.bim"
+    df_exp_bim[
+        [
+            "CHR_CODE",
+            "VAR_ID",
+            "POS_CM",
+            "BP_COORD",
+            "ALT",
+            "REF",
+        ]
+    ].to_csv(bim_file_path, sep="\t", header=False, index=False)
+
+    merged_output_path = output_folder / f"{base_name}_merged"
+    merge_command = [
+        "plink",
+        "--bfile",
+        str(genotype_input_path / base_name),
+        "--bmerge",
+        str(dummy_path / "dummy_dataset"),
+        "--make-bed",
+        "--out",
+        str(merged_output_path),
+    ]
+    subprocess.run(merge_command, check=True)
+
+    remove_command = [
+        "plink",
+        "--bfile",
+        str(merged_output_path),
+        "--remove",
+        str(dummy_path / "dummy_dataset.fam"),
+        "--make-bed",
+        "--out",
+        str(output_folder / f"{base_name}_reordered"),
+    ]
+    subprocess.run(remove_command, check=True)
+
+    shutil.rmtree(output_folder / "dummy_genotype_data")
+
+    keep_name = f"{base_name}_reordered"
+    for f in output_folder.iterdir():
+        if f.is_file() and not f.stem.startswith(keep_name):
+            f.unlink()
+
+    return output_folder

@@ -523,7 +523,7 @@ def _get_global_injections(
 
     device = get_device()
     memory_dataset = get_memory_dataset(n_snps=n_snps, n_samples=n_samples)
-    n_workers = get_dataloader_workers(memory_dataset=memory_dataset)
+    n_workers = get_dataloader_workers(memory_dataset=memory_dataset, device=device)
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
     early_stopping_buffer = max(early_stopping_buffer, 1000)
     sample_interval = min(2000, iter_per_epoch)
@@ -550,6 +550,7 @@ def _get_global_injections(
 def _maybe_get_slurm_job_memory() -> Optional[int]:
     job_id = os.getenv("SLURM_JOB_ID")
     if job_id:
+        logger.info("Running in a SLURM environment. Using SLURM job memory.")
         try:
             output = subprocess.check_output(
                 [
@@ -628,6 +629,7 @@ def get_device() -> str:
 def _maybe_get_slurm_job_cores() -> Optional[int]:
     job_id = os.getenv("SLURM_JOB_ID")
     if job_id:
+        logger.info("Running in a SLURM environment. Using SLURM job core count.")
         try:
             output = subprocess.check_output(
                 [
@@ -654,7 +656,7 @@ def _maybe_get_slurm_job_cores() -> Optional[int]:
     return None
 
 
-def get_dataloader_workers(memory_dataset: bool) -> int:
+def get_dataloader_workers(memory_dataset: bool, device: str) -> int:
     if memory_dataset:
         logger.info(
             "Dataset is loaded into memory; "
@@ -665,7 +667,10 @@ def get_dataloader_workers(memory_dataset: bool) -> int:
     slurm_cores = _maybe_get_slurm_job_cores()
     n_cores = slurm_cores if slurm_cores is not None else os.cpu_count() or 1
 
-    n_workers = int(0.8 * n_cores / 2)
+    if device == "cpu":
+        n_workers = int(0.8 * n_cores / 2)
+    else:
+        n_workers = int(0.8 * n_cores)
 
     if n_workers <= 2:
         logger.info(

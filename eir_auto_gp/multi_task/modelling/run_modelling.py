@@ -109,7 +109,7 @@ class TestSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"],
         )
 
-        base_aggregate_config = get_aggregate_config()
+        base_aggregate_config = get_aggregate_config(output_head="linear")
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
             build_configs(
@@ -122,6 +122,7 @@ class TestSingleRun(luigi.Task):
             base_predict_command = get_testing_string_from_config_folder(
                 config_folder=temp_config_folder, train_run_folder=train_run_folder
             )
+            logger.info("Testing command: %s", base_predict_command)
 
             base_command_split = base_predict_command.split()
             process_info = subprocess.run(
@@ -149,6 +150,7 @@ def get_testing_string_from_config_folder(
     base_string = "eirpredict"
     globals_string = " --global_configs "
     inputs_string = " --input_configs "
+    fusion_string = " --fusion_configs "
     output_string = " --output_configs "
 
     for file in config_folder.iterdir():
@@ -157,10 +159,14 @@ def get_testing_string_from_config_folder(
                 globals_string += " " + f"{str(file)}" + " "
             elif "input" in file.stem:
                 inputs_string += " " + f"{str(file)}" + " "
+            elif "fusion" in file.stem:
+                fusion_string += " " + f"{str(file)}" + " "
             elif "output" in file.stem:
                 output_string += " " + f"{str(file)}" + " "
 
-    final_string = base_string + globals_string + inputs_string + output_string
+    final_string = (
+        base_string + globals_string + inputs_string + fusion_string + output_string
+    )
 
     saved_models = list((train_run_folder / "saved_models").iterdir())
     assert len(saved_models) == 1, "Expected only one saved model."
@@ -219,6 +225,7 @@ class TrainSingleRun(luigi.Task):
             base_train_command = get_training_string_from_config_folder(
                 config_folder=temp_config_folder
             )
+            logger.info("Training command: %s", base_train_command)
 
             base_command_split = base_train_command.split()
             process_info = subprocess.run(
@@ -269,13 +276,7 @@ def build_injection_params(
     base_output_folder = modelling_config["modelling_output_folder"]
     cur_run_output_folder = f"{base_output_folder}/fold_{fold}"
 
-    label_file_path = build_tmp_label_file(
-        label_file_path=data_input_dict[f"{task}_tabular"].path,
-        output_cat_columns=modelling_config["output_cat_columns"],
-        tmp_dir=Path(base_output_folder, "tmp"),
-        output_con_columns=modelling_config["output_con_columns"],
-        prefix_name=task,
-    )
+    label_file_path = data_input_dict[f"{task}_tabular"].path
 
     manual_valid_ids_file = get_manual_valid_ids_file(
         task=task,
@@ -357,11 +358,6 @@ def build_tmp_label_file(
         ids_test = set(df["ID"].tolist())
         assert len(ids_train.intersection(ids_test)) == 0
 
-    if output_cat_columns:
-        df = df.dropna(subset=output_cat_columns)
-    if output_con_columns:
-        df = df.dropna(subset=output_con_columns)
-
     ensure_path_exists(path=tmp_label_file_path.parent, is_folder=True)
     df.to_csv(tmp_label_file_path, index=False)
 
@@ -404,6 +400,7 @@ def get_training_string_from_config_folder(config_folder: Path) -> str:
     base_string = "eirtrain"
     globals_string = " --global_configs "
     inputs_string = " --input_configs "
+    fusion_string = " --fusion_configs "
     output_string = " --output_configs "
 
     for file in config_folder.iterdir():
@@ -412,10 +409,14 @@ def get_training_string_from_config_folder(config_folder: Path) -> str:
                 globals_string += " " + f"{str(file)}" + " "
             elif "input" in file.stem:
                 inputs_string += " " + f"{str(file)}" + " "
+            elif "fusion" in file.stem:
+                fusion_string += " " + f"{str(file)}" + " "
             elif "output" in file.stem:
                 output_string += " " + f"{str(file)}" + " "
 
-    final_string = base_string + globals_string + inputs_string + output_string
+    final_string = (
+        base_string + globals_string + inputs_string + fusion_string + output_string
+    )
 
     return final_string
 
@@ -436,13 +437,15 @@ def _get_global_injections(
 
     device = get_device()
     memory_dataset = get_memory_dataset(n_snps=n_snps, n_samples=n_samples)
-    n_workers = get_dataloader_workers(memory_dataset=memory_dataset)
+    n_workers = get_dataloader_workers(memory_dataset=memory_dataset, device=device)
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
     early_stopping_buffer = max(early_stopping_buffer, 1000)
     sample_interval = min(2000, iter_per_epoch)
+    lr = _get_learning_rate(n_snps=n_snps)
 
     injections = {
         "output_folder": output_folder,
+        "lr": lr,
         "device": device,
         "batch_size": batch_size,
         "valid_size": valid_size,
@@ -459,6 +462,23 @@ def _get_global_injections(
     return injections
 
 
+def _get_learning_rate(n_snps: int) -> float:
+    if n_snps < 1000:
+        lr = 0.001
+    elif n_snps < 10000:
+        lr = 0.0005
+    elif n_snps < 100000:
+        lr = 0.0002
+    elif n_snps < 500000:
+        lr = 0.0001
+    else:
+        lr = 0.00001
+
+    logger.info("Setting learning rate to %f due to %d SNPs.", lr, n_snps)
+
+    return lr
+
+
 def _get_genotype_injections(
     input_source: str,
 ) -> Dict[str, Any]:
@@ -467,6 +487,9 @@ def _get_genotype_injections(
     )
     assert base_snp_path.exists(), f"SNP file not found at {base_snp_path}"
 
+    n_snps = lines_in_file(file_path=base_snp_path)
+    kernel_width, first_kernel_expansion = get_gln_kernel_parameters(n_snps=n_snps)
+
     injections = {
         "input_info": {
             "input_source": input_source,
@@ -474,9 +497,39 @@ def _get_genotype_injections(
         "input_type_info": {
             "snp_file": str(base_snp_path),
         },
+        "model_config": {
+            "model_init_config": {
+                "kernel_width": kernel_width,
+                "first_kernel_expansion": first_kernel_expansion,
+            }
+        },
     }
 
     return injections
+
+
+def get_gln_kernel_parameters(n_snps: int) -> tuple[int, int]:
+    if n_snps < 1000:
+        params = 16, -4
+    elif n_snps < 10000:
+        params = 16, -2
+    elif n_snps < 100000:
+        params = 16, 1
+    elif n_snps < 500000:
+        params = 16, 2
+    elif n_snps < 2000000:
+        params = 16, 4
+    else:
+        params = 16, 8
+
+    logger.info(
+        "Setting kernel width to %d and first kernel expansion to %d due to %d SNPs.",
+        params[0],
+        params[1],
+        n_snps,
+    )
+
+    return params
 
 
 def _get_tabular_injections(
@@ -504,6 +557,7 @@ def _get_output_injections(
         "output_type_info": {
             "target_cat_columns": output_cat_columns,
             "target_con_columns": output_con_columns,
+            "uncertainty_weighted_mt_loss": False,
         },
     }
 
@@ -549,6 +603,7 @@ def _get_all_dynamic_injections(
         "input_genotype_config": _get_genotype_injections(
             input_source=mip.genotype_input_source,
         ),
+        "fusion_config": {},
         "output_config": _get_output_injections(
             label_file_path=mip.label_file_path,
             output_cat_columns=list(mip.output_cat_columns),
