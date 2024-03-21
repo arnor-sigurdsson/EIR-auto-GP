@@ -58,7 +58,7 @@ def get_base_input_genotype_config() -> Dict[str, Any]:
                 "first_kernel_expansion": "FILL",
                 "l1": 0.0,
                 "cutoff": 4096,
-                "attention_inclusion_cutoff": 256,
+                "attention_inclusion_cutoff": 0,
             },
         },
     }

@@ -171,7 +171,7 @@ def get_testing_string_from_config_folder(
     saved_models = list((train_run_folder / "saved_models").iterdir())
     assert len(saved_models) == 1, "Expected only one saved model."
 
-    final_string += f" --model_path {saved_models[0]}"
+    final_string += f" --model_path {saved_models[0]} --evaluate"
 
     test_output_folder = train_run_folder / "test_set_predictions"
     ensure_path_exists(path=test_output_folder, is_folder=True)
