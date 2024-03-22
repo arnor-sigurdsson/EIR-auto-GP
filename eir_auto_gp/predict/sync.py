@@ -7,6 +7,7 @@ import pandas as pd
 from aislib.misc_utils import ensure_path_exists, get_logger
 from eir.setup.input_setup_modules.setup_omics import read_bim
 from rich.console import Console
+from rich.progress import Progress
 from rich.table import Table
 
 logger = get_logger(name=__name__)
@@ -17,48 +18,62 @@ def run_sync(
     experiment_folder: Path,
     output_folder: Path,
 ) -> str:
-    genotype_base_name = check_genotype_folder(genotype_folder=genotype_data_path)
+    with Progress() as progress:
+        genotype_base_name = check_genotype_folder(genotype_folder=genotype_data_path)
 
-    df_bim_exp = get_experiment_bim_file(experiment_folder=experiment_folder)
-    df_bim_prd = get_predict_bim_file(genotype_folder=genotype_data_path)
-    log_overlap(df_bim_prd=df_bim_prd, df_bim_exp=df_bim_exp)
+        df_bim_exp = get_experiment_bim_file(experiment_folder=experiment_folder)
+        df_bim_prd = get_predict_bim_file(genotype_folder=genotype_data_path)
 
-    cols = ["CHR_CODE", "BP_COORD", "ALT", "REF"]
-    df_bim_prd["key"] = df_bim_prd[cols].astype(str).agg("-".join, axis=1)
-    df_bim_exp["key"] = df_bim_exp[cols].astype(str).agg("-".join, axis=1)
+        log_overlap(df_bim_prd=df_bim_prd, df_bim_exp=df_bim_exp)
 
-    to_remove = df_bim_prd[~df_bim_prd["key"].isin(df_bim_exp["key"])]
-    df_remove = df_bim_prd.loc[to_remove.index]
+        sync_task = progress.add_task(
+            description="[green]Synchronizing genotype data...",
+            total=4,
+        )
 
-    df_remove = df_remove.drop(columns=["key"])
+        cols = ["CHR_CODE", "BP_COORD", "ALT", "REF"]
+        df_bim_prd["key"] = df_bim_prd[cols].astype(str).agg("-".join, axis=1)
+        df_bim_exp["key"] = df_bim_exp[cols].astype(str).agg("-".join, axis=1)
+        to_remove = df_bim_prd[~df_bim_prd["key"].isin(df_bim_exp["key"])]
+        df_remove = df_bim_prd.loc[to_remove.index]
+        df_remove = df_remove.drop(columns=["key"])
 
-    filtered_genotype_data_path = remove_extra_snps(
-        df_remove=df_remove,
-        genotype_data_path=str(genotype_data_path),
-        genotype_base_name=genotype_base_name,
-        output_folder=output_folder,
-    )
+        progress.advance(sync_task)
 
-    to_add = df_bim_exp[~df_bim_exp["key"].isin(df_bim_prd["key"])]
-    df_add = df_bim_exp.loc[to_add.index]
+        filtered_genotype_data_path = remove_extra_snps(
+            df_remove=df_remove,
+            genotype_data_path=str(genotype_data_path),
+            genotype_base_name=genotype_base_name,
+            output_folder=output_folder,
+        )
+        progress.advance(sync_task)
 
-    added_genotype_data = add_missing_snps(
-        df_add=df_add,
-        genotype_data_path=filtered_genotype_data_path,
-        genotype_base_name=genotype_base_name,
-        output_folder=output_folder,
-    )
+        to_add = df_bim_exp[~df_bim_exp["key"].isin(df_bim_prd["key"])]
+        df_add = df_bim_exp.loc[to_add.index]
 
-    reordered_genotype_data = update_and_reorder(
-        genotype_input_folder=added_genotype_data,
-        df_exp_bim=df_bim_exp,
-        output_folder=output_folder,
-    )
+        added_genotype_data = add_missing_snps(
+            df_add=df_add,
+            genotype_data_path=filtered_genotype_data_path,
+            genotype_base_name=genotype_base_name,
+            output_folder=output_folder,
+        )
+        progress.advance(sync_task)
 
-    df_bim_exp = df_bim_exp.drop(columns=["key"])
-    df_bim_final = get_predict_bim_file(genotype_folder=Path(reordered_genotype_data))
-    cols = ["CHR_CODE", "BP_COORD", "ALT", "REF"]
-    assert df_bim_final[cols].equals(df_bim_exp[cols])
+        reordered_genotype_data = update_and_reorder(
+            genotype_input_folder=added_genotype_data,
+            df_exp_bim=df_bim_exp,
+            output_folder=output_folder,
+        )
+        progress.advance(sync_task)
+
+        df_bim_exp = df_bim_exp.drop(columns=["key"])
+        df_bim_final = get_predict_bim_file(
+            genotype_folder=Path(reordered_genotype_data)
+        )
+        assert df_bim_final[cols].equals(df_bim_exp[cols])
+        progress.advance(sync_task)
+
+    print("\n")
 
     return str(reordered_genotype_data)
 
