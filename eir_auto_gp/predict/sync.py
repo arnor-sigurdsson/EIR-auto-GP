@@ -1,10 +1,15 @@
 import shutil
 import subprocess
 from pathlib import Path
+from subprocess import CalledProcessError
 
 import pandas as pd
-from aislib.misc_utils import ensure_path_exists
+from aislib.misc_utils import ensure_path_exists, get_logger
 from eir.setup.input_setup_modules.setup_omics import read_bim
+from rich.console import Console
+from rich.table import Table
+
+logger = get_logger(name=__name__)
 
 
 def run_sync(
@@ -16,6 +21,7 @@ def run_sync(
 
     df_bim_exp = get_experiment_bim_file(experiment_folder=experiment_folder)
     df_bim_prd = get_predict_bim_file(genotype_folder=genotype_data_path)
+    log_overlap(df_bim_prd=df_bim_prd, df_bim_exp=df_bim_exp)
 
     cols = ["CHR_CODE", "BP_COORD", "ALT", "REF"]
     df_bim_prd["key"] = df_bim_prd[cols].astype(str).agg("-".join, axis=1)
@@ -55,6 +61,48 @@ def run_sync(
     assert df_bim_final[cols].equals(df_bim_exp[cols])
 
     return str(reordered_genotype_data)
+
+
+def log_overlap(df_bim_prd: pd.DataFrame, df_bim_exp: pd.DataFrame) -> None:
+    logger.info(
+        "Examining SNP overlap between current prediction and previous experiment."
+    )
+
+    console = Console()
+
+    overlap = df_bim_prd.merge(df_bim_exp, on=["CHR_CODE", "BP_COORD", "ALT", "REF"])
+    prd_count = len(df_bim_prd)
+    exp_count = len(df_bim_exp)
+    overlap_count = len(overlap)
+    to_remove_count = prd_count - overlap_count
+    to_add_count = exp_count - overlap_count
+    overlap_percentage = (overlap_count / prd_count * 100) if prd_count > 0 else 0
+
+    color = (
+        "green"
+        if overlap_percentage > 75
+        else "yellow"
+        if overlap_percentage > 50
+        else "red"
+    )
+
+    table = Table(title="SNP Overlap Analysis", title_style="bold blue")
+    table.add_column("Metric", style="dim", width=40)
+    table.add_column("Value", style="bold")
+
+    table.add_row("Number of overlapping SNPs", f"[{color}]{overlap_count:,}[/]")
+    table.add_row(
+        "Percentage of current prediction SNPs overlapping",
+        f"[{color}]{overlap_percentage:.2f}%[/]",
+    )
+    table.add_row("Number of SNPs in previous experiment", f"{exp_count:,}")
+    table.add_row("Number of SNPs for current prediction", f"{prd_count:,}")
+    table.add_row("Number of SNPs to remove", f"{to_remove_count:,}")
+    table.add_row("Number of SNPs to add", f"{to_add_count:,}")
+
+    console.print("\n")
+    console.print(table)
+    console.print("\n")
 
 
 def check_genotype_folder(genotype_folder: Path) -> str:
@@ -100,7 +148,7 @@ def remove_extra_snps(
         "--out",
         filtered_path / genotype_base_name,
     ]
-    subprocess.run(remove_command, check=True)
+    run_subprocess(command=remove_command)
 
     return str(filtered_path)
 
@@ -132,7 +180,7 @@ def add_missing_snps(
         str(dummy_path / "dummy_dataset"),
         "--make-bed",
     ]
-    subprocess.run(dummy_command, check=True)
+    run_subprocess(command=dummy_command)
 
     bim_file_path = dummy_path / "dummy_dataset.bim"
     if bim_file_path.exists():
@@ -156,7 +204,7 @@ def add_missing_snps(
         "--out",
         str(output_folder_missing_imputed / (genotype_base_name + "_with_missing")),
     ]
-    subprocess.run(merge_command, check=True)
+    run_subprocess(command=merge_command)
 
     return str(output_folder_missing_imputed)
 
@@ -245,7 +293,7 @@ def create_and_merge_dummy_fileset(
         str(dummy_path / "dummy_dataset"),
         "--make-bed",
     ]
-    subprocess.run(dummy_command, check=True)
+    run_subprocess(command=dummy_command)
 
     bim_file_path = dummy_path / "dummy_dataset.bim"
     df_exp_bim[
@@ -270,7 +318,7 @@ def create_and_merge_dummy_fileset(
         "--out",
         str(merged_output_path),
     ]
-    subprocess.run(merge_command, check=True)
+    run_subprocess(command=merge_command)
 
     remove_command = [
         "plink",
@@ -282,7 +330,7 @@ def create_and_merge_dummy_fileset(
         "--out",
         str(output_folder / f"{base_name}_reordered"),
     ]
-    subprocess.run(remove_command, check=True)
+    run_subprocess(command=remove_command)
 
     shutil.rmtree(output_folder / "dummy_genotype_data")
 
@@ -292,3 +340,19 @@ def create_and_merge_dummy_fileset(
             f.unlink()
 
     return output_folder
+
+
+def run_subprocess(command: list[str]) -> None:
+    try:
+        subprocess.run(
+            command,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except CalledProcessError as e:
+        print(f"Command failed with exit code {e.returncode}")
+        print(f"Output: {e.output}")
+        print(f"Error: {e.stderr}")
+        raise

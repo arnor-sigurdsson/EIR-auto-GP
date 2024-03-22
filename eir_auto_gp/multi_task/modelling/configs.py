@@ -44,9 +44,9 @@ def get_base_input_genotype_config() -> Dict[str, Any]:
         "input_type_info": {
             "mixing_subtype": "cutmix-block",
             "na_augment_alpha": 1.0,
-            "na_augment_beta": 5.0,
+            "na_augment_beta": 9.0,
             "shuffle_augment_alpha": 1.0,
-            "shuffle_augment_beta": 20.0,
+            "shuffle_augment_beta": 19.0,
             "snp_file": "FILL",
         },
         "model_config": {

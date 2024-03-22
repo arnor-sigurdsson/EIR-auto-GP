@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import shutil
 from argparse import RawTextHelpFormatter
 from copy import copy
@@ -16,6 +17,9 @@ from eir_auto_gp.preprocess.gwas_pre_selection import validate_geno_data_path
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
+
+luigi_logger = logging.getLogger("luigi")
+luigi_logger.setLevel(logging.INFO)
 
 
 def get_argument_parser() -> argparse.ArgumentParser:
@@ -270,6 +274,7 @@ def run(cl_args: argparse.Namespace) -> None:
         tasks=[root_task],
         workers=1,
         local_scheduler=True,
+        log_level="INFO",
     )
 
 
