@@ -713,20 +713,20 @@ def get_gxg_iterator(
             inputs: pd.DataFrame,
             targets: pd.DataFrame,
         ) -> tuple[pd.DataFrame, pd.DataFrame]:
-            snp1_additive = (
-                inputs[f"{snp1}_0"] * 0
-                + inputs[f"{snp1}_1"] * 1
-                + inputs[f"{snp1}_2"] * 2
-            )
-            snp2_additive = (
-                inputs[f"{snp2}_0"] * 0
-                + inputs[f"{snp2}_1"] * 1
-                + inputs[f"{snp2}_2"] * 2
-            )
+            snp1_additive = pd.Series(0, index=inputs.index)
+            snp2_additive = pd.Series(0, index=inputs.index)
+
+            for genotype in [0, 1, 2]:
+                snp1_col = f"{snp1}_{genotype}"
+                if snp1_col in inputs.columns:
+                    snp1_additive += inputs[snp1_col] * genotype
+
+                snp2_col = f"{snp2}_{genotype}"
+                if snp2_col in inputs.columns:
+                    snp2_additive += inputs[snp2_col] * genotype
 
             interaction_term = snp1_additive * snp2_additive
             interaction_name = f"{snp1}_x_{snp2}"
-
             inputs[interaction_name] = interaction_term
 
             return inputs, targets
