@@ -1039,13 +1039,13 @@ test = ["pandas[test]", "pre-commit", "pytest", "pytest-cov", "pytest-rerunfailu
 
 [[package]]
 name = "dask-expr"
-version = "1.0.4"
+version = "1.0.5"
 description = "High Level Expressions for Dask"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "dask-expr-1.0.4.tar.gz", hash = "sha256:58899409fe9c19eedb1eba2477a0308da2cc3b3e1984b913fdbf012481b76326"},
-    {file = "dask_expr-1.0.4-py3-none-any.whl", hash = "sha256:442463458dbd583768d67d4d6a904904e2b3115bb65e6b8215832e760ab86cf1"},
+    {file = "dask-expr-1.0.5.tar.gz", hash = "sha256:341e48cae1675180b6a94d920b9d34d496dfddb09d89d2ecbb21bb6eb40f4908"},
+    {file = "dask_expr-1.0.5-py3-none-any.whl", hash = "sha256:aab56d69421492dc347f1ff6007d2f75e37418c9cb541971373dec5bd5d2f058"},
 ]
 
 [package.dependencies]
@@ -1260,7 +1260,7 @@ uvicorn = "^0.28.0"
 [package.source]
 type = "git"
 url = "https://git@github.com/arnor-sigurdsson/EIR.git"
-reference = "master"
+reference = "cbeba4aec72a57c520fb0d31b0dfef349cb2825b"
 resolved_reference = "cbeba4aec72a57c520fb0d31b0dfef349cb2825b"
 
 [[package]]
@@ -3072,13 +3072,13 @@ test = ["flaky", "ipykernel (>=6.19.3)", "ipython", "ipywidgets", "nbconvert (>=
 
 [[package]]
 name = "nbconvert"
-version = "7.16.2"
+version = "7.16.3"
 description = "Converting Jupyter Notebooks (.ipynb files) to other formats.  Output formats include asciidoc, html, latex, markdown, pdf, py, rst, script.  nbconvert can be used both as a Python library (`import nbconvert`) or as a command line tool (invoked as `jupyter nbconvert ...`)."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "nbconvert-7.16.2-py3-none-any.whl", hash = "sha256:0c01c23981a8de0220255706822c40b751438e32467d6a686e26be08ba784382"},
-    {file = "nbconvert-7.16.2.tar.gz", hash = "sha256:8310edd41e1c43947e4ecf16614c61469ebc024898eb808cce0999860fc9fb16"},
+    {file = "nbconvert-7.16.3-py3-none-any.whl", hash = "sha256:ddeff14beeeedf3dd0bc506623e41e4507e551736de59df69a91f86700292b3b"},
+    {file = "nbconvert-7.16.3.tar.gz", hash = "sha256:a6733b78ce3d47c3f85e504998495b07e6ea9cf9bf6ec1c98dda63ec6ad19142"},
 ]
 
 [package.dependencies]
@@ -3104,7 +3104,7 @@ docs = ["ipykernel", "ipython", "myst-parser", "nbsphinx (>=0.2.12)", "pydata-sp
 qtpdf = ["nbconvert[qtpng]"]
 qtpng = ["pyqtwebengine (>=5.15)"]
 serve = ["tornado (>=6.1)"]
-test = ["flaky", "ipykernel", "ipywidgets (>=7.5)", "pytest"]
+test = ["flaky", "ipykernel", "ipywidgets (>=7.5)", "pytest (>=7)"]
 webpdf = ["playwright"]
 
 [[package]]
@@ -6222,13 +6222,13 @@ files = [
 
 [[package]]
 name = "tox"
-version = "4.14.1"
+version = "4.14.2"
 description = "tox is a generic virtualenv management and test command line tool"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "tox-4.14.1-py3-none-any.whl", hash = "sha256:b03754b6ee6dadc70f2611da82b4ed8f625fcafd247e15d1d0cb056f90a06d3b"},
-    {file = "tox-4.14.1.tar.gz", hash = "sha256:f0ad758c3bbf7e237059c929d3595479363c3cdd5a06ac3e49d1dd020ffbee45"},
+    {file = "tox-4.14.2-py3-none-any.whl", hash = "sha256:2900c4eb7b716af4a928a7fdc2ed248ad6575294ed7cfae2ea41203937422847"},
+    {file = "tox-4.14.2.tar.gz", hash = "sha256:0defb44f6dafd911b61788325741cc6b2e12ea71f987ac025ad4d649f1f1a104"},
 ]
 
 [package.dependencies]
@@ -6283,13 +6283,13 @@ test = ["argcomplete (>=3.0.3)", "mypy (>=1.7.0)", "pre-commit", "pytest (>=7.0,
 
 [[package]]
 name = "transformers"
-version = "4.39.0"
+version = "4.39.1"
 description = "State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow"
 optional = false
 python-versions = ">=3.8.0"
 files = [
-    {file = "transformers-4.39.0-py3-none-any.whl", hash = "sha256:7801785b1f016d667467e8c372c1c3653c18fe32ba97952059e3bea79ba22b08"},
-    {file = "transformers-4.39.0.tar.gz", hash = "sha256:517a13cd633b10bea01c92ab0b3059762872c7c29da3d223db9d28e926fe330d"},
+    {file = "transformers-4.39.1-py3-none-any.whl", hash = "sha256:df167e08b27ab254044a38bb7c439461cd3916332205416e9b6b1592b517a1a5"},
+    {file = "transformers-4.39.1.tar.gz", hash = "sha256:ab9c1e1912843b9976e6cc62b27cd5434284fc0dab465e1b660333acfa81c6bc"},
 ]
 
 [package.dependencies]
@@ -6890,4 +6890,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11.0,<3.12"
-content-hash = "67daf2e3b72bea86d46d5ad37d94ebea3cc0c3c98043149d3b661d9b8d2f0ae5"
+content-hash = "cd1f9cbf98acc83f480bef2f3bd02871a10c7386c24ee95a6b57addd216ca3aa"

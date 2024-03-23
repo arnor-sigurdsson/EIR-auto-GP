@@ -8,7 +8,7 @@ packages = [{include = "eir_auto_gp"}]
 
 [tool.poetry.dependencies]
 python = ">=3.11.0,<3.12"
-eir-dl = {git = "https://git@github.com/arnor-sigurdsson/EIR.git", rev = "master"}
+eir-dl = {git = "https://git@github.com/arnor-sigurdsson/EIR.git", rev = "cbeba4aec72a57c520fb0d31b0dfef349cb2825b"}
 plink-pipelines = "^0.1.7a0"
 scikit-optimize = "^0.9.0"
 qmplot = "^0.3.2"
