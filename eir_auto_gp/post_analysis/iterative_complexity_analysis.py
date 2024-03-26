@@ -77,6 +77,7 @@ def run_iterative_complexity_analysis(
         results.append(df_performance)
 
     df_results = pd.concat(results)
+    df_results = df_results.reset_index(drop=True)
 
     output_root = pao.data_paths.analysis_output_path / "iterative_complexity"
     ensure_path_exists(path=output_root, is_folder=True)
