@@ -28,7 +28,7 @@ def add_directory_to_zip(
 ) -> None:
     logger.info(f"Writing directories {target_dirs} from {root_dir}.")
     for fold_dir in root_dir.iterdir():
-        if fold_dir.is_dir():
+        if fold_dir.is_dir() and fold_dir.name.startswith("fold_"):
             for directory in target_dirs:
                 target_dir = fold_dir / directory
                 if target_dir.exists() and target_dir.is_dir():
