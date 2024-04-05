@@ -67,6 +67,9 @@ def test_post_analysis_classification(
     )
     run_post_analysis.run_complexity_analysis(post_analysis_object=post_analysis_object)
     run_post_analysis.run_effect_analysis(post_analysis_object=post_analysis_object)
+    run_post_analysis.run_iterative_complexity_analysis(
+        post_analysis_object=post_analysis_object
+    )
 
     post_analysis_folder = tmp_path / "analysis" / "post_analysis"
     _check_post_analysis_results_wrapper(

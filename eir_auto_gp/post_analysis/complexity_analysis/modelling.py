@@ -6,16 +6,25 @@ from typing import TYPE_CHECKING, Any, Dict, Generator, Optional
 import numpy as np
 import pandas as pd
 import xgboost
+from aislib.misc_utils import get_logger
 from eir.train_utils import metrics as eir_metrics
 from sklearn import metrics
 from sklearn.exceptions import ConvergenceWarning
-from sklearn.linear_model import ElasticNetCV, LogisticRegressionCV
+from sklearn.linear_model import (
+    ElasticNetCV,
+    LinearRegression,
+    LogisticRegression,
+    LogisticRegressionCV,
+)
+from sklearn.model_selection import PredefinedSplit
 from sklearn.preprocessing import LabelEncoder
 
 if TYPE_CHECKING:
     from eir_auto_gp.post_analysis.run_complexity_analysis import ModelReadyObject
 
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
+
+logger = get_logger(name=__name__)
 
 
 @dataclass()
@@ -26,7 +35,7 @@ class TrainEvalResults:
     feature_importance: Optional[pd.DataFrame]
 
 
-def train_and_evaluate_xboost(
+def train_and_evaluate_xgboost(
     modelling_data: "ModelReadyObject",
     target_type: str,
 ) -> TrainEvalResults:
@@ -91,78 +100,60 @@ def train_and_evaluate_xboost(
 def train_and_evaluate_linear(
     modelling_data: "ModelReadyObject",
     target_type: str,
-    custom_coef_init: Optional[dict[str, float]] = None,
+    eval_set: str = "test",
+    cv_use_val_split: bool = False,
 ) -> TrainEvalResults:
     if target_type not in ["classification", "regression"]:
         raise ValueError("target_type must be 'classification' or 'regression'")
 
-    x_train = pd.concat([modelling_data.input_train, modelling_data.input_val]).values
-    y_train = pd.concat([modelling_data.target_train, modelling_data.target_val]).values
+    if eval_set not in ["test", "valid"]:
+        raise ValueError("eval_set must be 'test' or 'valid'")
 
-    if target_type == "classification":
-        model = LogisticRegressionCV(
-            cv=10,
-            random_state=0,
-            max_iter=1000,
-            class_weight="balanced",
-            scoring="roc_auc",
-            solver="saga",
-            penalty="elasticnet",
-            Cs=10,
-            l1_ratios=[0.1, 0.5, 0.7, 0.9, 0.95, 0.99],
-            n_jobs=-1,
-        )
-    else:
-        model = ElasticNetCV(
-            l1_ratio=[0.1, 0.5, 0.7, 0.9, 0.95, 0.99],
-            eps=1e-5,
-            n_alphas=100,
-            cv=10,
-            tol=1e-4,
-            selection="cyclic",
-            random_state=0,
-            n_jobs=-1,
-        )
+    x_train, y_train = _select_training_data(
+        modelling_data=modelling_data,
+        eval_set=eval_set,
+    )
+
+    cv = _get_cv_split(
+        modelling_data=modelling_data,
+        cv_use_val_split=cv_use_val_split,
+    )
+
+    model = _initialize_linear_model(target_type=target_type, cv=cv)
 
     model.fit(X=x_train, y=y_train.ravel())
 
-    x_test = modelling_data.input_test.values
-    y_test = modelling_data.target_test.values
+    x_eval, y_eval = _select_evaluation_set(
+        modelling_data=modelling_data,
+        eval_set=eval_set,
+    )
 
-    if target_type == "classification":
-        y_score = model.predict_proba(x_test)
-    else:
-        y_score = model.predict(x_test)
-        y_score = y_score.reshape(-1, 1)
+    y_score = _predict_with_linear(
+        model=model,
+        x_eval=x_eval,
+        target_type=target_type,
+    )
 
     performance = evaluate_model_performance(
-        y_true=y_test,
+        y_true=y_eval,
         y_score=y_score,
         task_type=target_type,
     )
 
     df_predictions, df_predictions_raw = parse_predictions(
         modelling_data=modelling_data,
-        y_test=y_test,
+        y_test=y_eval,
         y_score=y_score,
     )
     df_performance = pd.DataFrame.from_dict(data=performance, orient="index").T
 
     feature_names = modelling_data.input_train.columns.tolist()
-    if target_type == "classification":
-        coef = model.coef_[0]
-        feature_importance = abs(model.coef_[0])
-    else:
-        coef = model.coef_
-        feature_importance = abs(model.coef_)
 
-    df_feature_importance = pd.DataFrame(
-        {
-            "Feature": feature_names,
-            "Importance": feature_importance,
-            "Coef": coef,
-        }
-    ).sort_values(by="Importance", ascending=False)
+    df_feature_importance = _extract_linear_feature_importance(
+        model=model,
+        feature_names=feature_names,
+        target_type=target_type,
+    )
 
     results = TrainEvalResults(
         df_predictions=df_predictions,
@@ -172,6 +163,104 @@ def train_and_evaluate_linear(
     )
 
     return results
+
+
+def _select_training_data(modelling_data: "ModelReadyObject", eval_set: str) -> tuple:
+    if eval_set == "valid":
+        x_train = modelling_data.input_train.values
+        y_train = modelling_data.target_train.values
+    elif eval_set == "test":
+        x_train = pd.concat(
+            [
+                modelling_data.input_train,
+                modelling_data.input_val,
+            ]
+        ).values
+        y_train = pd.concat(
+            [
+                modelling_data.target_train,
+                modelling_data.target_val,
+            ]
+        ).values
+    else:
+        raise ValueError("eval_set must be 'test' or 'valid'")
+
+    return x_train, y_train
+
+
+def _get_cv_split(
+    modelling_data: "ModelReadyObject", cv_use_val_split: bool
+) -> int | PredefinedSplit:
+    if cv_use_val_split:
+        train_indices = [0] * len(modelling_data.input_train)
+        val_indices = [-1] * len(modelling_data.input_val)
+        test_fold = train_indices + val_indices
+
+        cv = PredefinedSplit(test_fold=test_fold)
+    else:
+        cv = 10
+    return cv
+
+
+def _select_evaluation_set(
+    modelling_data: "ModelReadyObject", eval_set: str
+) -> tuple[np.ndarray, np.ndarray]:
+    if eval_set == "test":
+        x_eval = modelling_data.input_test.values
+        y_eval = modelling_data.target_test.values
+    elif eval_set == "valid":
+        x_eval = modelling_data.input_val.values
+        y_eval = modelling_data.target_val.values
+    else:
+        raise ValueError("eval_set must be 'test' or 'valid'")
+
+    return x_eval, y_eval
+
+
+def _initialize_linear_model(target_type: str, cv: int | PredefinedSplit) -> Any:
+    if target_type == "classification":
+        return LogisticRegression(
+            solver="saga",
+            n_jobs=-1,
+        )
+    elif target_type == "regression":
+        return LinearRegression()
+    else:
+        raise ValueError()
+
+
+def _predict_with_linear(
+    model: LogisticRegressionCV | ElasticNetCV, x_eval: np.ndarray, target_type: str
+) -> np.ndarray:
+    if target_type == "classification":
+        return model.predict_proba(x_eval)
+    elif target_type == "regression":
+        return model.predict(x_eval).reshape(-1, 1)
+    else:
+        raise ValueError()
+
+
+def _extract_linear_feature_importance(
+    model: LogisticRegressionCV | ElasticNetCV,
+    feature_names: list[str],
+    target_type: str,
+) -> pd.DataFrame:
+    if target_type == "classification":
+        coef = model.coef_[0]
+        feature_importance = abs(model.coef_[0])
+    elif target_type == "regression":
+        coef = model.coef_
+        feature_importance = abs(model.coef_)
+    else:
+        raise ValueError()
+
+    return pd.DataFrame(
+        {
+            "Feature": feature_names,
+            "Importance": feature_importance,
+            "Coef": coef,
+        }
+    ).sort_values(by="Importance", ascending=False)
 
 
 def parse_predictions(

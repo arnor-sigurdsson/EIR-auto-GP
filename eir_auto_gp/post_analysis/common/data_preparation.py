@@ -30,6 +30,7 @@ class DataPaths:
     train_labels_path: Path
     test_labels_path: Path
     snp_bim_path: Path
+    split_ids_path: Optional[Path]
     dl_attribution_path: Path
     gwas_attribution_path: Optional[Path]
     analysis_output_path: Path
@@ -56,12 +57,17 @@ def build_data_paths(run_dir: Path) -> DataPaths:
     else:
         data_dir = run_dir / "data"
 
+    ids_path = data_dir / "ids"
+    if not ids_path.exists():
+        ids_path = None
+
     paths = DataPaths(
         experiment_config=run_dir / "config.json",
         train_data_path=data_dir / "genotype/final/train",
         test_data_path=data_dir / "genotype/final/test",
         train_labels_path=data_dir / "tabular/final/labels_train.csv",
         test_labels_path=data_dir / "tabular/final/labels_test.csv",
+        split_ids_path=ids_path,
         snp_bim_path=data_dir / "genotype/processed/parsed_files/data_final.bim",
         dl_attribution_path=run_dir
         / "feature_selection/snp_importance/dl_attributions.csv",
@@ -326,7 +332,9 @@ class FitTransformers:
 
 
 def _set_up_transformers(
-    df_train_tab_input: pd.DataFrame, df_train_tab_target: pd.DataFrame, task_type: str
+    df_train_tab_input: pd.DataFrame,
+    df_train_tab_target: pd.DataFrame,
+    task_type: str,
 ) -> FitTransformers:
     numerical_columns = df_train_tab_input.select_dtypes(include=[np.number]).columns
 
@@ -347,7 +355,7 @@ def _set_up_transformers(
     return FitTransformers(
         input_scaler=input_scaler,
         target_label_encoder=target_transformer,
-        numerical_columns=numerical_columns,
+        numerical_columns=numerical_columns.tolist(),
     )
 
 
@@ -438,9 +446,13 @@ def set_up_split_model_data(
         top_snps_list=top_snps_list,
     )
 
+    train_ids, valid_ids, _ = maybe_gather_ids(split_ids_path=data_paths.split_ids_path)
+
     train_data, valid_data = split_model_data_object(
         model_data=train_and_valid_data,
         test_size=0.1,
+        ids_train=train_ids,
+        ids_val=valid_ids,
     )
 
     test_data = set_up_model_data(
@@ -466,6 +478,27 @@ def set_up_split_model_data(
     validate_split_model_data(split_model_data=split_model_data_processed)
 
     return split_model_data_processed
+
+
+def maybe_gather_ids(
+    split_ids_path: Optional[Path],
+) -> tuple[Optional[list], Optional[list], Optional[list]]:
+    if split_ids_path is None:
+        return None, None, None
+
+    train_file = split_ids_path / "train_ids.txt"
+    val_file = split_ids_path / "valid_ids.txt"
+    test_file = split_ids_path / "test_ids.txt"
+
+    train_ids = list(train_file.read_text().split())
+
+    val_ids = []
+    if val_file.exists():
+        val_ids = list(val_file.read_text().split())
+
+    test_ids = list(test_file.read_text().split())
+
+    return train_ids, val_ids, test_ids
 
 
 def validate_split_model_data(split_model_data: "SplitModelData") -> None:
@@ -498,17 +531,30 @@ def parse_target_type(
 
 
 def split_model_data_object(
-    model_data: ModelData, test_size: float = 0.2
+    model_data: ModelData,
+    ids_train: list[str],
+    ids_val: list[str],
+    test_size: float = 0.2,
 ) -> tuple[ModelData, ModelData]:
     df_input = pd.concat(
-        objs=[model_data.df_genotype_input, model_data.df_tabular_input], axis=1
+        objs=[model_data.df_genotype_input, model_data.df_tabular_input],
+        axis=1,
     )
-    x_train, x_val, y_train, y_val = train_test_split(
-        df_input,
-        model_data.df_target,
-        test_size=test_size,
-        random_state=42,
-    )
+
+    if not ids_val:
+        logger.info("Randomly splitting data into train and validation sets.")
+        x_train, x_val, y_train, y_val = train_test_split(
+            df_input,
+            model_data.df_target,
+            test_size=test_size,
+            random_state=42,
+        )
+    else:
+        logger.info("Using provided IDs to split data into train and validation sets.")
+        x_train = df_input.loc[ids_train]
+        x_val = df_input.loc[ids_val]
+        y_train = model_data.df_target.loc[ids_train]
+        y_val = model_data.df_target.loc[ids_val]
 
     train_data = ModelData(
         df_genotype_input=x_train[model_data.df_genotype_input.columns],

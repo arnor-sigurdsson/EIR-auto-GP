@@ -14,7 +14,7 @@ from eir_auto_gp.post_analysis.common.data_preparation import (
 from eir_auto_gp.post_analysis.complexity_analysis.modelling import (
     get_training_eval_iterator,
     train_and_evaluate_linear,
-    train_and_evaluate_xboost,
+    train_and_evaluate_xgboost,
 )
 from eir_auto_gp.post_analysis.complexity_analysis.viz import plot_performance
 
@@ -55,7 +55,7 @@ def train_and_evaluate_wrapper(analysis_object: "PostAnalysisObject"):
         )
 
         if conditions["model_type"] == "xgboost":
-            train_eval_results = train_and_evaluate_xboost(
+            train_eval_results = train_and_evaluate_xgboost(
                 modelling_data=mro,
                 target_type=analysis_object.experiment_info.target_type,
             )

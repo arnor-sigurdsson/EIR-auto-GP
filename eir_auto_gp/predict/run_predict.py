@@ -210,6 +210,7 @@ def run_predict(
             train_run_folder=model_folder,
             with_labels=False,
         )
+        logger.info(f"Running command: {command}")
 
         subprocess.run(command, shell=True)
 
