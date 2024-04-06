@@ -53,8 +53,12 @@ def _get_step_information_objects(
 
 def run_iterative_complexity_analysis(
     post_analysis_object: "PostAnalysisObject",
+    eval_set: str,
 ) -> None:
-    results = []
+    if eval_set not in ["test", "valid"]:
+        raise ValueError(
+            f"Unsupported eval_set: {eval_set}. Must be 'test' or 'valid'."
+        )
 
     pao = post_analysis_object
     ei = pao.experiment_info
@@ -69,6 +73,13 @@ def run_iterative_complexity_analysis(
 
     output_name = outputs[0]
 
+    output_root = (
+        pao.data_paths.analysis_output_path / "iterative_complexity" / eval_set
+    )
+    ensure_path_exists(path=output_root, is_folder=True)
+
+    results = []
+
     data_iter = get_step_training_iterator(
         post_analysis_object=pao,
         step_information_objects=sidp,
@@ -76,14 +87,14 @@ def run_iterative_complexity_analysis(
         max_interaction_exe=5,
         max_interaction_gxe=5,
         max_interaction_gxg=5,
+        eval_set=eval_set,
     )
 
     for idx, (mro, group, model_type) in enumerate(data_iter):
         train_eval_results = train_and_evaluate_linear(
             modelling_data=mro,
-            target_type=pao.experiment_info.target_type,
-            eval_set="test",
-            cv_use_val_split=True,
+            target_type=ei.target_type,
+            eval_set=eval_set,
         )
         df_performance = train_eval_results.performance
         df_performance["model_type"] = model_type
@@ -94,16 +105,16 @@ def run_iterative_complexity_analysis(
     df_results = pd.concat(results)
     df_results = df_results.reset_index(drop=True)
 
-    output_root = pao.data_paths.analysis_output_path / "iterative_complexity"
-    ensure_path_exists(path=output_root, is_folder=True)
-
     df_results.to_csv(output_root / "iterative_complexity_results.csv")
+
+    figures_output_folder = output_root / "figures"
+    ensure_path_exists(path=figures_output_folder, is_folder=True)
 
     plot_iterative_complexity_results(
         df_results=df_results,
         output_name=output_name,
         df_complexity_results=sidp.complexity_results,
-        output_folder=output_root / "figures",
+        output_folder=figures_output_folder,
     )
 
 
@@ -133,13 +144,25 @@ def plot_iterative_complexity_results(
         fig.savefig(output_folder / f"{metric}_change.pdf")
         plt.close(fig)
 
+        direction = "increase" if metric != "rmse" else "decrease"
+        fig_changes = plot_top_changes(
+            df=df_results,
+            metric=metric,
+            metric_change=f"{metric}_change",
+            output_name=output_name,
+            direction=direction,
+        )
+        fig_changes.savefig(output_folder / f"{metric}_top_changes.pdf")
+        plt.close(fig_changes)
+
 
 def parse_metrics_changes(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    df_copy = df.copy()
     skip_cols = ["Unnamed: 0", "model_type", "step", "group"]
-    metric_columns = [col for col in df.columns if col not in skip_cols]
+    metric_columns = [col for col in df_copy.columns if col not in skip_cols]
     for metric in metric_columns:
-        df[f"{metric}_change"] = df[metric].diff().fillna(0)
-    return df, metric_columns
+        df_copy[f"{metric}_change"] = df_copy[metric].diff().fillna(0)
+    return df_copy, metric_columns
 
 
 def get_top_performance_info(df_complexity_results: pd.DataFrame, metric: str):
@@ -157,6 +180,58 @@ def get_top_performance_info(df_complexity_results: pd.DataFrame, metric: str):
     label = "-".join(filter(None, label_components))
 
     return top_row[metric], label
+
+
+def plot_top_changes(
+    df: pd.DataFrame,
+    metric_change: str,
+    metric: str,
+    output_name: str,
+    top_n: int = 3,
+    direction: str = "increase",
+) -> plt.Figure:
+    if direction not in ["increase", "decrease"]:
+        raise ValueError("direction must be 'increase' or 'decrease'")
+
+    excluded_terms = {"Tabular", "Genotype", "Genotype + Tabular"}
+    df_filtered = df[~df["model_type"].isin(excluded_terms)]
+
+    condition = (
+        f"{metric_change} > 0" if direction == "increase" else f"{metric_change} < 0"
+    )
+
+    df_relevant_changes = df_filtered.query(condition)
+
+    sort_ascending = direction == "decrease"
+
+    df_top_changes = (
+        df_relevant_changes.sort_values(by=[metric_change], ascending=sort_ascending)
+        .groupby("group")
+        .head(top_n)
+    )
+
+    fig = plt.figure(figsize=(10, 6))
+    sns.barplot(
+        data=df_top_changes,
+        x=metric_change,
+        y="model_type",
+        hue="group",
+        orient="h",
+        palette="deep",
+    )
+    title_suffix = "Decreases" if direction == "decrease" else "Improvements"
+    xlabel_suffix = "Reduction" if direction == "decrease" else "Improvement"
+    plt.title(
+        f"Top {top_n} {title_suffix} in {output_name}",
+        fontsize=16,
+        weight="bold",
+    )
+    plt.xlabel(f"{metric} {xlabel_suffix}", fontsize=14)
+    plt.ylabel("Model Type", fontsize=14)
+    plt.tight_layout()
+    plt.legend(title="Group", bbox_to_anchor=(1.05, 1), loc="upper left")
+
+    return fig
 
 
 def plot_metric_figure(
@@ -177,7 +252,7 @@ def plot_metric_figure(
 
     direction = "min" if metric == "rmse" else "max"
     df_parsed = prepare_dataframe_with_other_terms(
-        df_copy=df,
+        df=df,
         metric_change=change_col,
         metric=metric,
         top_n=3,
@@ -260,13 +335,13 @@ def plot_metric_figure(
 
 
 def prepare_dataframe_with_other_terms(
-    df_copy: pd.DataFrame,
+    df: pd.DataFrame,
     metric: str,
     metric_change: str = "r2_change",
     top_n: int = 3,
     direction: str = "max",
 ) -> pd.DataFrame:
-    df_copy = df_copy.copy()
+    df_copy = df.copy()
     df_copy[metric] = df_copy[metric].fillna(0)
 
     df_processed = pd.DataFrame()
@@ -300,6 +375,7 @@ def prepare_dataframe_with_other_terms(
                 else:
                     n_rows = len(df_processed)
                     df_other_terms[metric_change] += row[metric_change]
+                    df_other_terms[metric] = row[metric]
                     df_other_terms["model_type"] = f"Other terms {n_rows}"
                     df_other_terms["step"] = row["step"]
 
@@ -327,6 +403,7 @@ def get_step_training_iterator(
     max_interaction_exe: int,
     max_interaction_gxe: int,
     max_interaction_gxg: int,
+    eval_set: str,
     include_genotype: bool = True,
     include_tabular: bool = True,
 ) -> Generator[tuple[ModelReadyObject, str, str], None, None]:
@@ -372,6 +449,7 @@ def get_step_training_iterator(
         tabular_results = train_and_evaluate_linear(
             modelling_data=mro_tabular,
             target_type=ei.target_type,
+            eval_set=eval_set,
         )
         tabular_feature_importance = tabular_results.feature_importance
         running_mro = mro_tabular
@@ -815,6 +893,7 @@ def _find_txt_candidates(
         train_eval_results = train_and_evaluate_linear(
             modelling_data=modified_mro,
             target_type=target_type,
+            eval_set="valid",
         )
         df_performance = train_eval_results.performance
         df_performance["interaction"] = f"{col1}_x_{col2}"
@@ -946,6 +1025,7 @@ def _find_gxt_candidates(
             train_eval_results = train_and_evaluate_linear(
                 modelling_data=modified_mro,
                 target_type=target_type,
+                eval_set="valid",
             )
             df_performance = train_eval_results.performance
             df_performance["interaction"] = f"{snp_column}_x_{tab_column}"

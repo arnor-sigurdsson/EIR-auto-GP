@@ -174,7 +174,12 @@ def run_all():
 
     run_complexity_analysis(post_analysis_object=post_analysis_object)
     run_effect_analysis(post_analysis_object=post_analysis_object)
-    run_iterative_complexity_analysis(post_analysis_object=post_analysis_object)
+    run_iterative_complexity_analysis(
+        post_analysis_object=post_analysis_object, eval_set="test"
+    )
+    run_iterative_complexity_analysis(
+        post_analysis_object=post_analysis_object, eval_set="valid"
+    )
 
 
 def main():

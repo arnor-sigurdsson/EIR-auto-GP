@@ -80,6 +80,7 @@ def train_and_evaluate_xgboost(
         modelling_data=modelling_data,
         y_test=y_test,
         y_score=y_score,
+        eval_set="test",
     )
 
     feature_importance = pd.DataFrame(
@@ -144,6 +145,7 @@ def train_and_evaluate_linear(
         modelling_data=modelling_data,
         y_test=y_eval,
         y_score=y_score,
+        eval_set=eval_set,
     )
     df_performance = pd.DataFrame.from_dict(data=performance, orient="index").T
 
@@ -267,6 +269,7 @@ def parse_predictions(
     modelling_data: "ModelReadyObject",
     y_test: np.ndarray,
     y_score: np.ndarray,
+    eval_set: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     target_encoder = modelling_data.transformers.target_label_encoder
     if isinstance(target_encoder, LabelEncoder):
@@ -275,10 +278,17 @@ def parse_predictions(
     else:
         column_names = ["Prediction"]
 
+    if eval_set == "test":
+        index = modelling_data.target_test.index
+    elif eval_set == "valid":
+        index = modelling_data.target_val.index
+    else:
+        raise ValueError()
+
     df_predictions = pd.DataFrame(
         data=np.column_stack((y_test, y_score)),
         columns=["True Label"] + column_names,
-        index=modelling_data.target_test.index,
+        index=index,
     )
 
     if isinstance(target_encoder, LabelEncoder):
@@ -292,7 +302,7 @@ def parse_predictions(
     df_predictions_raw = pd.DataFrame(
         data=np.column_stack((y_test_raw, y_score_raw)),
         columns=["True Label", "Prediction"],
-        index=modelling_data.target_test.index,
+        index=index,
     )
 
     return df_predictions, df_predictions_raw
