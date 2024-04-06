@@ -450,7 +450,7 @@ def set_up_split_model_data(
 
     train_data, valid_data = split_model_data_object(
         model_data=train_and_valid_data,
-        test_size=0.1,
+        eval_size=0.1,
         ids_train=train_ids,
         ids_val=valid_ids,
     )
@@ -534,7 +534,7 @@ def split_model_data_object(
     model_data: ModelData,
     ids_train: list[str],
     ids_val: list[str],
-    test_size: float = 0.2,
+    eval_size: float = 0.2,
 ) -> tuple[ModelData, ModelData]:
     df_input = pd.concat(
         objs=[model_data.df_genotype_input, model_data.df_tabular_input],
@@ -546,15 +546,23 @@ def split_model_data_object(
         x_train, x_val, y_train, y_val = train_test_split(
             df_input,
             model_data.df_target,
-            test_size=test_size,
+            test_size=eval_size,
             random_state=42,
         )
     else:
         logger.info("Using provided IDs to split data into train and validation sets.")
-        x_train = df_input.loc[ids_train]
-        x_val = df_input.loc[ids_val]
-        y_train = model_data.df_target.loc[ids_train]
-        y_val = model_data.df_target.loc[ids_val]
+        index_set = set(df_input.index)
+
+        valid_ids_train = [id_ for id_ in ids_train if id_ in index_set]
+        valid_ids_val = [id_ for id_ in ids_val if id_ in index_set]
+
+        logger.info(f"Train IDs: {len(valid_ids_train)}/{len(ids_train)} available.")
+        logger.info(f"Validation IDs: {len(valid_ids_val)}/{len(ids_val)} available.")
+
+        x_train = df_input.loc[valid_ids_train]
+        x_val = df_input.loc[valid_ids_val]
+        y_train = model_data.df_target.loc[valid_ids_train]
+        y_val = model_data.df_target.loc[valid_ids_val]
 
     train_data = ModelData(
         df_genotype_input=x_train[model_data.df_genotype_input.columns],
