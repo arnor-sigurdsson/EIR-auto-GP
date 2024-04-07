@@ -1,4 +1,5 @@
 import argparse
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,6 +12,10 @@ from eir_auto_gp.post_analysis.common.data_preparation import (
     build_data_paths,
     extract_experiment_info_from_config,
     set_up_split_model_data,
+)
+from eir_auto_gp.post_analysis.effect_analysis.genotype_effects import (
+    get_snp_allele_maps,
+    read_bim,
 )
 from eir_auto_gp.post_analysis.iterative_complexity_analysis import (
     run_iterative_complexity_analysis,
@@ -161,6 +166,14 @@ def _save_data(post_analysis_object: PostAnalysisObject) -> None:
 
     test_input_and_target = mro.input_test.join(mro.target_test)
     test_input_and_target.to_csv(output_folder / "test_input_and_target.csv")
+
+    bim_path = str(post_analysis_object.data_paths.snp_bim_path)
+    df_bim = read_bim(bim_file_path=bim_path)
+    variants = post_analysis_object.modelling_data.train.df_genotype_input.columns
+    allele_maps = get_snp_allele_maps(df_bim=df_bim, snp_ids=variants)
+
+    with open(output_folder / "allele_maps.json", "w") as f:
+        json.dump(obj=allele_maps, fp=f)
 
     return None
 

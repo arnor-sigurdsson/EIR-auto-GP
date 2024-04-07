@@ -122,7 +122,12 @@ def train_and_evaluate_linear(
 
     model = _initialize_linear_model(target_type=target_type, cv=cv)
 
-    model.fit(X=x_train, y=y_train.ravel())
+    try:
+        model.fit(X=x_train, y=y_train.ravel())
+    except Exception as e:
+        logger.error(f"Encountered error when fitting simple linear model: {e}")
+        model = _initialize_fallback_model(target_type=target_type, cv=cv)
+        model.fit(X=x_train, y=y_train.ravel())
 
     x_eval, y_eval = _select_evaluation_set(
         modelling_data=modelling_data,
@@ -229,6 +234,41 @@ def _initialize_linear_model(target_type: str, cv: int | PredefinedSplit) -> Any
         return LinearRegression()
     else:
         raise ValueError()
+
+
+def _initialize_fallback_model(
+    target_type: str, cv: int | PredefinedSplit
+) -> ElasticNetCV | LogisticRegressionCV:
+    if target_type == "classification":
+        logger.warning("Falling back to LogisticRegressionCV.")
+        model = LogisticRegressionCV(
+            cv=cv,
+            random_state=0,
+            max_iter=1000,
+            class_weight="balanced",
+            scoring="roc_auc",
+            solver="saga",
+            penalty="elasticnet",
+            Cs=10,
+            l1_ratios=[0.1, 0.5, 0.7, 0.9, 0.95, 0.99],
+            n_jobs=-1,
+        )
+    elif target_type == "regression":
+        logger.warning("Falling back to ElasticNetCV.")
+        model = ElasticNetCV(
+            l1_ratio=[0.1, 0.5, 0.7, 0.9, 0.95, 0.99],
+            eps=1e-5,
+            n_alphas=100,
+            cv=cv,
+            tol=1e-4,
+            selection="cyclic",
+            random_state=0,
+            n_jobs=-1,
+        )
+    else:
+        raise ValueError()
+
+    return model
 
 
 def _predict_with_linear(
