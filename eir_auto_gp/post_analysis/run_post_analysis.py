@@ -3,7 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from aislib.misc_utils import ensure_path_exists
+from aislib.misc_utils import ensure_path_exists, get_logger
 
 from eir_auto_gp.post_analysis.common.data_preparation import (
     DataPaths,
@@ -25,6 +25,8 @@ from eir_auto_gp.post_analysis.run_complexity_analysis import (
     run_complexity_analysis,
 )
 from eir_auto_gp.post_analysis.run_effect_analysis import run_effect_analysis
+
+logger = get_logger(name=__name__)
 
 
 @dataclass()
@@ -187,12 +189,74 @@ def run_all():
 
     run_complexity_analysis(post_analysis_object=post_analysis_object)
     run_effect_analysis(post_analysis_object=post_analysis_object)
-    run_iterative_complexity_analysis(
-        post_analysis_object=post_analysis_object, eval_set="test"
+
+    should_run_iter_test = _should_run_iterative_complexity_analysis(
+        post_analysis_object=post_analysis_object,
+        eval_set="test",
+        force_unsafe=False,
     )
-    run_iterative_complexity_analysis(
-        post_analysis_object=post_analysis_object, eval_set="valid"
+    if should_run_iter_test:
+        run_iterative_complexity_analysis(
+            post_analysis_object=post_analysis_object, eval_set="test"
+        )
+
+    should_run_iter_valid = _should_run_iterative_complexity_analysis(
+        post_analysis_object=post_analysis_object,
+        eval_set="valid",
+        force_unsafe=False,
     )
+    if should_run_iter_valid:
+        run_iterative_complexity_analysis(
+            post_analysis_object=post_analysis_object, eval_set="valid"
+        )
+
+
+def _should_run_iterative_complexity_analysis(
+    post_analysis_object: PostAnalysisObject,
+    eval_set: str,
+    force_unsafe: bool,
+) -> bool:
+    sfea = post_analysis_object.sets_for_effect_analysis
+
+    if force_unsafe:
+        logger.warning(
+            "Forcing the iterative complexity analysis to run. "
+            "This is unsafe and may lead to data leakage. "
+            "This is intended for testing purposes only."
+        )
+        return True
+
+    if "valid" in sfea and "test" in sfea:
+        logger.warning(
+            "Both 'valid' and 'test' are in the sets for effect analysis. "
+            "As results from analyses performed sets are used to inform e.g. feature "
+            "selection in the iterative complexity analysis, having the effects "
+            "computed on the whole set introduces a risk of data leakage. "
+            "Iterative complexity analysis will not be run."
+        )
+        return False
+
+    if "test" in sfea and eval_set == "test":
+        logger.warning(
+            "Test set was used for the effect analysis. "
+            "As results from analyses performed sets are used to inform e.g. feature "
+            "selection in the iterative complexity analysis, having the effects "
+            "computed on the whole set introduces a risk of data leakage. "
+            "Iterative complexity analysis will not be run."
+        )
+        return False
+
+    if "valid" in sfea and eval_set == "valid":
+        logger.warning(
+            "Validation set was used for the effect analysis. "
+            "As results from analyses performed sets are used to inform e.g. feature "
+            "selection in the iterative complexity analysis, having the effects "
+            "computed on the whole set introduces a risk of data leakage. "
+            "Iterative complexity analysis will not be run."
+        )
+        return False
+
+    return True
 
 
 def main():
