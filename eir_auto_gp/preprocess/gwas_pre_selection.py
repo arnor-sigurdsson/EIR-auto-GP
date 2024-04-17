@@ -4,7 +4,7 @@ import subprocess
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -36,6 +36,8 @@ def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
         label_file_path=filter_config.label_file_path,
         fam_file_path=fam_file_path,
         output_path=gwas_label_path,
+        target_names=filter_config.target_names,
+        covariate_names=filter_config.covariate_names,
     )
 
     common_ids_to_keep = gather_all_ids(
@@ -98,7 +100,8 @@ def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
 
 
 def parse_gwas_label_file_column_names(
-    target_names: list[str], gwas_label_file: Path
+    target_names: list[str],
+    gwas_label_file: Path,
 ) -> list[str]:
     assert target_names
     assert gwas_label_file.exists()
@@ -293,6 +296,8 @@ def add_plink_format_train_test_files(
     )
     test_ids = set(test_ids)
 
+    assert train_ids.intersection(test_ids) == set(), "Train and test IDs overlap."
+
     train_output_path = Path(ids_folder, "train_ids_plink.txt")
     extract_and_save_wrapper(
         df_fam=df_fam,
@@ -315,6 +320,11 @@ def add_plink_format_train_test_files(
             .tolist()
         )
         valid_ids = set(valid_ids)
+
+        assert (
+            train_ids.intersection(valid_ids) == set()
+        ), "Train and valid IDs overlap."
+        assert test_ids.intersection(valid_ids) == set(), "Test and valid IDs overlap."
 
         valid_output_path = Path(ids_folder, "valid_ids_plink.txt")
         extract_and_save_wrapper(
@@ -422,12 +432,18 @@ def _get_train_ids_file(filter_config: "GWASPreFilterConfig") -> Path:
 
 
 def prepare_gwas_label_file(
-    label_file_path: str | Path, fam_file_path: str | Path, output_path: str | Path
+    label_file_path: str | Path,
+    fam_file_path: str | Path,
+    output_path: str | Path,
+    target_names: Sequence[str],
+    covariate_names: Sequence[str],
 ) -> tuple[Path, Path]:
+    columns = ["ID"] + list(target_names) + list(covariate_names)
     df = pd.read_csv(
         filepath_or_buffer=label_file_path,
         index_col="ID",
         dtype={"ID": str},
+        usecols=columns,
     )
 
     df_fam = _read_fam(fam_path=fam_file_path)

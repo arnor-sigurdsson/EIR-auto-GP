@@ -96,9 +96,7 @@ def log_overlap(df_bim_prd: pd.DataFrame, df_bim_exp: pd.DataFrame) -> None:
     color = (
         "green"
         if overlap_percentage > 75
-        else "yellow"
-        if overlap_percentage > 50
-        else "red"
+        else "yellow" if overlap_percentage > 50 else "red"
     )
 
     table = Table(title="SNP Overlap Analysis", title_style="bold blue")

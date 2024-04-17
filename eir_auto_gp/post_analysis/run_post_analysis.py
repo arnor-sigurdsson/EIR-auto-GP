@@ -184,6 +184,11 @@ def run_all():
     cl_args = get_cl_args()
     post_analysis_object = build_post_analysis_object(cl_args=cl_args)
 
+    _serialize_post_analysis_config(
+        cl_args=cl_args,
+        analysis_output_path=post_analysis_object.data_paths.analysis_output_path,
+    )
+
     if cl_args.save_data:
         _save_data(post_analysis_object=post_analysis_object)
 
@@ -209,6 +214,15 @@ def run_all():
         run_iterative_complexity_analysis(
             post_analysis_object=post_analysis_object, eval_set="valid"
         )
+
+
+def _serialize_post_analysis_config(
+    cl_args: argparse.Namespace, analysis_output_path: Path
+) -> None:
+    config_path = analysis_output_path / "config.json"
+    with open(config_path, "w") as f:
+        json.dump(vars(cl_args), f)
+    return None
 
 
 def _should_run_iterative_complexity_analysis(
