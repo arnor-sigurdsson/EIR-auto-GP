@@ -39,7 +39,8 @@ def run_grouped_interaction_analysis(
     df_combined = pd.concat(objs=[df_target, df_genotype_prepared], axis=1)
 
     all_snp_pairs = _get_snp_pairs_to_check(
-        df_interaction_effects=df_interaction_effects, top_n=None
+        df_interaction_effects=df_interaction_effects,
+        top_n=None,
     )
 
     snps_to_plot = _get_snp_pairs_to_check(

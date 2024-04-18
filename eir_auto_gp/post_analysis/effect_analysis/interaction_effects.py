@@ -1,7 +1,7 @@
 import warnings
-from io import StringIO
 from itertools import combinations
 from pathlib import Path
+from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -42,7 +42,7 @@ def get_interaction_effects(
         target_name=target_name,
         allele_maps=allele_maps,
         target_type=target_type,
-        p_threshold="auto",
+        p_threshold=None,
         df_bim=df_bim,
         allow_within_chr_interaction=allow_within_chr_interaction,
         min_interaction_pair_distance=min_interaction_pair_distance,
@@ -59,7 +59,7 @@ def compute_interactions(
     df_bim: pd.DataFrame,
     allow_within_chr_interaction: bool,
     min_interaction_pair_distance: int,
-    p_threshold: str | float = "auto",
+    p_threshold: Optional[Union[str, float]] = None,
 ) -> pd.DataFrame:
     logger.info(
         "Gathering all interaction allele effect results for '%s'.",
@@ -69,7 +69,9 @@ def compute_interactions(
     snps = [i for i in df.columns if i != target_name]
 
     if p_threshold == "auto":
-        p_threshold = 0.05 / (len(snps) ** 2)
+        n_snps = len(snps)
+        n_tests = n_snps * (n_snps - 1) / 2
+        p_threshold = 0.05 / n_tests
 
         logger.info(
             "p value threshold set to %f due to 'auto' option and %d SNPs.",
@@ -153,7 +155,7 @@ def _compute_interaction_snp_effect_wrapper(
     target_name: str,
     snp_1: str,
     snp_2: str,
-    p_threshold: float,
+    p_threshold: Optional[float],
     allele_maps: dict[str, dict[str, str]],
     target_type: str,
 ) -> pd.DataFrame | None:
@@ -191,13 +193,23 @@ def _compute_interaction_snp_effect_wrapper(
         )
         return None
 
-    p_value = _extract_p_value_from_interaction_results(results=result)
-    if p_value > p_threshold:
-        return None
+    if p_threshold is not None:
+        p_value = _extract_p_value_from_interaction_results(results=result)
+        if p_value > p_threshold:
+            logger.info(
+                "Rejected interaction effect between %s and %s due to p-value %f.",
+                snp_1,
+                snp_2,
+                p_value,
+            )
+            return None
 
     try:
         df_result = build_df_from_interaction_results(
-            results=result, allele_maps=allele_maps, snp_1=snp_1, snp_2=snp_2
+            results=result,
+            allele_maps=allele_maps,
+            snp_1=snp_1,
+            snp_2=snp_2,
         )
         return df_result
     except Exception as e:
@@ -237,34 +249,45 @@ def build_df_from_interaction_results(
     snp_1: str,
     snp_2: str,
 ) -> pd.DataFrame:
-    results_as_html = results.summary().tables[1].as_html()
-    html_buffer = StringIO(results_as_html)
-    df_linear = pd.read_html(io=html_buffer, header=0, index_col=0)[0]
-    df_linear.index.name = "allele"
-    df_linear.index = df_linear.index.str.replace(r"C\(Q\(", "", regex=True)
-    df_linear.index = df_linear.index.str.replace(r"Q\(", "", regex=True)
-    df_linear.index = df_linear.index.str.replace(r"\)", "", regex=True)
-    df_linear.index = df_linear.index.str.replace(r"'", "", regex=True)
+    coef = results.params
+    std_err = results.bse
+    p_values = results.pvalues
+    conf_int = results.conf_int()
 
-    df_linear_renamed = _rename_interaction_regression_index(
-        df_results=df_linear,
+    df = pd.DataFrame(
+        {
+            "Coefficient": coef,
+            "STD ERR": std_err,
+            "P>|t|": p_values,
+            "0.025 CI": conf_int[0],
+            "0.975 CI": conf_int[1],
+        }
+    )
+
+    df.index.name = "allele"
+
+    df.index = df.index.str.replace(r"C\(Q\(", "", regex=True)
+    df.index = df.index.str.replace(r"Q\(", "", regex=True)
+    df.index = df.index.str.replace(r"\)", "", regex=True)
+    df.index = df.index.str.replace(r"'", "", regex=True)
+
+    df = _rename_interaction_regression_index(
+        df_results=df,
         allele_maps=allele_maps,
         snp=snp_1,
     )
 
-    df_linear_renamed = _rename_interaction_regression_index(
-        df_results=df_linear_renamed,
+    df = _rename_interaction_regression_index(
+        df_results=df,
         allele_maps=allele_maps,
         snp=snp_2,
     )
 
-    df_linear_renamed = df_linear_renamed.rename(
-        {f"{snp_1}:{snp_2}": f"{snp_1}--:--{snp_2}"}
-    )
+    df = df.rename(index={f"{snp_1}:{snp_2}": f"{snp_1}--:--{snp_2}"})
 
-    df_linear_renamed["KEY"] = f"{snp_1}--:--{snp_2}"
+    df["KEY"] = f"{snp_1}--:--{snp_2}"
 
-    df_linear_column_renamed = df_linear_renamed.rename(
+    df = df.rename(
         columns={
             "coef": "Coefficient",
             "std err": "STD ERR",
@@ -273,7 +296,7 @@ def build_df_from_interaction_results(
         }
     )
 
-    return df_linear_column_renamed
+    return df
 
 
 def _rename_interaction_regression_index(

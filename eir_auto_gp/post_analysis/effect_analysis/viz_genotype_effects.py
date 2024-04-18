@@ -35,7 +35,10 @@ def get_snp_allele_nucleotide_map(df_acts: pd.DataFrame, rs_id: str) -> Dict[str
 
 
 def plot_top_snps(
-    df: pd.DataFrame, p_value_threshold: float, top_n: int, output_dir: Path
+    df: pd.DataFrame,
+    p_value_threshold: float,
+    top_n: int,
+    output_dir: Path,
 ) -> None:
     ensure_path_exists(path=output_dir, is_folder=True)
 

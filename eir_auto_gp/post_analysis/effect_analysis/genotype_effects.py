@@ -1,5 +1,4 @@
 import warnings
-from io import StringIO
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
@@ -172,19 +171,32 @@ def build_df_from_basic_results(
     snp: str,
     n_per_group_dict: dict[str, int],
 ) -> pd.DataFrame:
-    results_as_html = results.summary().tables[1].as_html()
-    html_buffer = StringIO(results_as_html)
-    df_linear = pd.read_html(io=html_buffer, header=0, index_col=0)[0]
-    df_linear.index.name = "allele"
+    coef = results.params
+    std_err = results.bse
+    p_values = results.pvalues
+    conf_int = results.conf_int()
 
-    df_linear_renamed = _rename_linear_regression_index(
-        df_results=df_linear,
+    df = pd.DataFrame(
+        {
+            "Coefficient": coef,
+            "STD ERR": std_err,
+            "P>|t|": p_values,
+            "0.025 CI": conf_int[0],
+            "0.975 CI": conf_int[1],
+        }
+    )
+
+    df.index.name = "allele"
+
+    df_renamed = _rename_linear_regression_index(
+        df_results=df,
         allele_maps=allele_maps,
         snp=snp,
     )
-    df_linear_renamed["n"] = df_linear_renamed["Label"].map(n_per_group_dict)
 
-    df_linear_column_renamed = df_linear_renamed.rename(
+    df_renamed["n"] = df_renamed.index.map(n_per_group_dict)
+
+    df_renamed = df_renamed.rename(
         columns={
             "coef": "Coefficient",
             "std err": "STD ERR",
@@ -193,9 +205,9 @@ def build_df_from_basic_results(
         }
     )
 
-    df_linear_column_renamed["KEY"] = snp
+    df_renamed["KEY"] = snp
 
-    return df_linear_column_renamed
+    return df_renamed
 
 
 def _rename_linear_regression_index(

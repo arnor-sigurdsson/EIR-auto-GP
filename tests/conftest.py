@@ -11,7 +11,9 @@ import pytest
 def simulate_genetic_data_to_bed(tmp_path: Path) -> Callable[[int, int, str], Path]:
     def _wrapper(n_individuals: int, n_snps: int, phenotype: str) -> Path:
         df_snp, df_pheno = simulate_genetic_data(
-            n_individuals=n_individuals, n_snps=n_snps, phenotype=phenotype
+            n_individuals=n_individuals,
+            n_snps=n_snps,
+            phenotype=phenotype,
         )
 
         ind_ids = [f"ind{i+1}" for i in range(n_individuals)]
