@@ -220,6 +220,7 @@ def _serialize_post_analysis_config(
     cl_args: argparse.Namespace, analysis_output_path: Path
 ) -> None:
     config_path = analysis_output_path / "config.json"
+    ensure_path_exists(path=config_path, is_folder=False)
     with open(config_path, "w") as f:
         json.dump(vars(cl_args), f)
     return None
