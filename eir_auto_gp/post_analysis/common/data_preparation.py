@@ -8,6 +8,7 @@ import pandas as pd
 from aislib.misc_utils import get_logger
 from eir.data_load.data_source_modules.deeplake_ops import load_deeplake_dataset
 from eir.setup.input_setup_modules import setup_omics as eir_setup_omics
+from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
@@ -280,13 +281,31 @@ def process_split_model_data(
         task_type=task_type,
     )
 
+    numerical_columns_ = transformers.numerical_columns
+    categorical_columns_ = transformers.categorical_columns
+
+    continuous_imputer, categorical_imputer = setup_imputers(
+        df_train=split_model_data.train.df_tabular_input,
+        categorical_columns=categorical_columns_,
+        numerical_columns=numerical_columns_,
+    )
+
     def process_model_data(
         model_data: ModelData,
     ) -> ModelData:
         df_tabular_input_encoded = model_data.df_tabular_input
         if len(df_tabular_input_encoded.columns) > 0:
+
+            df_tabular_input_imputed = apply_imputers(
+                df=df_tabular_input_encoded,
+                continuous_imputer=continuous_imputer,
+                categorical_imputer=categorical_imputer,
+                categorical_columns=categorical_columns_,
+                numerical_columns=numerical_columns_,
+            )
+
             df_tabular_input_encoded = pd.get_dummies(
-                data=model_data.df_tabular_input,
+                data=df_tabular_input_imputed,
                 drop_first=False,
             )
 
@@ -324,11 +343,69 @@ def process_split_model_data(
     )
 
 
+def setup_imputers(
+    df_train: pd.DataFrame, categorical_columns: list, numerical_columns: list
+) -> tuple[Optional[SimpleImputer], Optional[SimpleImputer]]:
+    continuous_imputer = None
+    categorical_imputer = None
+
+    logger.info(
+        "Checking for missing values and setting up imputation based "
+        "on training data. Imputation based on training set statistics will "
+        "be applied to training, validation and test sets."
+    )
+
+    if numerical_columns:
+        logger.info(f"Setting up continuous imputer for columns: {numerical_columns}")
+        continuous_imputer = SimpleImputer(strategy="mean")
+        if df_train[numerical_columns].isnull().any().any():
+            missing_info = df_train[numerical_columns].isnull().sum()
+            logger.info(
+                f"Missing values in numerical columns "
+                f"before imputation:\n{missing_info}"
+            )
+        continuous_imputer.fit(df_train[numerical_columns])
+
+    if categorical_columns:
+        logger.info(
+            f"Setting up categorical imputer for columns: {categorical_columns}"
+        )
+        categorical_imputer = SimpleImputer(strategy="most_frequent")
+        if df_train[categorical_columns].isnull().any().any():
+            missing_info = df_train[categorical_columns].isnull().sum()
+            logger.info(
+                f"Missing values in categorical columns before"
+                f" imputation:\n{missing_info}"
+            )
+        categorical_imputer.fit(df_train[categorical_columns])
+
+    return continuous_imputer, categorical_imputer
+
+
+def apply_imputers(
+    df: pd.DataFrame,
+    continuous_imputer: Optional[SimpleImputer],
+    categorical_imputer: Optional[SimpleImputer],
+    categorical_columns: list[str],
+    numerical_columns: list[str],
+) -> pd.DataFrame:
+    if continuous_imputer and numerical_columns:
+        df[numerical_columns] = continuous_imputer.transform(X=df[numerical_columns])
+
+    if categorical_imputer and categorical_columns:
+        df[categorical_columns] = categorical_imputer.transform(
+            X=df[categorical_columns]
+        )
+
+    return df
+
+
 @dataclass()
 class FitTransformers:
     input_scaler: Optional[StandardScaler]
     target_label_encoder: Optional[LabelEncoder]
     numerical_columns: list[str]
+    categorical_columns: list[str]
 
 
 def _set_up_transformers(
@@ -337,6 +414,12 @@ def _set_up_transformers(
     task_type: str,
 ) -> FitTransformers:
     numerical_columns = df_train_tab_input.select_dtypes(include=[np.number]).columns
+    categorical_columns = df_train_tab_input.select_dtypes(
+        include=[
+            "object",
+            "category",
+        ]
+    ).columns
 
     if len(numerical_columns) > 0:
         input_scaler = StandardScaler()
@@ -356,6 +439,7 @@ def _set_up_transformers(
         input_scaler=input_scaler,
         target_label_encoder=target_transformer,
         numerical_columns=numerical_columns.tolist(),
+        categorical_columns=categorical_columns.tolist(),
     )
 
 
@@ -471,7 +555,7 @@ def set_up_split_model_data(
     )
     validate_split_model_data(split_model_data=split_model_data_raw)
 
-    split_model_data_processed = process_split_model_data(
+    split_model_data_processed: SplitModelData = process_split_model_data(
         split_model_data=split_model_data_raw,
         task_type=experiment_info.target_type,
     )

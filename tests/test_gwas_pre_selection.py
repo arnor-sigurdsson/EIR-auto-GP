@@ -283,7 +283,7 @@ def test_get_covariate_names_with_one_hot(mock_csv, mock_one_hot_mappings):
         covariate_names=covariate_names,
         one_hot_mappings_file=mock_one_hot_mappings,
     )
-    assert sorted(result) == sorted(["Gender_M", "Gender_F"])
+    assert sorted(result) == sorted(["Gender_Gender_M", "Gender_Gender_F"])
 
 
 def test_get_covariate_names_no_one_hot(mock_csv):

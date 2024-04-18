@@ -81,7 +81,42 @@ def simulate_genetic_data(
         raise ValueError("Phenotype must be 'continuous' or 'binary'")
 
     df_snp, df_pheno = df_snp.drop(columns=["phenotype"]), df_snp["phenotype"]
-    return df_snp, df_pheno
+
+    df_pheno_with_covars = add_covars_to_phenotype_df(df_pheno=df_pheno)
+
+    return df_snp, df_pheno_with_covars
+
+
+def add_covars_to_phenotype_df(df_pheno: pd.Series) -> pd.DataFrame:
+    n = len(df_pheno)
+
+    categories = ["GroupA", "GroupB", "GroupC"]
+    cov_cat_random = np.random.choice(categories, size=n)
+    cov_cat_random[np.random.rand(n) < 0.1] = np.nan
+
+    cov_con_random = np.random.normal(loc=0, scale=1, size=n)
+    cov_con_random[np.random.rand(n) < 0.1] = np.nan
+
+    quantiles = pd.cut(df_pheno, 3, labels=["Low", "Medium", "High"])
+    cov_cat_computed = quantiles.astype(str)
+    cov_cat_computed[np.random.rand(n) < 0.1] = np.nan
+
+    cov_con_computed = df_pheno * 0.1 + np.random.normal(loc=0, scale=0.5, size=n)
+    cov_con_computed[np.random.rand(n) < 0.1] = np.nan
+
+    df_covars = pd.DataFrame(
+        {
+            "CAT_RANDOM": cov_cat_random,
+            "CON_RANDOM": cov_con_random,
+            "CAT_COMPUTED": cov_cat_computed,
+            "CON_COMPUTED": cov_con_computed,
+        },
+        index=df_pheno.index,
+    )
+
+    df_pheno_with_covars = pd.concat([df_pheno, df_covars], axis=1)
+
+    return df_pheno_with_covars
 
 
 def _get_snp_list(n_snps: int) -> list[str]:

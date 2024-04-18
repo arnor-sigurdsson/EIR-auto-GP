@@ -152,6 +152,12 @@ def get_plink_gwas_command(
     ids_file: Optional[str | Path],
     one_hot_mappings_file: Optional[Path],
 ) -> list[str]:
+    """
+    TODO: The whole covariate name filtering / parsing can potentially be
+          greatly simplified if the GWAS label file now only contains
+          the columns to use for GWAS. We can then pull the covariate
+          names from the label file directly.
+    """
     ensure_path_exists(path=output_path, is_folder=True)
 
     pheno_names = get_pheno_names(
@@ -194,7 +200,9 @@ def get_plink_gwas_command(
 
 
 def get_pheno_names(
-    label_file_path: Path, target_names: list[str], covariate_names: list[str]
+    label_file_path: Path,
+    target_names: list[str],
+    covariate_names: list[str],
 ) -> list[str]:
     if target_names:
         return target_names
@@ -235,7 +243,11 @@ def get_covariate_names(
     one_hot_mappings_file: Optional[Path],
 ) -> list[str]:
     id_columns = ["ID", "FID", "IID"]
-    all_columns = pd.read_csv(label_file_path, nrows=1, sep=r"\s+").columns.tolist()
+    all_columns = pd.read_csv(
+        label_file_path,
+        nrows=1,
+        sep=r"\s+",
+    ).columns.tolist()
     to_skip = id_columns + target_names
 
     inferred_target_names = []
@@ -258,8 +270,12 @@ def get_covariate_names(
 
     covariates_to_use = []
     for covariate in covariate_names:
+
         if covariate in one_hot_mappings:
-            covariates_to_use.extend(one_hot_mappings[covariate])
+            cur_mappings = one_hot_mappings[covariate]
+            cur_names = [f"{covariate}_{mapping}" for mapping in cur_mappings]
+            covariates_to_use.extend(cur_names)
+
         else:
             covariates_to_use.extend(
                 [col for col in all_covariates if col == covariate]
@@ -475,6 +491,10 @@ def _prepare_df_columns_for_gwas(
 
     Note: For now we just have some simple heuristics for determining which columns
     to one-hot encode. We can make this more sophisticated/configurable later.
+
+    Note: We drop the first there is a one-hot encoding to avoid multicollinearity.
+          We need to ensure this is reflected in the mappings as they are
+          later used to build the plink command.
     """
     one_hot_target_columns = []
     one_hot_mappings = {}
@@ -484,13 +504,24 @@ def _prepare_df_columns_for_gwas(
 
         if df[column].dtype in ("object", "category"):
             one_hot_target_columns.append(column)
-            one_hot_mappings[column] = list(df[column].unique())
+            unique_values = list(df[column].unique())
+            unique_values_no_nan = sorted(
+                [val for val in unique_values if not pd.isna(val)]
+            )
+            unique_values_drop_first = unique_values_no_nan[1:]
+            one_hot_mappings[column] = unique_values_drop_first
 
         elif df[column].dtype == "int":
             n_unique = df[column].nunique()
             if 2 < n_unique < 10:
                 one_hot_target_columns.append(column)
-                one_hot_mappings[column] = list(df[column].unique())
+                unique_values = list(df[column].unique())
+                unique_values_no_nan = sorted(
+                    [val for val in unique_values if not pd.isna(val)]
+                )
+                unique_values_drop_first = unique_values_no_nan[1:]
+                one_hot_mappings[column] = unique_values_drop_first
+
             else:
                 logger.debug(
                     "Integer Column %s has %d unique values, not one-hot encoding. "

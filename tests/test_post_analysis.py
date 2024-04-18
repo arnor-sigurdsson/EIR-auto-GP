@@ -21,6 +21,8 @@ def _get_test_modelling_cl_command(
         f"--label_file_path {folder_path}/phenotype.csv "
         "--global_output_folder runs/simulated_test "
         f"--output_{target_type}_columns phenotype "
+        f"--input_con_columns CON_RANDOM CON_COMPUTED "
+        f"--input_cat_columns CAT_RANDOM CAT_COMPUTED "
         "--folds 2 "
         f"--feature_selection {feature_selection} "
         "--n_dl_feature_selection_setup_folds 1 "
@@ -79,7 +81,7 @@ def test_post_analysis_classification(
     post_analysis_folder = tmp_path / "analysis" / "post_analysis"
     _check_post_analysis_results_wrapper(
         post_analysis_folder=post_analysis_folder,
-        include_tabular=False,
+        include_tabular=True,
         check_effects=True,
         regression_type="logistic",
     )
@@ -133,7 +135,7 @@ def test_post_analysis_regression(
     post_analysis_folder = tmp_path / "analysis" / "post_analysis"
     _check_post_analysis_results_wrapper(
         post_analysis_folder=post_analysis_folder,
-        include_tabular=False,
+        include_tabular=True,
         check_effects=True,
         regression_type="linear",
     )
@@ -162,10 +164,10 @@ def _check_complexity_analysis_results(
     complexity_folder: Path,
     include_tabular: bool,
 ) -> None:
-    expected_runs = 8 if include_tabular else 4
+    expected_runs = 10 if include_tabular else 4
     df = pd.read_csv(complexity_folder / "all_results.csv")
 
-    assert len(df) == expected_runs
+    assert len(df) == expected_runs, complexity_folder
 
     _check_xgboost_better_than_linear(df=df)
     _check_one_hot_better_in_linear(df=df)

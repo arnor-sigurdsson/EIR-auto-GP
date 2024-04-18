@@ -656,9 +656,12 @@ def get_t_term_iterator(
     post_analysis_object: "PostAnalysisObject",
     running_mro: ModelReadyObject,
 ) -> tuple[Generator, ModelReadyObject]:
-    pao = post_analysis_object
-
-    tabular_columns = pao.experiment_info.all_input_columns
+    """
+    Note: For now we are only considering numerical columns here. This can be extended
+          to also include the one-hot-encoded columns from categorical variables,
+          by looping over:
+          [i for i in running_mro.df_train.columns if i.startswith("_COVAR")]
+    """
 
     scaler = running_mro.transformers.input_scaler
     numerical_columns = running_mro.transformers.numerical_columns
@@ -667,13 +670,13 @@ def get_t_term_iterator(
 
     def generator():
         nonlocal running_mro
-        for col in tabular_columns:
+        for col in numerical_columns:
 
             def add_squared_term(
                 inputs: pd.DataFrame, targets: pd.DataFrame
             ) -> tuple[pd.DataFrame, pd.DataFrame]:
-                col_name = f"COVAR_{col}"
-                term = f"COVAR_{col}^2"
+                col_name = f"{col}"
+                term = f"{col}^2"
 
                 inputs[term] = inputs[col_name] ** 2
 
@@ -682,8 +685,8 @@ def get_t_term_iterator(
             def add_cubed_term(
                 inputs: pd.DataFrame, targets: pd.DataFrame
             ) -> tuple[pd.DataFrame, pd.DataFrame]:
-                col_name = f"COVAR_{col}"
-                term = f"COVAR_{col}^3"
+                col_name = f"{col}"
+                term = f"{col}^3"
                 inputs[term] = inputs[col_name] ** 3
 
                 return inputs, targets
@@ -698,7 +701,7 @@ def get_t_term_iterator(
                 from scaling) and then take the log, then scale again for models like
                 ElasticNetCV.
                 """
-                col_name: str = f"COVAR_{col}"
+                col_name: str = f"{col}"
                 term: str = f"log_{col_name}"
 
                 if scaler is not None:
@@ -728,8 +731,8 @@ def get_t_term_iterator(
             def add_inverse_term(
                 inputs: pd.DataFrame, targets: pd.DataFrame
             ) -> tuple[pd.DataFrame, pd.DataFrame]:
-                col_name = f"COVAR_{col}"
-                term = f"1/COVAR_{col}"
+                col_name = f"{col}"
+                term = f"1/{col}"
 
                 if (inputs[col_name] == 0).any():
                     raise ValueError(
@@ -809,7 +812,7 @@ def get_txt_iterator(
     pao = post_analysis_object
 
     target_type = pao.experiment_info.target_type
-    tabular_columns = pao.experiment_info.all_input_columns
+    numerical_columns = running_mro.transformers.numerical_columns
 
     mro_txt_search = convert_split_data_to_model_ready_object(
         split_model_data=pao.modelling_data,
@@ -820,7 +823,7 @@ def get_txt_iterator(
 
     txt_candidates = _find_txt_candidates(
         model_ready_object=mro_txt_search,
-        tabular_columns=tabular_columns,
+        tabular_columns=numerical_columns,
         target_type=target_type,
         top_n=top_n,
     )
@@ -837,8 +840,8 @@ def get_txt_iterator(
             def add_interaction(
                 inputs: pd.DataFrame, targets: pd.DataFrame
             ) -> tuple[pd.DataFrame, pd.DataFrame]:
-                col1_name = f"COVAR_{col1}"
-                col2_name = f"COVAR_{col2}"
+                col1_name = f"{col1}"
+                col2_name = f"{col2}"
                 interaction_term = f"{col1_name}_x_{col2_name}"
                 inputs[interaction_term] = inputs[col1_name] * inputs[col2_name]
                 return inputs, targets
@@ -879,8 +882,8 @@ def _find_txt_candidates(
             inputs: pd.DataFrame,
             targets: pd.DataFrame,
         ) -> tuple[pd.DataFrame, pd.DataFrame]:
-            col1_name = f"COVAR_{col1}"
-            col2_name = f"COVAR_{col2}"
+            col1_name = f"{col1}"
+            col2_name = f"{col2}"
             interaction_term = f"{col1_name}_x_{col2_name}"
             inputs[interaction_term] = inputs[col1_name] * inputs[col2_name]
             return inputs, targets
@@ -1183,7 +1186,7 @@ def _merge_operate_and_split(
     try:
         df_all_inputs, df_all_targets = function(df_all_inputs, df_all_targets)
     except Exception as e:
-        logger.error("Error when applying function to model ready object: %s", str(e))
+        logger.error("Error when applying function to model ready object: %s", e)
         return FailedMergeOperateAndSplit()
 
     input_train = df_all_inputs.loc[model_ready_object.input_train.index]
