@@ -97,7 +97,8 @@ def add_covars_to_phenotype_df(df_pheno: pd.Series) -> pd.DataFrame:
     cov_con_random = np.random.normal(loc=0, scale=1, size=n)
     cov_con_random[np.random.rand(n) < 0.1] = np.nan
 
-    quantiles = pd.cut(df_pheno, 3, labels=["Low", "Medium", "High"])
+    noisy_pheno = df_pheno + np.random.normal(loc=0, scale=5, size=n)
+    quantiles = pd.cut(noisy_pheno, 3, labels=["Low", "Medium", "High"])
     cov_cat_computed = quantiles.astype(str)
     cov_cat_computed[np.random.rand(n) < 0.1] = np.nan
 
@@ -115,6 +116,7 @@ def add_covars_to_phenotype_df(df_pheno: pd.Series) -> pd.DataFrame:
     )
 
     df_pheno_with_covars = pd.concat([df_pheno, df_covars], axis=1)
+    df_pheno_with_covars["phenotype"][np.random.rand(n) < 0.1] = np.nan
 
     return df_pheno_with_covars
 

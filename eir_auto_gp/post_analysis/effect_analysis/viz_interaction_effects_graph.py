@@ -90,6 +90,8 @@ def _filter_interaction_df_for_p_value(
 
     logger.info(
         "Keeping %d interactions out of %d for SNP interaction graph figure.",
+        len(valid_keys),
+        len(interaction_df),
     )
 
     df_filtered = df[df["KEY"].isin(valid_keys)]

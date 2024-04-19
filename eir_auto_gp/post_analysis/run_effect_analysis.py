@@ -31,13 +31,16 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
     mro_genotype = convert_split_data_to_model_ready_object(
         split_model_data=post_analysis_object.modelling_data,
         include_genotype=True,
-        include_tabular=False,
+        include_tabular=True,
         one_hot_encode=False,
     )
+
+    input_cat_columns = post_analysis_object.experiment_info.input_cat_columns
 
     df_genotype, df_target = _build_effect_inputs(
         model_ready_object=mro_genotype,
         sets_for_effect_analysis=post_analysis_object.sets_for_effect_analysis,
+        input_cat_columns=input_cat_columns,
     )
 
     pao = post_analysis_object
@@ -48,15 +51,17 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
     effects_output = output_root / "allele_effects"
     ensure_path_exists(path=effects_output, is_folder=True)
     df_allele_effects = get_allele_effects(
-        df_genotype=df_genotype,
+        df_inputs=df_genotype,
         df_target=df_target,
         bim_file=pao.data_paths.snp_bim_path,
         target_type=pao.experiment_info.target_type,
     )
     df_allele_effects.to_csv(effects_output / "allele_effects.csv")
 
+    df_allele_effects_only = filter_snp_rows(df=df_allele_effects)
+
     plot_top_snps(
-        df=df_allele_effects,
+        df=df_allele_effects_only,
         p_value_threshold=0.05,
         top_n=pao.top_n_genotype_snps_effects_to_plot,
         output_dir=effects_output / "figures",
@@ -65,7 +70,7 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
     interaction_output = output_root / "interaction_effects"
     ensure_path_exists(path=interaction_output, is_folder=True)
     df_interaction_effects = get_interaction_effects(
-        df_genotype=df_genotype,
+        df_inputs=df_genotype,
         df_target=df_target,
         bim_file=pao.data_paths.snp_bim_path,
         target_type=pao.experiment_info.target_type,
@@ -75,9 +80,12 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
     df_interaction_effects.to_csv(interaction_output / "interaction_effects.csv")
 
     if len(df_interaction_effects) > 0:
+
+        df_interaction_effects_only = filter_snp_rows(df=df_interaction_effects)
+
         trait_name = df_target.columns[0]
         generate_interaction_snp_graph_figure(
-            df_interaction_effects=df_interaction_effects,
+            df_interaction_effects=df_interaction_effects_only,
             bim_file_path=pao.data_paths.snp_bim_path,
             df_target=df_target,
             trait=trait_name,
@@ -88,7 +96,7 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
         run_grouped_interaction_analysis(
             df_genotype=df_genotype,
             df_target=df_target,
-            df_interaction_effects=df_interaction_effects,
+            df_interaction_effects=df_interaction_effects_only,
             top_n_snps=pao.top_n_interaction_pairs,
             bim_file=pao.data_paths.snp_bim_path,
             output_folder=output_root / "grouped_interaction_analysis",
@@ -98,7 +106,12 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
 def _build_effect_inputs(
     model_ready_object: ModelReadyObject,
     sets_for_effect_analysis: list[str],
+    input_cat_columns: list[str],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Note we drop the first dummy column for each categorical column to avoid
+    issues with multicollinearity in the linear models.
+    """
     valid_sets = {"train", "valid", "test"}
     if not all(set_name in valid_sets for set_name in sets_for_effect_analysis):
         raise ValueError(
@@ -122,4 +135,21 @@ def _build_effect_inputs(
     concatenated_input = pd.concat(input_dfs, ignore_index=True)
     concatenated_target = pd.concat(target_dfs, ignore_index=True)
 
+    for cat_column in input_cat_columns:
+        dummy_columns = [
+            col
+            for col in concatenated_input.columns
+            if col.startswith("COVAR_" + cat_column + "_")
+        ]
+        if dummy_columns:
+            dummy_columns_sorted = sorted(dummy_columns)
+            concatenated_input = concatenated_input.drop(
+                columns=dummy_columns_sorted[0]
+            )
+
     return concatenated_input, concatenated_target
+
+
+def filter_snp_rows(df: pd.DataFrame) -> pd.DataFrame:
+    df_filtered = df[~df.index.str.contains("COVAR")].copy()
+    return df_filtered

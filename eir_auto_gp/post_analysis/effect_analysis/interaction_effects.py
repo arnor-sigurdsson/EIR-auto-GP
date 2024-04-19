@@ -23,7 +23,7 @@ warnings.filterwarnings(action="ignore", category=RuntimeWarning)
 
 
 def get_interaction_effects(
-    df_genotype: pd.DataFrame,
+    df_inputs: pd.DataFrame,
     df_target: pd.DataFrame,
     bim_file: Path,
     target_type: str,
@@ -31,10 +31,10 @@ def get_interaction_effects(
     min_interaction_pair_distance: int,
 ) -> pd.DataFrame:
     target_name = df_target.columns[0]
-    df_combined = pd.concat(objs=[df_target, df_genotype], axis=1)
+    df_combined = pd.concat(objs=[df_target, df_inputs], axis=1)
 
     df_bim = read_bim(bim_file_path=str(bim_file))
-    snp_ids = df_genotype.columns
+    snp_ids = [i for i in df_inputs.columns if not i.startswith("COVAR_")]
     allele_maps = get_snp_allele_maps(df_bim=df_bim, snp_ids=snp_ids)
 
     df_results = compute_interactions(
@@ -66,7 +66,8 @@ def compute_interactions(
         target_name,
     )
 
-    snps = [i for i in df.columns if i != target_name]
+    snps = [i for i in df.columns if i != target_name and not i.startswith("COVAR_")]
+    covar_columns = [i for i in df.columns if i.startswith("COVAR_")]
 
     if p_threshold == "auto":
         n_snps = len(snps)
@@ -96,6 +97,7 @@ def compute_interactions(
             snp_2=snp_2,
             p_threshold=p_threshold,
             target_type=target_type,
+            covar_columns=covar_columns,
         )
         for snp_1, snp_2 in snp_iter
     )
@@ -158,14 +160,16 @@ def _compute_interaction_snp_effect_wrapper(
     p_threshold: Optional[float],
     allele_maps: dict[str, dict[str, str]],
     target_type: str,
+    covar_columns: list[str],
 ) -> pd.DataFrame | None:
     formula = build_multiplicative_interaction_snp_formula(
         target=target_name,
         snp_1=snp_1,
         snp_2=snp_2,
+        covar_columns=covar_columns,
     )
 
-    df_cur = df[[target_name, snp_1, snp_2]]
+    df_cur = df[[target_name, snp_1, snp_2, *covar_columns]]
     df_cur_no_na = df_cur[df_cur[snp_1] != -1]
     df_cur_no_na = df_cur_no_na[df_cur_no_na[snp_2] != -1]
 
@@ -237,10 +241,16 @@ def build_multiplicative_interaction_snp_formula(
     target: str,
     snp_1: str,
     snp_2: str,
+    covar_columns: list[str],
 ) -> str:
-    return (
+    formula = (
         f"Q('{target}') ~ C(Q('{snp_1}')) + C(Q('{snp_2}')) + Q('{snp_1}'):Q('{snp_2}')"
     )
+
+    for covar in covar_columns:
+        formula += f" + Q('{covar}')"
+
+    return formula
 
 
 def build_df_from_interaction_results(
@@ -300,20 +310,37 @@ def build_df_from_interaction_results(
 
 
 def _rename_interaction_regression_index(
-    df_results: pd.DataFrame, allele_maps: dict[str, dict[str, str]], snp: str
-):
+    df_results: pd.DataFrame,
+    allele_maps: dict[str, dict[str, str]],
+    snp: str,
+) -> pd.DataFrame:
     snp_allele_map = allele_maps[snp]
     cur_mapping = {}
     for index in df_results.index:
         if "[T.1]" in index and snp in index:
             key = "HET"
+            cur_allele = snp_allele_map[key]
+            cur_mapping[index] = f"{snp} {cur_allele}"
         elif "[T.2]" in index and snp in index:
             key = "ALT"
+            cur_allele = snp_allele_map[key]
+            cur_mapping[index] = f"{snp} {cur_allele}"
+        elif "Q(" in index:
+            start_pos = index.find("'") + 1
+            end_pos = index.find("'", start_pos)
+            covar_name = index[start_pos:end_pos]
+
+            if "[T." in index and "]" in index:
+                start = index.find("[T.") + 3
+                end = index.find("]")
+                group = index[start:end]
+                group_name = f"{covar_name} (Group {group})"
+            else:
+                group_name = covar_name
+
+            cur_mapping[index] = group_name
         else:
             continue
-
-        cur_allele = snp_allele_map[key]
-        cur_mapping[index] = f"{snp} {cur_allele}"
 
     df_results = df_results.rename(index=cur_mapping)
 

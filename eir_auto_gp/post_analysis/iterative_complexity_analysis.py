@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Generator
+from typing import TYPE_CHECKING, Callable, Generator, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -39,16 +39,23 @@ def _get_step_information_objects(
     df_allele_effects = pd.read_csv(
         output_root / "effect_analysis/allele_effects/allele_effects.csv"
     )
+    df_allele_effects = filter_snp_rows(df=df_allele_effects)
 
     df_interaction_effects = pd.read_csv(
         output_root / "effect_analysis/interaction_effects/interaction_effects.csv"
     )
+    df_interaction_effects = filter_snp_rows(df=df_interaction_effects)
 
     return StepInformationObjects(
         complexity_results=df_complexity,
         allele_effects=df_allele_effects,
         interaction_effects=df_interaction_effects,
     )
+
+
+def filter_snp_rows(df: pd.DataFrame) -> pd.DataFrame:
+    df_filtered = df[~df["allele"].str.contains("COVAR")].copy()
+    return df_filtered
 
 
 def run_iterative_complexity_analysis(
@@ -526,9 +533,10 @@ def get_step_training_iterator(
             top_n=max_interaction_exe,
         )
 
-        for mro_txt, model_type in txt_iterator:
-            yield mro_txt, "TxT", model_type
-            running_mro = mro_txt
+        if txt_iterator is not None:
+            for mro_txt, model_type in txt_iterator:
+                yield mro_txt, "TxT", model_type
+                running_mro = mro_txt
 
     # 8
     if run_tabular and run_genotype:
@@ -808,7 +816,7 @@ def get_txt_iterator(
     post_analysis_object: "PostAnalysisObject",
     running_mro: ModelReadyObject,
     top_n: int,
-) -> tuple[Generator, pd.DataFrame, ModelReadyObject]:
+) -> tuple[Optional[Generator], pd.DataFrame, ModelReadyObject]:
     pao = post_analysis_object
 
     target_type = pao.experiment_info.target_type
@@ -827,6 +835,10 @@ def get_txt_iterator(
         target_type=target_type,
         top_n=top_n,
     )
+
+    if txt_candidates.empty:
+        logger.warning("No TxT candidates found, skipping.")
+        return None, pd.DataFrame(), running_mro
 
     logger.debug(
         "Top %d TxT candidates: %s", top_n, txt_candidates["interaction"].tolist()
@@ -902,6 +914,9 @@ def _find_txt_candidates(
         df_performance["interaction"] = f"{col1}_x_{col2}"
 
         results.append(df_performance)
+
+    if not results:
+        return pd.DataFrame()
 
     df_results = pd.concat(results)
     metric = "r2" if target_type == "regression" else "mcc"

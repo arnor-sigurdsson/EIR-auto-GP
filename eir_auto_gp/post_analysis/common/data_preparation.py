@@ -273,7 +273,8 @@ def _handle_missing_target_values(
 
 
 def process_split_model_data(
-    split_model_data: "SplitModelData", task_type: str
+    split_model_data: "SplitModelData",
+    task_type: str,
 ) -> "SplitModelData":
     transformers = _set_up_transformers(
         df_train_tab_input=split_model_data.train.df_tabular_input,
@@ -674,7 +675,8 @@ def extract_experiment_info_from_config(config_path: Path) -> ExperimentInfo:
     output_con_columns = config_dict["output_con_columns"]
 
     target_type = parse_target_type(
-        output_cat_columns=output_cat_columns, output_con_columns=output_con_columns
+        output_cat_columns=output_cat_columns,
+        output_con_columns=output_con_columns,
     )
 
     experiment_info = ExperimentInfo(

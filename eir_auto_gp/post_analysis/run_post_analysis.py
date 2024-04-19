@@ -175,7 +175,7 @@ def _save_data(post_analysis_object: PostAnalysisObject) -> None:
     allele_maps = get_snp_allele_maps(df_bim=df_bim, snp_ids=variants)
 
     with open(output_folder / "allele_maps.json", "w") as f:
-        json.dump(obj=allele_maps, fp=f)
+        json.dump(obj=allele_maps, fp=f, indent=4)
 
     return None
 

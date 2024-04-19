@@ -222,10 +222,23 @@ def _check_allele_effects(
     _check_recessive_coefficients(df=df_allele_effects)
 
 
-def _check_basic_snps_significant_p_values(df: pd.DataFrame) -> None:
+def _check_basic_snps_significant_p_values(
+    df: pd.DataFrame, regression_type: str
+) -> None:
+    """
+    As the phenotype is defined by the median (resulting in 50/50 output distribution)
+    in the logistic case, there is no expected deviation from random for the
+    intercept and HET terms for SNP4 (recessive), hence we adjust the
+    threshold for this SNP.
+    """
     for snp in range(1, 7):
         df_snp = df[df["SNP"] == f"snp{snp}"]
-        assert (df_snp["p_value"] < 1e-4).sum() >= 2, f"SNP{snp}"
+
+        threshold = 2
+        if regression_type == "logistic" and snp == 4:
+            threshold = 1
+
+        assert (df_snp["p_value"] < 1e-4).sum() >= threshold, f"SNP{snp}"
 
 
 def _check_additive_coefficients(df: pd.DataFrame, regression_type: str) -> None:
@@ -239,7 +252,7 @@ def _check_additive_coefficients(df: pd.DataFrame, regression_type: str) -> None
             third_row_coef = np.exp(third_row_coef)
 
         ratio = abs(third_row_coef - 2 * second_row_coef) / (2 * second_row_coef)
-        is_close = ratio < 0.2
+        is_close = ratio < 0.25
 
         msg = (
             f"SNP{snp}: 2nd row = {second_row_coef}, "

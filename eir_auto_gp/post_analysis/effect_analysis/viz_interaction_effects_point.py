@@ -25,7 +25,7 @@ def run_grouped_interaction_analysis(
     output_folder: Path,
 ) -> None:
     df_bim = read_bim(bim_file_path=str(bim_file))
-    snp_ids = df_genotype.columns
+    snp_ids = [i for i in df_genotype.columns if not i.startswith("COVAR_")]
     allele_maps = get_snp_allele_maps(df_bim=df_bim, snp_ids=snp_ids)
 
     df_genotype_prepared = prepare_genotype_data(
