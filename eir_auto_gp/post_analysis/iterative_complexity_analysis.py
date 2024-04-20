@@ -44,7 +44,9 @@ def _get_step_information_objects(
     df_interaction_effects = pd.read_csv(
         output_root / "effect_analysis/interaction_effects/interaction_effects.csv"
     )
-    df_interaction_effects = filter_snp_rows(df=df_interaction_effects)
+
+    if len(df_interaction_effects) != 0:
+        df_interaction_effects = filter_snp_rows(df=df_interaction_effects)
 
     return StepInformationObjects(
         complexity_results=df_complexity,

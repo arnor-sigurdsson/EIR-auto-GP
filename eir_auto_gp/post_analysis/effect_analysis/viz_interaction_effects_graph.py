@@ -29,6 +29,10 @@ def generate_interaction_snp_graph_figure(
         p_threshold="auto",
     )
 
+    if len(df_interaction_effects_filtered) == 0:
+        logger.info("No interactions found for SNP interaction graph figure, skipping.")
+        return
+
     train_interaction_info = _extract_cluster_info_from_interaction_df(
         df_interactions=df_interaction_effects_filtered,
         bim_file_path=bim_file_path,

@@ -216,7 +216,9 @@ def _check_allele_effects(
     assert regression_type in ("logistic", "linear")
 
     df_allele_effects["SNP"] = df_allele_effects["allele"].str.split(" ").str[0]
-    _check_basic_snps_significant_p_values(df=df_allele_effects)
+    _check_basic_snps_significant_p_values(
+        df=df_allele_effects, regression_type=regression_type
+    )
     _check_additive_coefficients(df=df_allele_effects, regression_type=regression_type)
     _check_dominant_coefficients(df=df_allele_effects)
     _check_recessive_coefficients(df=df_allele_effects)
