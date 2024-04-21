@@ -38,7 +38,7 @@ def plot_performance(df: pd.DataFrame, output_path: Path, metric: str) -> None:
         x="complexity_level",
         y=metric,
         hue="model_type",
-        hue_order=["linear", "xgboost"],
+        hue_order=["linear_model", "ridge", "lasso", "elasticnet", "xgboost"],
         data=df,
     )
     plt.title(metric.upper())

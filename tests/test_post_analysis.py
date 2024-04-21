@@ -148,7 +148,11 @@ def _check_post_analysis_results_wrapper(
     regression_type: str,
 ) -> None:
     _check_complexity_analysis_results(
-        complexity_folder=post_analysis_folder / "complexity",
+        complexity_folder=post_analysis_folder / "complexity/valid",
+        include_tabular=include_tabular,
+    )
+    _check_complexity_analysis_results(
+        complexity_folder=post_analysis_folder / "complexity/test",
         include_tabular=include_tabular,
     )
 
@@ -164,7 +168,7 @@ def _check_complexity_analysis_results(
     complexity_folder: Path,
     include_tabular: bool,
 ) -> None:
-    expected_runs = 10 if include_tabular else 4
+    expected_runs = 25 if include_tabular else 10
     df = pd.read_csv(complexity_folder / "all_results.csv")
 
     assert len(df) == expected_runs, complexity_folder
@@ -178,13 +182,17 @@ def _check_complexity_analysis_results(
 
 
 def _check_xgboost_better_than_linear(df: pd.DataFrame) -> None:
-    avg_perf_xgboost = df[df["model_type"] == "xgboost"]["average_performance"].mean()
-    avg_perf_linear = df[df["model_type"] == "linear"]["average_performance"].mean()
-    assert avg_perf_xgboost > avg_perf_linear
+    perf_key = "average_performance"
+    avg_perf_xgboost = df[df["model_type"] == "xgboost"][perf_key].mean()
+
+    linear_models = ["linear_model", "ridge", "lasso", "elasticnet"]
+    for model in linear_models:
+        avg_perf_linear = df[df["model_type"] == model][perf_key].mean()
+        assert avg_perf_xgboost > avg_perf_linear
 
 
 def _check_one_hot_better_in_linear(df: pd.DataFrame) -> None:
-    df_linear = df[df["model_type"] == "linear"]
+    df_linear = df[df["model_type"] == "linear_model"]
 
     df_linear_one_hot = df_linear[df_linear["one_hot_encode"]]
 

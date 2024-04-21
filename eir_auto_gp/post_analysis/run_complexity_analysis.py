@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import pandas as pd
 import seaborn as sns
@@ -26,23 +26,35 @@ sns.set(font_scale=1.2)
 
 
 def run_complexity_analysis(post_analysis_object: "PostAnalysisObject") -> None:
-    df_results = train_and_evaluate_wrapper(analysis_object=post_analysis_object)
-    metrics_to_plot = _get_metric_columns(
-        target_type=post_analysis_object.experiment_info.target_type
-    )
-    metrics_to_plot_w_average = metrics_to_plot + ["average_performance"]
-    plot_output_root = (
-        post_analysis_object.data_paths.analysis_output_path / "complexity/plots"
-    )
-    for metric in metrics_to_plot_w_average:
-        plot_performance(
-            df=df_results,
-            output_path=plot_output_root,
-            metric=metric,
+    pao = post_analysis_object
+
+    eval_sets = ("valid", "test")
+    for eval_set in eval_sets:
+        eval_set: Literal["valid", "test"]
+        df_results = train_and_evaluate_wrapper(
+            analysis_object=post_analysis_object,
+            eval_set=eval_set,
         )
+        metrics_to_plot = _get_metric_columns(
+            target_type=pao.experiment_info.target_type
+        )
+        metrics_to_plot_w_average = metrics_to_plot + ["average_performance"]
+
+        plot_output_root = (
+            pao.data_paths.analysis_output_path / f"complexity/{eval_set}/plots"
+        )
+        for metric in metrics_to_plot_w_average:
+            plot_performance(
+                df=df_results,
+                output_path=plot_output_root,
+                metric=metric,
+            )
 
 
-def train_and_evaluate_wrapper(analysis_object: "PostAnalysisObject"):
+def train_and_evaluate_wrapper(
+    analysis_object: "PostAnalysisObject",
+    eval_set: Literal["valid", "test"],
+) -> pd.DataFrame:
     all_results = []
 
     any_tabular = len(analysis_object.experiment_info.all_input_columns) > 0
@@ -58,11 +70,16 @@ def train_and_evaluate_wrapper(analysis_object: "PostAnalysisObject"):
             train_eval_results = train_and_evaluate_xgboost(
                 modelling_data=mro,
                 target_type=analysis_object.experiment_info.target_type,
+                eval_set=eval_set,
             )
         else:
+            model_type = conditions["model_type"]
             train_eval_results = train_and_evaluate_linear(
                 modelling_data=mro,
                 target_type=analysis_object.experiment_info.target_type,
+                eval_set=eval_set,
+                cv_use_val_split=True,
+                model_type=model_type,
             )
 
         df_conditions = pd.DataFrame([conditions])
@@ -84,13 +101,17 @@ def train_and_evaluate_wrapper(analysis_object: "PostAnalysisObject"):
         all_results=all_results,
         target_type=analysis_object.experiment_info.target_type,
         analysis_output_path=analysis_object.data_paths.analysis_output_path,
+        eval_set=eval_set,
     )
 
     return df_all_results
 
 
 def process_results(
-    all_results: list, target_type: str, analysis_output_path: Path
+    all_results: list,
+    target_type: str,
+    analysis_output_path: Path,
+    eval_set: Literal["valid", "test"],
 ) -> pd.DataFrame:
     df_all_results = pd.concat(
         [r["performance"] for r in all_results],
@@ -101,7 +122,7 @@ def process_results(
     average = df_all_results[numerical_columns].mean(axis=1)
     df_all_results["average_performance"] = average
 
-    output_root = analysis_output_path / "complexity"
+    output_root = analysis_output_path / "complexity" / eval_set
     ensure_path_exists(path=output_root, is_folder=True)
     df_all_results.to_csv(output_root / "all_results.csv", index=False)
 

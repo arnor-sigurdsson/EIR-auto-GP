@@ -31,10 +31,12 @@ class StepInformationObjects:
 
 def _get_step_information_objects(
     post_analysis_object: "PostAnalysisObject",
+    eval_set: str,
 ) -> StepInformationObjects:
+    assert eval_set in ["valid", "test"]
     output_root = post_analysis_object.data_paths.analysis_output_path
 
-    df_complexity = pd.read_csv(output_root / "complexity/all_results.csv")
+    df_complexity = pd.read_csv(output_root / f"complexity/{eval_set}/all_results.csv")
 
     df_allele_effects = pd.read_csv(
         output_root / "effect_analysis/allele_effects/allele_effects.csv"
@@ -71,7 +73,10 @@ def run_iterative_complexity_analysis(
 
     pao = post_analysis_object
     ei = pao.experiment_info
-    sidp = _get_step_information_objects(post_analysis_object=pao)
+    sidp = _get_step_information_objects(
+        post_analysis_object=pao,
+        eval_set=eval_set,
+    )
 
     outputs = ei.output_cat_columns + ei.output_con_columns
     if len(outputs) > 1:
@@ -104,6 +109,8 @@ def run_iterative_complexity_analysis(
             modelling_data=mro,
             target_type=ei.target_type,
             eval_set=eval_set,
+            cv_use_val_split=True,
+            with_fallback=True,
         )
         df_performance = train_eval_results.performance
         df_performance["model_type"] = model_type
@@ -459,6 +466,8 @@ def get_step_training_iterator(
             modelling_data=mro_tabular,
             target_type=ei.target_type,
             eval_set=eval_set,
+            cv_use_val_split=True,
+            with_fallback=True,
         )
         tabular_feature_importance = tabular_results.feature_importance
         running_mro = mro_tabular
@@ -911,6 +920,8 @@ def _find_txt_candidates(
             modelling_data=modified_mro,
             target_type=target_type,
             eval_set="valid",
+            cv_use_val_split=True,
+            with_fallback=True,
         )
         df_performance = train_eval_results.performance
         df_performance["interaction"] = f"{col1}_x_{col2}"
@@ -1046,6 +1057,8 @@ def _find_gxt_candidates(
                 modelling_data=modified_mro,
                 target_type=target_type,
                 eval_set="valid",
+                cv_use_val_split=True,
+                with_fallback=True,
             )
             df_performance = train_eval_results.performance
             df_performance["interaction"] = f"{snp_column}_x_{tab_column}"
