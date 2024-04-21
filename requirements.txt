@@ -97,7 +97,7 @@ patsy==0.5.6 ; python_full_version >= "3.11.0" and python_version < "3.12"
 pexpect==4.9.0 ; python_full_version >= "3.11.0" and python_version < "3.12" and (sys_platform != "win32" and sys_platform != "emscripten")
 pillow==10.2.0 ; python_full_version >= "3.11.0" and python_version < "3.12"
 plink-pipelines==0.2.0 ; python_full_version >= "3.11.0" and python_version < "3.12"
-pluggy==1.4.0 ; python_full_version >= "3.11.0" and python_version < "3.12"
+pluggy==1.5.0 ; python_full_version >= "3.11.0" and python_version < "3.12"
 pox==0.3.4 ; python_full_version >= "3.11.0" and python_version < "3.12"
 ppft==1.7.6.8 ; python_full_version >= "3.11.0" and python_version < "3.12"
 prompt-toolkit==3.0.43 ; python_full_version >= "3.11.0" and python_version < "3.12"
