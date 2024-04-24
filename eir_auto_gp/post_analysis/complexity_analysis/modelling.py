@@ -377,11 +377,6 @@ def _extract_linear_feature_importance(
     else:
         raise ValueError()
 
-    x = x.astype(float)
-    residuals = y.ravel() - model_predictions
-    mse = np.sum(residuals**2) / (len(x) - len(feature_names) - 1)
-
-    new_x = np.append(np.ones((len(x), 1)), x, axis=1)
     dataframe_entries = {
         "Feature": ["Intercept"] + feature_names,
         "Coefficient": np.append(model.intercept_, coef),
@@ -389,6 +384,13 @@ def _extract_linear_feature_importance(
     }
 
     if model_type == "linear_model":
+
+        x = x.astype(float)
+        residuals = y.ravel() - model_predictions
+        mse = np.sum(residuals**2) / (len(x) - len(feature_names) - 1)
+
+        new_x = np.append(np.ones((len(x), 1)), x, axis=1)
+
         try:
             var_b = mse * (np.linalg.inv(np.dot(new_x.T, new_x)).diagonal())
         except np.linalg.LinAlgError:
