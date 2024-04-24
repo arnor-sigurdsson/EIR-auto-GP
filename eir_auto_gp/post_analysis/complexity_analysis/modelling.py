@@ -361,6 +361,7 @@ def _extract_linear_feature_importance(
     model_predictions: np.ndarray,
     feature_names: list[str],
     target_type: str,
+    model_type: str,
 ) -> pd.DataFrame:
     """
     Adapted from https://stackoverflow.com/questions/27928275
@@ -381,41 +382,43 @@ def _extract_linear_feature_importance(
     mse = np.sum(residuals**2) / (len(x) - len(feature_names) - 1)
 
     new_x = np.append(np.ones((len(x), 1)), x, axis=1)
+    dataframe_entries = {
+        "Feature": ["Intercept"] + feature_names,
+        "Coefficient": np.append(model.intercept_, coef),
+        "Importance": np.append(abs(model.intercept_), feature_importance),
+    }
 
-    pinv_used = False
-    try:
-        var_b = mse * (np.linalg.inv(np.dot(new_x.T, new_x)).diagonal())
-    except np.linalg.LinAlgError:
-        logger.warning(
-            "Singular matrix encountered when calculating standard errors, "
-            "falling back to using pseudo-inverse. "
-            "This may lead to inaccurate results."
+    if model_type == "linear_model":
+        try:
+            var_b = mse * (np.linalg.inv(np.dot(new_x.T, new_x)).diagonal())
+        except np.linalg.LinAlgError:
+            logger.warning(
+                "Singular matrix encountered when calculating standard errors, "
+                "falling back to using pseudo-inverse. "
+                "This may lead to inaccurate results."
+            )
+            var_b = mse * (np.linalg.pinv(np.dot(new_x.T, new_x)).diagonal())
+
+        se_b = np.sqrt(var_b)
+
+        coefficients = np.append(model.intercept_, coef)
+        t_values = coefficients / se_b
+        p_values = 2 * (1 - stats.t.cdf(abs(t_values), len(x) - len(feature_names) - 1))
+
+        ci_lower = coefficients - 1.96 * se_b
+        ci_upper = coefficients + 1.96 * se_b
+
+        dataframe_entries.update(
+            {
+                "Standard Error": se_b,
+                "t-Value": t_values,
+                "P-Value": p_values,
+                "95% CI Lower": ci_lower,
+                "95% CI Upper": ci_upper,
+            }
         )
-        var_b = mse * (np.linalg.pinv(np.dot(new_x.T, new_x)).diagonal())
-        pinv_used = True
 
-    se_b = np.sqrt(var_b)
-
-    coefficients = np.append(model.intercept_, coef)
-    t_values = coefficients / se_b
-    p_values = 2 * (1 - stats.t.cdf(abs(t_values), len(x) - len(feature_names) - 1))
-
-    ci_lower = coefficients - 1.96 * se_b
-    ci_upper = coefficients + 1.96 * se_b
-
-    return pd.DataFrame(
-        {
-            "Feature": ["Intercept"] + feature_names,
-            "Importance": np.append(abs(model.intercept_), feature_importance),
-            "Coefficient": coefficients,
-            "Standard Error": se_b,
-            "t-Value": t_values,
-            "P-Value": p_values,
-            "95% CI Lower": ci_lower,
-            "95% CI Upper": ci_upper,
-            "Pseudo-Inverse Used": [pinv_used] + [pinv_used] * len(feature_names),
-        }
-    ).sort_values(by="Importance", ascending=False)
+    return pd.DataFrame(dataframe_entries).sort_values(by="Importance", ascending=False)
 
 
 def parse_predictions(
