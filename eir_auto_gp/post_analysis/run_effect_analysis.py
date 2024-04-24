@@ -6,6 +6,9 @@ from aislib.misc_utils import ensure_path_exists, get_logger
 from eir_auto_gp.post_analysis.effect_analysis.genotype_effects import (
     get_allele_effects,
 )
+from eir_auto_gp.post_analysis.effect_analysis.gxe_interaction_effects import (
+    get_gxe_interaction_effects,
+)
 from eir_auto_gp.post_analysis.effect_analysis.interaction_effects import (
     get_interaction_effects,
 )
@@ -37,7 +40,7 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
 
     input_cat_columns = post_analysis_object.experiment_info.input_cat_columns
 
-    df_genotype, df_target = _build_effect_inputs(
+    df_inputs, df_target = _build_effect_inputs(
         model_ready_object=mro_genotype,
         sets_for_effect_analysis=post_analysis_object.sets_for_effect_analysis,
         input_cat_columns=input_cat_columns,
@@ -51,7 +54,7 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
     effects_output = output_root / "allele_effects"
     ensure_path_exists(path=effects_output, is_folder=True)
     df_allele_effects = get_allele_effects(
-        df_inputs=df_genotype,
+        df_inputs=df_inputs,
         df_target=df_target,
         bim_file=pao.data_paths.snp_bim_path,
         target_type=pao.experiment_info.target_type,
@@ -70,7 +73,7 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
     interaction_output = output_root / "interaction_effects"
     ensure_path_exists(path=interaction_output, is_folder=True)
     df_interaction_effects = get_interaction_effects(
-        df_inputs=df_genotype,
+        df_inputs=df_inputs,
         df_target=df_target,
         bim_file=pao.data_paths.snp_bim_path,
         target_type=pao.experiment_info.target_type,
@@ -94,13 +97,25 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
         )
 
         run_grouped_interaction_analysis(
-            df_genotype=df_genotype,
+            df_genotype=df_inputs,
             df_target=df_target,
             df_interaction_effects=df_interaction_effects_only,
             top_n_snps=pao.top_n_interaction_pairs,
             bim_file=pao.data_paths.snp_bim_path,
             output_folder=output_root / "grouped_interaction_analysis",
         )
+
+    gxe_output = output_root / "gxe_interaction_effects"
+    ensure_path_exists(path=gxe_output, is_folder=True)
+    df_gxe_interaction_effects = get_gxe_interaction_effects(
+        df_inputs=df_inputs,
+        df_target=df_target,
+        bim_file=pao.data_paths.snp_bim_path,
+        target_type=pao.experiment_info.target_type,
+    )
+
+    if len(df_gxe_interaction_effects) > 0:
+        df_gxe_interaction_effects.to_csv(gxe_output / "gxe_interaction_effects.csv")
 
 
 def _build_effect_inputs(
