@@ -201,6 +201,7 @@ def train_and_evaluate_linear(
         y=y_train,
         model_predictions=y_score_train,
         target_type=target_type,
+        model_type=model_type,
     )
 
     results = TrainEvalResults(
