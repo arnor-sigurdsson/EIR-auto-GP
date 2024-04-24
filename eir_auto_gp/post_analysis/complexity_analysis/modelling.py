@@ -8,6 +8,7 @@ import pandas as pd
 import xgboost
 from aislib.misc_utils import get_logger
 from eir.train_utils import metrics as eir_metrics
+from scipy import stats
 from sklearn import metrics
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import (
@@ -104,10 +105,12 @@ def train_and_evaluate_xgboost(
         eval_set=eval_set,
     )
 
+    feature_names = modelling_data.input_train.columns
+    booster_fi = trained_model.get_score(importance_type="gain")
     feature_importance = pd.DataFrame(
-        data=trained_model.get_score(importance_type="gain").items(),
+        [(feature_names[int(k[1:])], v) for k, v in booster_fi.items()],
         columns=["Feature", "Importance"],
-    )
+    ).sort_values(by="Importance", ascending=False)
 
     results = TrainEvalResults(
         df_predictions=df_predictions,
@@ -186,9 +189,17 @@ def train_and_evaluate_linear(
 
     feature_names = modelling_data.input_train.columns.tolist()
 
+    y_score_train = _predict_with_linear(
+        model=model,
+        x_eval=x_train,
+        target_type=target_type,
+    )
     df_feature_importance = _extract_linear_feature_importance(
         model=model,
         feature_names=feature_names,
+        x=x_train,
+        y=y_train,
+        model_predictions=y_score_train,
         target_type=target_type,
     )
 
@@ -345,23 +356,51 @@ def _predict_with_linear(
 
 def _extract_linear_feature_importance(
     model: al_linear_models,
+    x: np.ndarray,
+    y: np.ndarray,
+    model_predictions: np.ndarray,
     feature_names: list[str],
     target_type: str,
 ) -> pd.DataFrame:
+    """
+    Adapted from https://stackoverflow.com/questions/27928275
+    """
     if target_type == "classification":
         coef = model.coef_[0]
         feature_importance = abs(model.coef_[0])
+        model_predictions = model_predictions[:, 1]
     elif target_type == "regression":
         coef = model.coef_
         feature_importance = abs(model.coef_)
+        model_predictions = model_predictions.ravel()
     else:
         raise ValueError()
 
+    x = x.astype(float)
+    residuals = y.ravel() - model_predictions
+    mse = np.sum(residuals**2) / (len(x) - len(feature_names) - 1)
+
+    new_x = np.append(np.ones((len(x), 1)), x, axis=1)
+    var_b = mse * (np.linalg.inv(np.dot(new_x.T, new_x)).diagonal())
+    se_b = np.sqrt(var_b)
+
+    coefficients = np.append(model.intercept_, coef)
+    t_values = coefficients / se_b
+    p_values = 2 * (1 - stats.t.cdf(abs(t_values), len(x) - len(feature_names) - 1))
+
+    ci_lower = coefficients - 1.96 * se_b
+    ci_upper = coefficients + 1.96 * se_b
+
     return pd.DataFrame(
         {
-            "Feature": feature_names,
-            "Importance": feature_importance,
-            "Coef": coef,
+            "Feature": ["Intercept"] + feature_names,
+            "Importance": np.append(abs(model.intercept_), feature_importance),
+            "Coefficient": coefficients,
+            "Standard Error": se_b,
+            "t-Value": t_values,
+            "P-Value": p_values,
+            "95% CI Lower": ci_lower,
+            "95% CI Upper": ci_upper,
         }
     ).sort_values(by="Importance", ascending=False)
 

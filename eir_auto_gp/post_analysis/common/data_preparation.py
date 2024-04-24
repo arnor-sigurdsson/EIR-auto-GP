@@ -307,7 +307,7 @@ def process_split_model_data(
 
             df_tabular_input_encoded = pd.get_dummies(
                 data=df_tabular_input_imputed,
-                drop_first=False,
+                drop_first=True,
             )
 
             input_scaler = transformers.input_scaler

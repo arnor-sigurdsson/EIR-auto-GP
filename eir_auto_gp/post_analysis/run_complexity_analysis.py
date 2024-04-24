@@ -64,6 +64,7 @@ def train_and_evaluate_wrapper(
             include_genotype=conditions["include_genotype"],
             include_tabular=conditions["include_tabular"],
             one_hot_encode=conditions["one_hot_encode"],
+            one_hot_drop_first=True,
         )
 
         if conditions["model_type"] == "xgboost":
@@ -93,6 +94,7 @@ def train_and_evaluate_wrapper(
             "df_predictions": train_eval_results.df_predictions,
             "df_predictions_raw": train_eval_results.df_predictions_raw,
             "performance": df_result,
+            "importance": train_eval_results.feature_importance,
         }
 
         all_results.append(result)
@@ -138,6 +140,11 @@ def process_results(
         ensure_path_exists(path=raw_output_path, is_folder=False)
         result["df_predictions_raw"].to_csv(raw_output_path)
 
+        importance_output_path = output_root.parent / "importance" / file_name
+        ensure_path_exists(path=importance_output_path, is_folder=False)
+        if not importance_output_path.exists():
+            result["importance"].to_csv(importance_output_path)
+
     return df_all_results
 
 
@@ -169,6 +176,7 @@ def convert_split_data_to_model_ready_object(
     include_genotype: bool = True,
     include_tabular: bool = True,
     one_hot_encode: bool = False,
+    one_hot_drop_first: bool = False,
 ) -> ModelReadyObject:
     genotype_data_combined = pd.concat(
         [
@@ -180,7 +188,8 @@ def convert_split_data_to_model_ready_object(
 
     if one_hot_encode:
         genotype_data_combined = pd.get_dummies(
-            genotype_data_combined.astype(str), drop_first=False
+            genotype_data_combined.astype(str),
+            drop_first=one_hot_drop_first,
         )
 
     def get_input_data(model_data: ModelData) -> pd.DataFrame:

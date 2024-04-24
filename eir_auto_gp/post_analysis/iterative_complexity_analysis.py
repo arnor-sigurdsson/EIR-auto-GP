@@ -600,7 +600,12 @@ def _get_one_hot_iterator(
             inputs: pd.DataFrame, targets: pd.DataFrame
         ) -> tuple[pd.DataFrame, pd.DataFrame]:
             if snp in inputs.columns:
-                inputs = pd.get_dummies(inputs, columns=[snp], prefix=snp + "_OH")
+                inputs = pd.get_dummies(
+                    inputs,
+                    columns=[snp],
+                    prefix=snp + "_OH",
+                    drop_first=True,
+                )
             return inputs, targets
 
         running_mro = _merge_operate_and_split(
@@ -659,6 +664,7 @@ def one_hot_encode_all_snps(
                 data=inputs,
                 columns=snps_to_encode,
                 prefix={snp: snp + "_OH" for snp in snps_to_encode},
+                drop_first=True,
             )
         return inputs, targets
 
@@ -1025,6 +1031,9 @@ def _find_gxt_candidates(
         top_n=top_n,
     )
 
+    df_tabular_feature_importance = df_tabular_feature_importance[
+        df_tabular_feature_importance["Feature"] != "Intercept"
+    ]
     top_tabular_columns = df_tabular_feature_importance.head(top_n)["Feature"].tolist()
 
     logger.debug(

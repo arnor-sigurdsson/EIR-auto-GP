@@ -29,16 +29,31 @@ def assign_complexity(row):
         return 5
 
 
-def plot_performance(df: pd.DataFrame, output_path: Path, metric: str) -> None:
+def plot_performance(
+    df: pd.DataFrame,
+    output_path: Path,
+    metric: str,
+) -> None:
+    df = df.copy()
     df["complexity_level"] = df.apply(assign_complexity, axis=1)
+
+    model_name_mapping = {
+        "linear_model": "Linear Model",
+        "ridge": "Ridge",
+        "lasso": "Lasso",
+        "elasticnet": "ElasticNet",
+        "xgboost": "XGBoost",
+    }
+    df["model_type"] = df["model_type"].map(model_name_mapping)
 
     plt.figure(figsize=(12, 8))
 
+    hue_order = ["Linear Model", "Ridge", "Lasso", "ElasticNet", "XGBoost"]
     sns.barplot(
         x="complexity_level",
         y=metric,
         hue="model_type",
-        hue_order=["linear_model", "ridge", "lasso", "elasticnet", "xgboost"],
+        hue_order=hue_order,
         data=df,
     )
     plt.title(metric.upper())
