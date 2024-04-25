@@ -392,6 +392,7 @@ def _extract_linear_feature_importance(
 
         new_x = np.append(np.ones((len(x), 1)), x, axis=1)
 
+        used_pinv = False
         try:
             var_b = mse * (np.linalg.inv(np.dot(new_x.T, new_x)).diagonal())
         except np.linalg.LinAlgError:
@@ -401,6 +402,7 @@ def _extract_linear_feature_importance(
                 "This may lead to inaccurate results."
             )
             var_b = mse * (np.linalg.pinv(np.dot(new_x.T, new_x)).diagonal())
+            used_pinv = True
 
         se_b = np.sqrt(var_b)
 
@@ -418,6 +420,7 @@ def _extract_linear_feature_importance(
                 "P-Value": p_values,
                 "95% CI Lower": ci_lower,
                 "95% CI Upper": ci_upper,
+                "Used Pseudo-Inverse": [used_pinv] + [used_pinv] * len(feature_names),
             }
         )
 
