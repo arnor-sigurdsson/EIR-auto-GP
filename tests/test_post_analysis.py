@@ -71,10 +71,12 @@ def test_post_analysis_classification(
     run_post_analysis.run_effect_analysis(post_analysis_object=post_analysis_object)
     run_post_analysis.run_iterative_complexity_analysis(
         post_analysis_object=post_analysis_object,
+        n_iterative_complexity_candidates=5,
         eval_set="valid",
     )
     run_post_analysis.run_iterative_complexity_analysis(
         post_analysis_object=post_analysis_object,
+        n_iterative_complexity_candidates=5,
         eval_set="test",
     )
 
@@ -125,10 +127,12 @@ def test_post_analysis_regression(
     run_post_analysis.run_effect_analysis(post_analysis_object=post_analysis_object)
     run_post_analysis.run_iterative_complexity_analysis(
         post_analysis_object=post_analysis_object,
+        n_iterative_complexity_candidates=5,
         eval_set="valid",
     )
     run_post_analysis.run_iterative_complexity_analysis(
         post_analysis_object=post_analysis_object,
+        n_iterative_complexity_candidates=5,
         eval_set="test",
     )
 

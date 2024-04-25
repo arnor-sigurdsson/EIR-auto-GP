@@ -64,6 +64,7 @@ def filter_snp_rows(df: pd.DataFrame) -> pd.DataFrame:
 
 def run_iterative_complexity_analysis(
     post_analysis_object: "PostAnalysisObject",
+    n_iterative_complexity_candidates: int,
     eval_set: str,
 ) -> None:
     if eval_set not in ["test", "valid"]:
@@ -94,13 +95,14 @@ def run_iterative_complexity_analysis(
 
     results = []
 
+    n = n_iterative_complexity_candidates
     data_iter = get_step_training_iterator(
         post_analysis_object=pao,
         step_information_objects=sidp,
-        max_one_hot=5,
-        max_interaction_exe=5,
-        max_interaction_gxe=5,
-        max_interaction_gxg=5,
+        max_one_hot=n,
+        max_interaction_exe=n,
+        max_interaction_gxe=n,
+        max_interaction_gxg=n,
         eval_set=eval_set,
     )
 

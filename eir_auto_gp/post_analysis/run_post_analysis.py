@@ -138,6 +138,16 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--n_iterative_complexity_candidates",
+        type=int,
+        default=5,
+        help="Number of candidates to consider for the iterative complexity analysis. "
+        "This value is commonly applied to the number of features to consider in "
+        "the number of one-hot encoded SNPs as well as tested interaction"
+        "terms for ExE, GxE and GxG interactions.",
+    )
+
+    parser.add_argument(
         "--save_data",
         action="store_true",
         default=False,
@@ -202,7 +212,9 @@ def run_all():
     )
     if should_run_iter_test:
         run_iterative_complexity_analysis(
-            post_analysis_object=post_analysis_object, eval_set="test"
+            post_analysis_object=post_analysis_object,
+            n_iterative_complexity_candidates=cl_args.n_iterative_complexity_candidates,
+            eval_set="test",
         )
 
     should_run_iter_valid = _should_run_iterative_complexity_analysis(
@@ -212,7 +224,9 @@ def run_all():
     )
     if should_run_iter_valid:
         run_iterative_complexity_analysis(
-            post_analysis_object=post_analysis_object, eval_set="valid"
+            post_analysis_object=post_analysis_object,
+            n_iterative_complexity_candidates=cl_args.n_iterative_complexity_candidates,
+            eval_set="valid",
         )
 
 
