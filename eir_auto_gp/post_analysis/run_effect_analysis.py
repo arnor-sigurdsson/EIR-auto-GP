@@ -25,7 +25,10 @@ from eir_auto_gp.post_analysis.run_complexity_analysis import (
 )
 
 if TYPE_CHECKING:
-    from eir_auto_gp.post_analysis.run_post_analysis import PostAnalysisObject
+    from eir_auto_gp.post_analysis.run_post_analysis import (
+        PostAnalysisObject,
+        SplitModelData,
+    )
 
 logger = get_logger(name=__name__)
 
@@ -40,8 +43,9 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
 
     input_cat_columns = post_analysis_object.experiment_info.input_cat_columns
 
-    df_inputs, df_target = _build_effect_inputs(
+    df_inputs, df_target, df_genotype_missing = _build_effect_inputs(
         model_ready_object=mro_genotype,
+        modelling_data=post_analysis_object.modelling_data,
         sets_for_effect_analysis=post_analysis_object.sets_for_effect_analysis,
         input_cat_columns=input_cat_columns,
     )
@@ -56,6 +60,7 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
     df_allele_effects = get_allele_effects(
         df_inputs=df_inputs,
         df_target=df_target,
+        df_genotype_missing=df_genotype_missing,
         bim_file=pao.data_paths.snp_bim_path,
         target_type=pao.experiment_info.target_type,
     )
@@ -75,6 +80,7 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
     df_interaction_effects = get_interaction_effects(
         df_inputs=df_inputs,
         df_target=df_target,
+        df_genotype_missing=df_genotype_missing,
         bim_file=pao.data_paths.snp_bim_path,
         target_type=pao.experiment_info.target_type,
         allow_within_chr_interaction=pao.allow_within_chr_interaction,
@@ -120,9 +126,10 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
 
 def _build_effect_inputs(
     model_ready_object: ModelReadyObject,
+    modelling_data: "SplitModelData",
     sets_for_effect_analysis: list[str],
     input_cat_columns: list[str],
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Note we drop the first dummy column for each categorical column to avoid
     issues with multicollinearity in the linear models.
@@ -136,19 +143,24 @@ def _build_effect_inputs(
 
     input_dfs = []
     target_dfs = []
+    missing_info_dfs = []
 
     if "train" in sets_for_effect_analysis:
         input_dfs.append(model_ready_object.input_train)
         target_dfs.append(model_ready_object.target_train)
+        missing_info_dfs.append(modelling_data.train.df_genotype_nan_mask)
     if "valid" in sets_for_effect_analysis:
         input_dfs.append(model_ready_object.input_val)
         target_dfs.append(model_ready_object.target_val)
+        missing_info_dfs.append(modelling_data.val.df_genotype_nan_mask)
     if "test" in sets_for_effect_analysis:
         input_dfs.append(model_ready_object.input_test)
         target_dfs.append(model_ready_object.target_test)
+        missing_info_dfs.append(modelling_data.test.df_genotype_nan_mask)
 
     concatenated_input = pd.concat(input_dfs, ignore_index=True)
     concatenated_target = pd.concat(target_dfs, ignore_index=True)
+    concatenated_missing = pd.concat(missing_info_dfs, ignore_index=True)
 
     for cat_column in input_cat_columns:
         dummy_columns = [
@@ -162,7 +174,7 @@ def _build_effect_inputs(
                 columns=dummy_columns_sorted[0]
             )
 
-    return concatenated_input, concatenated_target
+    return concatenated_input, concatenated_target, concatenated_missing
 
 
 def filter_snp_rows(df: pd.DataFrame) -> pd.DataFrame:

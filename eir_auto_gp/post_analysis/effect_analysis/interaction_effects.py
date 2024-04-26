@@ -25,6 +25,7 @@ warnings.filterwarnings(action="ignore", category=RuntimeWarning)
 def get_interaction_effects(
     df_inputs: pd.DataFrame,
     df_target: pd.DataFrame,
+    df_genotype_missing: pd.DataFrame,
     bim_file: Path,
     target_type: str,
     allow_within_chr_interaction: bool,
@@ -40,6 +41,7 @@ def get_interaction_effects(
     df_results = compute_interactions(
         df=df_combined,
         target_name=target_name,
+        df_genotype_missing=df_genotype_missing,
         allele_maps=allele_maps,
         target_type=target_type,
         p_threshold=None,
@@ -54,6 +56,7 @@ def get_interaction_effects(
 def compute_interactions(
     df: pd.DataFrame,
     target_name: str,
+    df_genotype_missing: pd.DataFrame,
     allele_maps: dict[str, dict[str, str]],
     target_type: str,
     df_bim: pd.DataFrame,
@@ -92,6 +95,7 @@ def compute_interactions(
         delayed(_compute_interaction_snp_effect_wrapper)(
             df=df,
             target_name=target_name,
+            df_genotype_missing=df_genotype_missing,
             allele_maps=allele_maps,
             snp_1=snp_1,
             snp_2=snp_2,
@@ -155,6 +159,7 @@ def filter_snp_pairs(
 def _compute_interaction_snp_effect_wrapper(
     df: pd.DataFrame,
     target_name: str,
+    df_genotype_missing: pd.DataFrame,
     snp_1: str,
     snp_2: str,
     p_threshold: Optional[float],
@@ -170,8 +175,10 @@ def _compute_interaction_snp_effect_wrapper(
     )
 
     df_cur = df[[target_name, snp_1, snp_2, *covar_columns]]
-    df_cur_no_na = df_cur[df_cur[snp_1] != -1]
-    df_cur_no_na = df_cur_no_na[df_cur_no_na[snp_2] != -1]
+
+    mask_1 = df_genotype_missing[snp_1] == 0
+    mask_2 = df_genotype_missing[snp_2] == 0
+    df_cur_no_na = df_cur[mask_1 & mask_2]
 
     fit_func = get_statsmodels_fit_function(target_type=target_type)
 

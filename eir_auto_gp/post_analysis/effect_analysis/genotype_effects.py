@@ -20,6 +20,7 @@ warnings.filterwarnings(action="ignore", category=RuntimeWarning)
 def get_allele_effects(
     df_inputs: pd.DataFrame,
     df_target: pd.DataFrame,
+    df_genotype_missing: pd.DataFrame,
     bim_file: Path,
     target_type: str,
 ) -> pd.DataFrame:
@@ -32,6 +33,7 @@ def get_allele_effects(
 
     df_results = get_all_linear_results(
         df=df_combined,
+        df_genotype_missing=df_genotype_missing,
         target_name=target_name,
         allele_maps=allele_maps,
         target_type=target_type,
@@ -49,6 +51,7 @@ def get_allele_effects(
 
 def get_all_linear_results(
     df: pd.DataFrame,
+    df_genotype_missing: pd.DataFrame,
     target_name: str,
     allele_maps: dict[str, dict[str, str]],
     target_type: str,
@@ -61,6 +64,7 @@ def get_all_linear_results(
     all_results = parallel_worker(
         delayed(_compute_single_snp_effect_wrapper)(
             df=df,
+            df_genotype_missing=df_genotype_missing,
             target_name=target_name,
             allele_maps=allele_maps,
             snp=col,
@@ -80,6 +84,7 @@ def get_all_linear_results(
 
 def _compute_single_snp_effect_wrapper(
     df: pd.DataFrame,
+    df_genotype_missing: pd.DataFrame,
     target_name: str,
     snp: str,
     allele_maps: dict[str, dict[str, str]],
@@ -93,7 +98,7 @@ def _compute_single_snp_effect_wrapper(
     )
 
     df_cur = df[[target_name, snp, *covar_columns]]
-    df_cur_no_na = df_cur[df_cur[snp] != -1]
+    df_cur_no_na = df_cur[df_genotype_missing[snp] == 0]
 
     n_per_group_dict = df_cur_no_na[snp].value_counts().to_dict()
     n_per_group_dict = {

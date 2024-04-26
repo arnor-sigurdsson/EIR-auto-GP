@@ -82,6 +82,9 @@ def simulate_genetic_data(
 
     df_snp, df_pheno = df_snp.drop(columns=["phenotype"]), df_snp["phenotype"]
 
+    mask = np.random.rand(*df_snp.shape) < 0.02
+    df_snp.where(~mask, np.nan, inplace=True)
+
     df_pheno_with_covars = add_covars_to_phenotype_df(df_pheno=df_pheno)
 
     return df_snp, df_pheno_with_covars

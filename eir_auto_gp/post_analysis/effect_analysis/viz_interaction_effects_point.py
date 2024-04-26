@@ -148,7 +148,7 @@ def fit_models_for_combinations(
     snp2: str,
     target_name: str,
     allele_maps: dict[str, dict[str, str]],
-):
+) -> pd.DataFrame:
     results = []
     allele_order = ["REF", "HET", "ALT"]
     total_samples = len(df)

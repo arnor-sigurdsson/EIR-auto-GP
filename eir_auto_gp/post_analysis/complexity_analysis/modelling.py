@@ -214,7 +214,35 @@ def train_and_evaluate_linear(
     return results
 
 
+def _validate_linear_training_data(modelling_data: "ModelReadyObject") -> None:
+    input_train = modelling_data.input_train
+    input_val = modelling_data.input_val
+    input_test = modelling_data.input_test
+
+    names = ["input_train", "input_val", "input_test"]
+
+    for df, name in zip([input_train, input_val, input_test], names):
+        _check_and_report_na(df=df, df_name=name)
+
+
+def _check_and_report_na(df: pd.DataFrame, df_name: str) -> None:
+    nan_info = df.isna().sum()
+    nan_info_as_dict = nan_info.to_dict()
+    if nan_info.any():
+        for column, count in nan_info_as_dict.items():
+            logger.error(
+                f"Found NaN in column '{column}': {count} entries in {df_name}."
+            )
+        raise AssertionError(
+            "Data contains NaN values, which are not permitted, "
+            "this is a bug as they should have been imputed already."
+        )
+
+
 def _get_training_data(modelling_data: "ModelReadyObject") -> tuple:
+
+    _validate_linear_training_data(modelling_data=modelling_data)
+
     x_train = pd.concat(
         [
             modelling_data.input_train,

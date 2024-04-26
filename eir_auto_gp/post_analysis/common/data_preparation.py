@@ -95,6 +95,8 @@ class ModelData:
     df_tabular_input: pd.DataFrame
     df_target: pd.DataFrame
 
+    df_genotype_nan_mask: pd.DataFrame
+
 
 def get_subset_indices_and_names(
     bim_file_path: Path,
@@ -245,10 +247,12 @@ def set_up_model_data(
     assert df_genotype_input.index.equals(df_target.index)
     assert df_genotype_input.index.equals(df_tabular_input.index)
 
+    df_genotype_test_nan_mask = df_genotype_input.isnull().astype(int)
     model_data = ModelData(
         df_genotype_input=df_genotype_input,
         df_tabular_input=df_tabular_input,
         df_target=df_target,
+        df_genotype_nan_mask=df_genotype_test_nan_mask,
     )
 
     return model_data
@@ -285,10 +289,30 @@ def process_split_model_data(
     numerical_columns_ = transformers.numerical_columns
     categorical_columns_ = transformers.categorical_columns
 
-    continuous_imputer, categorical_imputer = setup_imputers(
+    df_tabular_combined = pd.concat(
+        [
+            split_model_data.train.df_tabular_input,
+            split_model_data.val.df_tabular_input,
+            split_model_data.test.df_tabular_input,
+        ]
+    )
+    continuous_imputer, categorical_imputer = setup_tabular_imputers(
         df_train=split_model_data.train.df_tabular_input,
+        df_combined=df_tabular_combined,
         categorical_columns=categorical_columns_,
         numerical_columns=numerical_columns_,
+    )
+
+    df_genotype_combined = pd.concat(
+        [
+            split_model_data.train.df_genotype_input,
+            split_model_data.val.df_genotype_input,
+            split_model_data.test.df_genotype_input,
+        ]
+    )
+    genotype_imputer = setup_genotype_imputers(
+        df_train=split_model_data.train.df_genotype_input,
+        df_combined=df_genotype_combined,
     )
 
     def process_model_data(
@@ -297,7 +321,7 @@ def process_split_model_data(
         df_tabular_input_encoded = model_data.df_tabular_input
         if len(df_tabular_input_encoded.columns) > 0:
 
-            df_tabular_input_imputed = apply_imputers(
+            df_tabular_input_imputed = apply_tabular_imputers(
                 df=df_tabular_input_encoded,
                 continuous_imputer=continuous_imputer,
                 categorical_imputer=categorical_imputer,
@@ -318,6 +342,12 @@ def process_split_model_data(
                 )
                 df_tabular_input_encoded[numerical_columns] = transformed_numerical
 
+        df_genotype_encoded = apply_genotype_imputers(
+            df=model_data.df_genotype_input,
+            genotype_imputer=genotype_imputer,
+        )
+        df_genotype_encoded = df_genotype_encoded.astype(int)
+
         target_data = model_data.df_target.values
         if task_type == "classification":
             label_encoder = transformers.target_label_encoder
@@ -331,9 +361,10 @@ def process_split_model_data(
         )
 
         return ModelData(
-            df_genotype_input=model_data.df_genotype_input,
+            df_genotype_input=df_genotype_encoded,
             df_tabular_input=df_tabular_input_encoded,
             df_target=df_target_standardized,
+            df_genotype_nan_mask=model_data.df_genotype_nan_mask,
         )
 
     return SplitModelData(
@@ -344,8 +375,40 @@ def process_split_model_data(
     )
 
 
-def setup_imputers(
-    df_train: pd.DataFrame, categorical_columns: list, numerical_columns: list
+def setup_genotype_imputers(
+    df_train: pd.DataFrame,
+    df_combined: pd.DataFrame,
+) -> Optional[SimpleImputer]:
+    categorical_imputer = None
+    if df_combined.isnull().any().any():
+        categorical_imputer = SimpleImputer(strategy="most_frequent")
+        missing_info = df_combined.isnull().sum()
+        logger.info(
+            f"Missing values in genotype columns before imputation:\n{missing_info}."
+            f"These missing values will be imputed for model training, but "
+            f"skipped during effect analysis."
+        )
+        categorical_imputer.fit(df_train)
+
+    return categorical_imputer
+
+
+def apply_genotype_imputers(
+    df: pd.DataFrame,
+    genotype_imputer: Optional[SimpleImputer],
+) -> pd.DataFrame:
+    if genotype_imputer:
+        imputed_values = genotype_imputer.transform(X=df)
+        df = pd.DataFrame(data=imputed_values, columns=df.columns, index=df.index)
+
+    return df
+
+
+def setup_tabular_imputers(
+    df_train: pd.DataFrame,
+    df_combined: pd.DataFrame,
+    categorical_columns: list,
+    numerical_columns: list,
 ) -> tuple[Optional[SimpleImputer], Optional[SimpleImputer]]:
     continuous_imputer = None
     categorical_imputer = None
@@ -359,8 +422,8 @@ def setup_imputers(
     if numerical_columns:
         logger.info(f"Setting up continuous imputer for columns: {numerical_columns}")
         continuous_imputer = SimpleImputer(strategy="mean")
-        if df_train[numerical_columns].isnull().any().any():
-            missing_info = df_train[numerical_columns].isnull().sum()
+        if df_combined[numerical_columns].isnull().any().any():
+            missing_info = df_combined[numerical_columns].isnull().sum()
             logger.info(
                 f"Missing values in numerical columns "
                 f"before imputation:\n{missing_info}"
@@ -372,8 +435,8 @@ def setup_imputers(
             f"Setting up categorical imputer for columns: {categorical_columns}"
         )
         categorical_imputer = SimpleImputer(strategy="most_frequent")
-        if df_train[categorical_columns].isnull().any().any():
-            missing_info = df_train[categorical_columns].isnull().sum()
+        if df_combined[categorical_columns].isnull().any().any():
+            missing_info = df_combined[categorical_columns].isnull().sum()
             logger.info(
                 f"Missing values in categorical columns before"
                 f" imputation:\n{missing_info}"
@@ -383,7 +446,7 @@ def setup_imputers(
     return continuous_imputer, categorical_imputer
 
 
-def apply_imputers(
+def apply_tabular_imputers(
     df: pd.DataFrame,
     continuous_imputer: Optional[SimpleImputer],
     categorical_imputer: Optional[SimpleImputer],
@@ -448,25 +511,29 @@ def load_tabular_data_into_df(
     labels_input_path: Path,
     experiment_info: ExperimentInfo,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+
+    ei = experiment_info
+
     all_cols = list(
         ["ID"]
-        + experiment_info.input_cat_columns
-        + experiment_info.input_con_columns
-        + experiment_info.output_cat_columns
-        + experiment_info.output_con_columns,
+        + ei.input_cat_columns
+        + ei.input_con_columns
+        + ei.output_cat_columns
+        + ei.output_con_columns,
     )
 
     df_labels = pd.read_csv(
-        filepath_or_buffer=labels_input_path, usecols=all_cols, index_col="ID"
+        filepath_or_buffer=labels_input_path,
+        usecols=all_cols,
+        index_col="ID",
     )
     df_labels.index = df_labels.index.astype(str)
 
-    df_input = df_labels[
-        experiment_info.input_cat_columns + experiment_info.input_con_columns
-    ]
-    df_target = df_labels[
-        experiment_info.output_cat_columns + experiment_info.output_con_columns
-    ]
+    input_cols = ei.input_cat_columns + ei.input_con_columns
+    df_input = df_labels[input_cols]
+
+    target_cols = ei.output_cat_columns + ei.output_con_columns
+    df_target = df_labels[target_cols]
     assert df_target.shape[1] == 1
 
     df_input.columns = ["COVAR_" + col for col in df_input.columns]
@@ -488,8 +555,8 @@ def load_deeplake_samples_into_df(
         sample_genotype = deeplake_sample["genotype"].numpy()
         sample_genotype_subset = sample_genotype[:, genotype_indices_to_load]
 
-        array_maxed = sample_genotype_subset.argmax(0)
-        array_maxed[array_maxed == 3] = -1
+        array_maxed = sample_genotype_subset.argmax(0).astype(np.float32)
+        array_maxed[array_maxed == 3] = np.nan
 
         ids.append(sample_id)
         genotype_arrays.append(array_maxed)
@@ -649,16 +716,21 @@ def split_model_data_object(
         y_train = model_data.df_target.loc[valid_ids_train]
         y_val = model_data.df_target.loc[valid_ids_val]
 
+    df_genotype_input_train = x_train[model_data.df_genotype_input.columns]
+    df_genotype_train_nan_mask = df_genotype_input_train.isnull().astype(int)
     train_data = ModelData(
-        df_genotype_input=x_train[model_data.df_genotype_input.columns],
+        df_genotype_input=df_genotype_input_train,
         df_tabular_input=x_train[model_data.df_tabular_input.columns],
         df_target=y_train,
+        df_genotype_nan_mask=df_genotype_train_nan_mask,
     )
 
+    df_genotype_input_val = x_val[model_data.df_genotype_input.columns]
     val_data = ModelData(
-        df_genotype_input=x_val[model_data.df_genotype_input.columns],
+        df_genotype_input=df_genotype_input_val,
         df_tabular_input=x_val[model_data.df_tabular_input.columns],
         df_target=y_val,
+        df_genotype_nan_mask=df_genotype_input_val.isnull().astype(int),
     )
 
     return train_data, val_data

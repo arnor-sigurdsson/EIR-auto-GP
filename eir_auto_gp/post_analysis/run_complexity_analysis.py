@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Literal
 
 import pandas as pd
 import seaborn as sns
-from aislib.misc_utils import ensure_path_exists
+from aislib.misc_utils import ensure_path_exists, get_logger
 
 from eir_auto_gp.post_analysis.common.data_preparation import (
     FitTransformers,
@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 sns.set_theme(style="whitegrid")
 sns.set(font_scale=1.2)
+
+logger = get_logger(name=__name__)
 
 
 def run_complexity_analysis(post_analysis_object: "PostAnalysisObject") -> None:
@@ -66,14 +68,19 @@ def train_and_evaluate_wrapper(
             one_hot_encode=conditions["one_hot_encode"],
             one_hot_drop_first=True,
         )
+        combination_string = "_".join(
+            f"{k}={v}" for k, v in conditions.items() if k != "one_hot_drop_first"
+        )
 
         if conditions["model_type"] == "xgboost":
+            logger.info(f"Running XGBoost with {combination_string}.")
             train_eval_results = train_and_evaluate_xgboost(
                 modelling_data=mro,
                 target_type=analysis_object.experiment_info.target_type,
                 eval_set=eval_set,
             )
         else:
+            logger.info(f"Running linear model with {combination_string}.")
             model_type = conditions["model_type"]
             train_eval_results = train_and_evaluate_linear(
                 modelling_data=mro,
