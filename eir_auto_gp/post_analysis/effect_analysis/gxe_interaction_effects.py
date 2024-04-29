@@ -24,6 +24,7 @@ warnings.filterwarnings(action="ignore", category=RuntimeWarning)
 def get_gxe_interaction_effects(
     df_inputs: pd.DataFrame,
     df_target: pd.DataFrame,
+    df_genotype_missing: pd.DataFrame,
     bim_file: Path,
     target_type: str,
 ) -> pd.DataFrame:
@@ -36,6 +37,7 @@ def get_gxe_interaction_effects(
 
     df_results = compute_interactions(
         df=df_combined,
+        df_genotype_missing=df_genotype_missing,
         target_name=target_name,
         allele_maps=allele_maps,
         target_type=target_type,
@@ -46,6 +48,7 @@ def get_gxe_interaction_effects(
 
 def compute_interactions(
     df: pd.DataFrame,
+    df_genotype_missing: pd.DataFrame,
     target_name: str,
     allele_maps: dict[str, dict[str, str]],
     target_type: str,
@@ -62,6 +65,7 @@ def compute_interactions(
         delayed(_compute_interaction_effect_wrapper)(
             df=df,
             target_name=target_name,
+            df_genotype_missing=df_genotype_missing,
             allele_maps=allele_maps,
             snp=snp,
             covar=covar,
@@ -82,6 +86,7 @@ def compute_interactions(
 def _compute_interaction_effect_wrapper(
     df: pd.DataFrame,
     target_name: str,
+    df_genotype_missing: pd.DataFrame,
     snp: str,
     covar: str,
     target_type: str,
@@ -99,11 +104,13 @@ def _compute_interaction_effect_wrapper(
     )
 
     df_cur = df[[target_name, snp, *covar_columns]].dropna()
+    mask = df_genotype_missing[snp] == 0
+    df_cur_no_na = df_cur[mask]
 
     fit_func = get_statsmodels_fit_function(target_type=target_type)
 
     try:
-        result = fit_func(formula=formula, data=df_cur).fit(disp=0)
+        result = fit_func(formula=formula, data=df_cur_no_na).fit(disp=0)
         if hasattr(result, "mle_retvals"):
             if not result.mle_retvals["converged"]:
                 raise RuntimeError("Model did not converge.")

@@ -230,9 +230,10 @@ def _check_and_report_na(df: pd.DataFrame, df_name: str) -> None:
     nan_info_as_dict = nan_info.to_dict()
     if nan_info.any():
         for column, count in nan_info_as_dict.items():
-            logger.error(
-                f"Found NaN in column '{column}': {count} entries in {df_name}."
-            )
+            if count > 0:
+                logger.error(
+                    f"Found NaN in column '{column}': {count} entries in {df_name}."
+                )
         raise AssertionError(
             "Data contains NaN values, which are not permitted, "
             "this is a bug as they should have been imputed already."

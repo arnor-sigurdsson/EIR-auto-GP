@@ -384,7 +384,7 @@ def setup_genotype_imputers(
         categorical_imputer = SimpleImputer(strategy="most_frequent")
         missing_info = df_combined.isnull().sum()
         logger.info(
-            f"Missing values in genotype columns before imputation:\n{missing_info}."
+            f"Missing values in genotype columns before imputation:\n{missing_info}.\n"
             f"These missing values will be imputed for model training, but "
             f"skipped during effect analysis."
         )
