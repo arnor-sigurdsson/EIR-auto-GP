@@ -116,6 +116,7 @@ def run_effect_analysis(post_analysis_object: "PostAnalysisObject") -> None:
     df_gxe_interaction_effects = get_gxe_interaction_effects(
         df_inputs=df_inputs,
         df_target=df_target,
+        df_genotype_missing=df_genotype_missing,
         bim_file=pao.data_paths.snp_bim_path,
         target_type=pao.experiment_info.target_type,
     )
