@@ -107,20 +107,36 @@ def run_grouped_interaction_analysis(
 
 def _get_snp_pairs_to_check(
     df_interaction_effects: pd.DataFrame,
-    top_n: Optional[int],
-) -> list[list[str, str]]:
+    top_n: Optional[int] = None,
+    p_value_threshold: float | str = "auto",
+) -> list[list[str]]:
+    if p_value_threshold == "auto":
+        num_tests = df_interaction_effects["KEY"].nunique()
+        p_value_threshold = 0.05 / num_tests
+    elif not isinstance(p_value_threshold, float):
+        raise ValueError("p_value_threshold must be 'auto' or a float.")
+
+    logger.info(
+        "Using p-value threshold of %f for grouped analysis.", p_value_threshold
+    )
+
     interaction_keys = df_interaction_effects["KEY"].unique()
+    df_all = df_interaction_effects
+    df_ie = df_all[df_all.index.isin(interaction_keys)].copy()
 
-    df_ie = df_interaction_effects
-    df_interactions = df_ie[df_ie.index.isin(interaction_keys)]
+    df_ie_filtered = df_ie[df_ie["P>|t|"] <= p_value_threshold]
+    df_ie_interaction_keys = df_ie_filtered["KEY"].unique()
+    assert len(df_ie_interaction_keys) == len(df_ie_filtered)
 
-    df_to_check = df_interactions.copy()
+    df_to_check = df_ie_filtered.copy()
 
     if top_n is not None:
-        df_to_check = df_interactions.sort_values(
+        df_to_check = df_ie_filtered.sort_values(
             "Coefficient",
             ascending=False,
         ).head(top_n)
+
+    logger.info("Checking %d SNP pairs for grouped analysis.", len(df_to_check))
 
     return df_to_check["KEY"].str.split("--:--", expand=True).to_numpy().tolist()
 
