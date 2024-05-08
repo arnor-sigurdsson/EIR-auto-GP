@@ -670,14 +670,18 @@ def maybe_gather_ids(
 
 
 def _log_and_replace_inf(df: pd.DataFrame, data_name: str) -> pd.DataFrame:
-    inf_mask = np.isinf(df)
+    numeric_cols = df.select_dtypes(include=[np.number])
+    inf_mask = np.isinf(numeric_cols)
+
     if inf_mask.any().any():
         inf_summary = inf_mask.sum()
         logger.error(
             f"Found Inf values in '{data_name}': {inf_summary}. "
             f"Replacing Inf values with NaN."
         )
-        df = df.replace([np.inf, -np.inf], np.nan)
+        for col in numeric_cols.columns[inf_mask.any()]:
+            df[col] = df[col].replace([np.inf, -np.inf], np.nan)
+
     return df
 
 
