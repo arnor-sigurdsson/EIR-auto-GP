@@ -222,22 +222,37 @@ def _validate_linear_training_data(modelling_data: "ModelReadyObject") -> None:
     names = ["input_train", "input_val", "input_test"]
 
     for df, name in zip([input_train, input_val, input_test], names):
-        _check_and_report_na(df=df, df_name=name)
+        _check_and_report_values(df=df, df_name=name)
 
 
-def _check_and_report_na(df: pd.DataFrame, df_name: str) -> None:
+def _check_and_report_values(df: pd.DataFrame, df_name: str) -> None:
     nan_info = df.isna().sum()
     nan_info_as_dict = nan_info.to_dict()
-    if nan_info.any():
-        for column, count in nan_info_as_dict.items():
-            if count > 0:
+    has_nan = nan_info.any()
+
+    inf_info = df.replace([np.inf, -np.inf], np.nan).isna().sum() - nan_info
+    inf_info_as_dict = inf_info.to_dict()
+    has_inf = inf_info.any()
+
+    if has_nan or has_inf:
+        for column, nan_count in nan_info_as_dict.items():
+            if nan_count > 0:
                 logger.error(
-                    f"Found NaN in column '{column}': {count} entries in {df_name}."
+                    f"Found NaN in column '{column}': {nan_count} entries in {df_name}."
                 )
-        raise AssertionError(
-            "Data contains NaN values, which are not permitted, "
-            "this is a bug as they should have been imputed already."
+        for column, inf_count in inf_info_as_dict.items():
+            if inf_count > 0:
+                logger.error(
+                    f"Found Inf in column '{column}': {inf_count} entries in {df_name}."
+                )
+
+        error_message = (
+            "Data contains invalid values (NaN/Inf), "
+            "which are not permitted. "
+            "This is a bug as they should have been imputed "
+            "or managed already."
         )
+        raise AssertionError(error_message)
 
 
 def _get_training_data(modelling_data: "ModelReadyObject") -> tuple:

@@ -212,8 +212,7 @@ def _extract_cluster_info_from_interaction_df(
 
     for key, df_slice in df_interactions.groupby("KEY"):
         df_slice = df_slice.reset_index()
-        snp_1 = df_slice.iloc[1]["allele"].split(" ")[0]
-        snp_2 = df_slice.iloc[-2]["allele"].split(" ")[0]
+        snp_1, snp_2 = str(key).split("--:--")
 
         snp_1_chr = snp_chr_map[snp_1]
         snp_2_chr = snp_chr_map[snp_2]

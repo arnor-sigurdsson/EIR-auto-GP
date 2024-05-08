@@ -221,6 +221,7 @@ def set_up_model_data(
     experiment_info: ExperimentInfo,
     genotype_indices_to_load: np.ndarray,
     top_snps_list: list[str],
+    data_name: str,
 ) -> ModelData:
     df_genotype_input = load_deeplake_samples_into_df(
         genotype_input_path=genotype_input_path,
@@ -241,6 +242,16 @@ def set_up_model_data(
         df_target=df_target,
         df_genotype_input=df_genotype_input,
         df_tabular_input=df_tabular_input,
+        data_name=data_name,
+    )
+
+    df_tabular_input = _log_and_replace_inf(
+        df=df_tabular_input,
+        data_name=f"{data_name} tabular input",
+    )
+    df_genotype_input = _log_and_replace_inf(
+        df=df_genotype_input,
+        data_name=f"{data_name} genotype input",
     )
 
     assert df_genotype_input.shape[0] == df_target.shape[0] == df_tabular_input.shape[0]
@@ -262,8 +273,11 @@ def _handle_missing_target_values(
     df_target: pd.DataFrame,
     df_genotype_input: pd.DataFrame,
     df_tabular_input: pd.DataFrame,
+    data_name: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    logger.info("Handling missing target values, target shape: %s", df_target.shape)
+    logger.info("Handling missing/Inf target values, target shape: %s", df_target.shape)
+
+    df_target = _log_and_replace_inf(df=df_target, data_name=f"{data_name} target")
 
     df_target = df_target.dropna()
     df_genotype_input = df_genotype_input.loc[df_target.index]
@@ -596,6 +610,7 @@ def set_up_split_model_data(
         experiment_info=experiment_info,
         genotype_indices_to_load=subset_indices,
         top_snps_list=top_snps_list,
+        data_name="Train and valid",
     )
 
     train_ids, valid_ids, _ = maybe_gather_ids(split_ids_path=data_paths.split_ids_path)
@@ -613,6 +628,7 @@ def set_up_split_model_data(
         experiment_info=experiment_info,
         genotype_indices_to_load=subset_indices,
         top_snps_list=top_snps_list,
+        data_name="Test",
     )
 
     split_model_data_raw = SplitModelData(
@@ -651,6 +667,18 @@ def maybe_gather_ids(
     test_ids = list(test_file.read_text().split())
 
     return train_ids, val_ids, test_ids
+
+
+def _log_and_replace_inf(df: pd.DataFrame, data_name: str) -> pd.DataFrame:
+    inf_mask = np.isinf(df)
+    if inf_mask.any().any():
+        inf_summary = inf_mask.sum()
+        logger.error(
+            f"Found Inf values in '{data_name}': {inf_summary}. "
+            f"Replacing Inf values with NaN."
+        )
+        df = df.replace([np.inf, -np.inf], np.nan)
+    return df
 
 
 def validate_split_model_data(split_model_data: "SplitModelData") -> None:
