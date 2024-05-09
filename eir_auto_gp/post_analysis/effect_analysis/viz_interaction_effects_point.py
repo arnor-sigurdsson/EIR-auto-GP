@@ -80,6 +80,10 @@ def run_grouped_interaction_analysis(
 
         all_results.append(df_results)
 
+    if not all_results:
+        logger.warning("No significant SNP pairs found for grouped analysis.")
+        return
+
     df_all_results = pd.concat(all_results)
 
     df_all_results.to_csv(
