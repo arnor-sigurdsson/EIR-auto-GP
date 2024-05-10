@@ -22,7 +22,7 @@ def _get_test_modelling_cl_command(
         "--global_output_folder runs/simulated_test "
         f"--output_{target_type}_columns phenotype "
         f"--input_con_columns CON_RANDOM CON_COMPUTED "
-        f"--input_cat_columns CAT_RANDOM CAT_COMPUTED "
+        f"--input_cat_columns CAT_RANDOM CAT_COMPUTED CAT_IMBALANCED "
         "--folds 2 "
         f"--feature_selection {feature_selection} "
         "--n_dl_feature_selection_setup_folds 1 "

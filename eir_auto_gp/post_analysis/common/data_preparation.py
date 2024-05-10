@@ -269,6 +269,68 @@ def set_up_model_data(
     return model_data
 
 
+def load_deeplake_samples_into_df(
+    genotype_input_path: Path,
+    genotype_indices_to_load: np.ndarray,
+    top_snps_list: list[str],
+) -> pd.DataFrame:
+    deeplake_ds = load_deeplake_dataset(data_source=str(genotype_input_path))
+    ids = []
+    genotype_arrays = []
+
+    for deeplake_sample in deeplake_ds:
+        sample_id = deeplake_sample["ID"].text()
+        sample_genotype = deeplake_sample["genotype"].numpy()
+        sample_genotype_subset = sample_genotype[:, genotype_indices_to_load]
+
+        array_maxed = sample_genotype_subset.argmax(0).astype(np.float32)
+        array_maxed[array_maxed == 3] = np.nan
+
+        ids.append(sample_id)
+        genotype_arrays.append(array_maxed)
+
+    genotype_array = np.stack(genotype_arrays, axis=0)
+    df_genotype = pd.DataFrame(data=genotype_array, columns=top_snps_list, index=ids)
+    df_genotype.index.name = "ID"
+    df_genotype.index = df_genotype.index.astype(str)
+
+    return df_genotype
+
+
+def load_tabular_data_into_df(
+    labels_input_path: Path,
+    experiment_info: ExperimentInfo,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+
+    ei = experiment_info
+
+    all_cols = list(
+        ["ID"]
+        + ei.input_cat_columns
+        + ei.input_con_columns
+        + ei.output_cat_columns
+        + ei.output_con_columns,
+    )
+
+    df_labels = pd.read_csv(
+        filepath_or_buffer=labels_input_path,
+        usecols=all_cols,
+        index_col="ID",
+    )
+    df_labels.index = df_labels.index.astype(str)
+
+    input_cols = ei.input_cat_columns + ei.input_con_columns
+    df_input = df_labels[input_cols]
+
+    target_cols = ei.output_cat_columns + ei.output_con_columns
+    df_target = df_labels[target_cols]
+    assert df_target.shape[1] == 1
+
+    df_input.columns = ["COVAR_" + col for col in df_input.columns]
+
+    return df_input, df_target
+
+
 def _handle_missing_target_values(
     df_target: pd.DataFrame,
     df_genotype_input: pd.DataFrame,
@@ -310,11 +372,17 @@ def process_split_model_data(
             split_model_data.test.df_tabular_input,
         ]
     )
+
     continuous_imputer, categorical_imputer = setup_tabular_imputers(
         df_train=split_model_data.train.df_tabular_input,
         df_combined=df_tabular_combined,
         categorical_columns=categorical_columns_,
         numerical_columns=numerical_columns_,
+    )
+
+    categorical_maps = compute_categorical_maps(
+        df_combined=df_tabular_combined,
+        categorical_columns=categorical_columns_,
     )
 
     df_genotype_combined = pd.concat(
@@ -343,8 +411,9 @@ def process_split_model_data(
                 numerical_columns=numerical_columns_,
             )
 
-            df_tabular_input_encoded = pd.get_dummies(
-                data=df_tabular_input_imputed,
+            df_tabular_input_encoded = apply_one_hot_encoding(
+                df_base=df_tabular_input_imputed,
+                category_maps=categorical_maps,
                 drop_first=True,
             )
 
@@ -381,12 +450,73 @@ def process_split_model_data(
             df_genotype_nan_mask=model_data.df_genotype_nan_mask,
         )
 
-    return SplitModelData(
+    processed = SplitModelData(
         train=process_model_data(model_data=split_model_data.train),
         val=process_model_data(model_data=split_model_data.val),
         test=process_model_data(model_data=split_model_data.test),
         transformers=transformers,
     )
+
+    validate_processed_split_model_data(split_model_data=processed)
+
+    return processed
+
+
+def compute_categorical_maps(
+    df_combined: pd.DataFrame, categorical_columns: list[str]
+) -> dict[str, list[str]]:
+    category_maps = {
+        col: sorted(df_combined[col].dropna().unique().tolist())
+        for col in categorical_columns
+    }
+    return category_maps
+
+
+def apply_one_hot_encoding(
+    df_base: pd.DataFrame,
+    category_maps: dict[str, list[str]],
+    drop_first: bool = True,
+) -> pd.DataFrame:
+
+    df = df_base.copy()
+    for col, categories in category_maps.items():
+        for category in categories:
+            df[f"{col}_{category}"] = np.array(df[col] == category).astype(int)
+        if drop_first and len(categories) > 1:
+            drop_category = categories[0]
+            df = df.drop(f"{col}_{drop_category}", axis=1)
+
+    return df.drop(columns=category_maps.keys())
+
+
+def validate_processed_split_model_data(split_model_data: "SplitModelData") -> None:
+    train = split_model_data.train
+    val = split_model_data.val
+    test = split_model_data.test
+
+    train_tab = train.df_tabular_input
+    val_tab = val.df_tabular_input
+    test_tab = test.df_tabular_input
+
+    assert train_tab.shape[1] == val_tab.shape[1] == test_tab.shape[1]
+    assert train_tab.columns.equals(val_tab.columns)
+    assert train_tab.columns.equals(test_tab.columns)
+
+    train_gen = train.df_genotype_input
+    val_gen = val.df_genotype_input
+    test_gen = test.df_genotype_input
+
+    assert train_gen.shape[1] == val_gen.shape[1] == test_gen.shape[1]
+    assert train_gen.columns.equals(val_gen.columns)
+    assert train_gen.columns.equals(test_gen.columns)
+
+    train_target = train.df_target
+    val_target = val.df_target
+    test_target = test.df_target
+
+    assert train_target.shape[1] == val_target.shape[1] == test_target.shape[1]
+    assert train_target.columns.equals(val_target.columns)
+    assert train_target.columns.equals(test_target.columns)
 
 
 def setup_genotype_imputers(
@@ -519,68 +649,6 @@ def _set_up_transformers(
         numerical_columns=numerical_columns.tolist(),
         categorical_columns=categorical_columns.tolist(),
     )
-
-
-def load_tabular_data_into_df(
-    labels_input_path: Path,
-    experiment_info: ExperimentInfo,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-
-    ei = experiment_info
-
-    all_cols = list(
-        ["ID"]
-        + ei.input_cat_columns
-        + ei.input_con_columns
-        + ei.output_cat_columns
-        + ei.output_con_columns,
-    )
-
-    df_labels = pd.read_csv(
-        filepath_or_buffer=labels_input_path,
-        usecols=all_cols,
-        index_col="ID",
-    )
-    df_labels.index = df_labels.index.astype(str)
-
-    input_cols = ei.input_cat_columns + ei.input_con_columns
-    df_input = df_labels[input_cols]
-
-    target_cols = ei.output_cat_columns + ei.output_con_columns
-    df_target = df_labels[target_cols]
-    assert df_target.shape[1] == 1
-
-    df_input.columns = ["COVAR_" + col for col in df_input.columns]
-
-    return df_input, df_target
-
-
-def load_deeplake_samples_into_df(
-    genotype_input_path: Path,
-    genotype_indices_to_load: np.ndarray,
-    top_snps_list: list[str],
-) -> pd.DataFrame:
-    deeplake_ds = load_deeplake_dataset(data_source=str(genotype_input_path))
-    ids = []
-    genotype_arrays = []
-
-    for deeplake_sample in deeplake_ds:
-        sample_id = deeplake_sample["ID"].text()
-        sample_genotype = deeplake_sample["genotype"].numpy()
-        sample_genotype_subset = sample_genotype[:, genotype_indices_to_load]
-
-        array_maxed = sample_genotype_subset.argmax(0).astype(np.float32)
-        array_maxed[array_maxed == 3] = np.nan
-
-        ids.append(sample_id)
-        genotype_arrays.append(array_maxed)
-
-    genotype_array = np.stack(genotype_arrays, axis=0)
-    df_genotype = pd.DataFrame(data=genotype_array, columns=top_snps_list, index=ids)
-    df_genotype.index.name = "ID"
-    df_genotype.index = df_genotype.index.astype(str)
-
-    return df_genotype
 
 
 @dataclass()

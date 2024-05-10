@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Generator, Optional
+from warnings import simplefilter
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,6 +19,8 @@ from eir_auto_gp.post_analysis.run_complexity_analysis import (
 
 if TYPE_CHECKING:
     from eir_auto_gp.post_analysis.run_post_analysis import PostAnalysisObject
+
+simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 logger = get_logger(name=__name__)
 
@@ -262,13 +265,8 @@ def plot_metric_figure(
     sns.set(style="whitegrid", palette="deep")
 
     change_col = f"{metric}_change"
-    y_size = 0.75 * len(df["model_type"].unique())
-
-    longest_string = max(df["model_type"], key=len)
-    x_size = max(8, int(0.35 * len(longest_string)))
-    plt.figure(figsize=(x_size, y_size))
-
     direction = "min" if metric == "rmse" else "max"
+
     df_parsed = prepare_dataframe_with_other_terms(
         df=df,
         metric_change=change_col,
@@ -276,6 +274,11 @@ def plot_metric_figure(
         top_n=3,
         direction=direction,
     )
+
+    y_size = 0.75 * len(df_parsed["model_type"].unique())
+    longest_string = max(df_parsed["model_type"], key=len)
+    x_size = max(8, int(0.35 * len(longest_string)))
+    plt.figure(figsize=(x_size, y_size))
 
     ax = sns.barplot(
         data=df_parsed,
