@@ -18,20 +18,22 @@ warnings.filterwarnings(action="ignore", category=RuntimeWarning)
 
 
 def get_allele_effects(
-    df_genotype: pd.DataFrame,
+    df_inputs: pd.DataFrame,
     df_target: pd.DataFrame,
+    df_genotype_missing: pd.DataFrame,
     bim_file: Path,
     target_type: str,
 ) -> pd.DataFrame:
     target_name = df_target.columns[0]
-    df_combined = pd.concat(objs=[df_target, df_genotype], axis=1)
+    df_combined = pd.concat(objs=[df_target, df_inputs], axis=1)
 
     df_bim = read_bim(bim_file_path=str(bim_file))
-    rs_ids = df_genotype.columns
+    rs_ids = [i for i in df_inputs.columns if not i.startswith("COVAR_")]
     allele_maps = get_snp_allele_maps(df_bim=df_bim, snp_ids=rs_ids)
 
     df_results = get_all_linear_results(
         df=df_combined,
+        df_genotype_missing=df_genotype_missing,
         target_name=target_name,
         allele_maps=allele_maps,
         target_type=target_type,
@@ -49,23 +51,28 @@ def get_allele_effects(
 
 def get_all_linear_results(
     df: pd.DataFrame,
+    df_genotype_missing: pd.DataFrame,
     target_name: str,
     allele_maps: dict[str, dict[str, str]],
     target_type: str,
 ) -> pd.DataFrame:
     logger.info("Gathering all linear allele effect results for '%s'.", target_name)
 
+    covar_columns = [i for i in df.columns if i.startswith("COVAR_")]
+
     parallel_worker = Parallel(n_jobs=-1)
     all_results = parallel_worker(
         delayed(_compute_single_snp_effect_wrapper)(
             df=df,
+            df_genotype_missing=df_genotype_missing,
             target_name=target_name,
             allele_maps=allele_maps,
-            snp=snp,
+            snp=col,
             model=target_type,
+            covar_columns=covar_columns,
         )
-        for snp in df.columns
-        if snp != target_name
+        for col in df.columns
+        if col != target_name and not col.startswith("COVAR_")
     )
     all_results = [i for i in all_results if i is not None]
 
@@ -77,15 +84,21 @@ def get_all_linear_results(
 
 def _compute_single_snp_effect_wrapper(
     df: pd.DataFrame,
+    df_genotype_missing: pd.DataFrame,
     target_name: str,
     snp: str,
     allele_maps: dict[str, dict[str, str]],
     model: str,
+    covar_columns: list[str],
 ) -> Optional[pd.DataFrame]:
-    formula = build_basic_fit_formula(target=target_name, snp=snp)
+    formula = build_basic_fit_formula(
+        target=target_name,
+        snp=snp,
+        covar_columns=covar_columns,
+    )
 
-    df_cur = df[[target_name, snp]]
-    df_cur_no_na = df_cur[df_cur[snp] != -1]
+    df_cur = df[[target_name, snp, *covar_columns]]
+    df_cur_no_na = df_cur[df_genotype_missing[snp] == 0]
 
     n_per_group_dict = df_cur_no_na[snp].value_counts().to_dict()
     n_per_group_dict = {
@@ -136,17 +149,24 @@ def get_statsmodels_fit_function(target_type: str) -> Callable:
     return func
 
 
-def build_basic_fit_formula(target: str, snp: str) -> str:
-    return f"Q('{target}') ~ C(Q('{snp}'))"
+def build_basic_fit_formula(target: str, snp: str, covar_columns: list[str]) -> str:
+    formula = f"Q('{target}') ~ C(Q('{snp}'))"
+
+    for covar in covar_columns:
+        formula += f" + Q('{covar}')"
+
+    return formula
 
 
 def get_snp_allele_maps(
-    df_bim: pd.DataFrame, snp_ids: Iterable[str]
+    df_bim: pd.DataFrame,
+    snp_ids: Iterable[str],
 ) -> dict[str, dict[str, str]]:
     snp_allele_maps = {}
     for rs_id in snp_ids:
         snp_allele_maps[rs_id] = get_snp_allele_nucleotide_map(
-            df_bim=df_bim, rs_id=rs_id
+            df_bim=df_bim,
+            rs_id=rs_id,
         )
 
     return snp_allele_maps
@@ -194,7 +214,7 @@ def build_df_from_basic_results(
         snp=snp,
     )
 
-    df_renamed["n"] = df_renamed.index.map(n_per_group_dict)
+    df_renamed["n"] = [n_per_group_dict.get(i, np.nan) for i in df_renamed["Label"]]
 
     df_renamed = df_renamed.rename(
         columns={
@@ -211,7 +231,9 @@ def build_df_from_basic_results(
 
 
 def _rename_linear_regression_index(
-    df_results: pd.DataFrame, allele_maps: dict[str, dict[str, str]], snp: str
+    df_results: pd.DataFrame,
+    allele_maps: dict[str, dict[str, str]],
+    snp: str,
 ) -> pd.DataFrame:
     df_results_copy = df_results.copy()
 
@@ -234,6 +256,21 @@ def _rename_linear_regression_index(
             cur_allele = snp_allele_map[key]
             cur_mapping[index] = f"{snp} {cur_allele}"
             labels.append(key)
+        elif "Q(" in index:
+            start_pos = index.find("'") + 1
+            end_pos = index.find("'", start_pos)
+            covar_name = index[start_pos:end_pos]
+
+            if "[T." in index and "]" in index:
+                start = index.find("[T.") + 3
+                end = index.find("]")
+                group = index[start:end]
+                group_name = f"{covar_name} (Group {group})"
+            else:
+                group_name = covar_name
+
+            cur_mapping[index] = group_name
+            labels.append(group_name)
         else:
             raise ValueError(f"Unexpected index format: {index}")
 

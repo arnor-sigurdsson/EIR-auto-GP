@@ -29,6 +29,10 @@ def generate_interaction_snp_graph_figure(
         p_threshold="auto",
     )
 
+    if len(df_interaction_effects_filtered) == 0:
+        logger.info("No interactions found for SNP interaction graph figure, skipping.")
+        return
+
     train_interaction_info = _extract_cluster_info_from_interaction_df(
         df_interactions=df_interaction_effects_filtered,
         bim_file_path=bim_file_path,
@@ -90,6 +94,8 @@ def _filter_interaction_df_for_p_value(
 
     logger.info(
         "Keeping %d interactions out of %d for SNP interaction graph figure.",
+        len(valid_keys),
+        len(interaction_df),
     )
 
     df_filtered = df[df["KEY"].isin(valid_keys)]
@@ -206,8 +212,7 @@ def _extract_cluster_info_from_interaction_df(
 
     for key, df_slice in df_interactions.groupby("KEY"):
         df_slice = df_slice.reset_index()
-        snp_1 = df_slice.iloc[1]["allele"].split(" ")[0]
-        snp_2 = df_slice.iloc[-2]["allele"].split(" ")[0]
+        snp_1, snp_2 = str(key).split("--:--")
 
         snp_1_chr = snp_chr_map[snp_1]
         snp_2_chr = snp_chr_map[snp_2]

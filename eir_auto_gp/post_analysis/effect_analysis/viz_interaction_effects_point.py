@@ -25,7 +25,7 @@ def run_grouped_interaction_analysis(
     output_folder: Path,
 ) -> None:
     df_bim = read_bim(bim_file_path=str(bim_file))
-    snp_ids = df_genotype.columns
+    snp_ids = [i for i in df_genotype.columns if not i.startswith("COVAR_")]
     allele_maps = get_snp_allele_maps(df_bim=df_bim, snp_ids=snp_ids)
 
     df_genotype_prepared = prepare_genotype_data(
@@ -80,6 +80,10 @@ def run_grouped_interaction_analysis(
 
         all_results.append(df_results)
 
+    if not all_results:
+        logger.warning("No significant SNP pairs found for grouped analysis.")
+        return
+
     df_all_results = pd.concat(all_results)
 
     df_all_results.to_csv(
@@ -107,20 +111,36 @@ def run_grouped_interaction_analysis(
 
 def _get_snp_pairs_to_check(
     df_interaction_effects: pd.DataFrame,
-    top_n: Optional[int],
-) -> list[list[str, str]]:
+    top_n: Optional[int] = None,
+    p_value_threshold: float | str = "auto",
+) -> list[list[str]]:
+    if p_value_threshold == "auto":
+        num_tests = df_interaction_effects["KEY"].nunique()
+        p_value_threshold = 0.05 / num_tests
+    elif not isinstance(p_value_threshold, float):
+        raise ValueError("p_value_threshold must be 'auto' or a float.")
+
+    logger.info(
+        "Using p-value threshold of %f for grouped analysis.", p_value_threshold
+    )
+
     interaction_keys = df_interaction_effects["KEY"].unique()
+    df_all = df_interaction_effects
+    df_ie = df_all[df_all.index.isin(interaction_keys)].copy()
 
-    df_ie = df_interaction_effects
-    df_interactions = df_ie[df_ie.index.isin(interaction_keys)]
+    df_ie_filtered = df_ie[df_ie["P>|t|"] <= p_value_threshold]
+    df_ie_interaction_keys = df_ie_filtered["KEY"].unique()
+    assert len(df_ie_interaction_keys) == len(df_ie_filtered)
 
-    df_to_check = df_interactions.copy()
+    df_to_check = df_ie_filtered.copy()
 
     if top_n is not None:
-        df_to_check = df_interactions.sort_values(
+        df_to_check = df_ie_filtered.sort_values(
             "Coefficient",
             ascending=False,
         ).head(top_n)
+
+    logger.info("Checking %d SNP pairs for grouped analysis.", len(df_to_check))
 
     return df_to_check["KEY"].str.split("--:--", expand=True).to_numpy().tolist()
 
@@ -148,7 +168,7 @@ def fit_models_for_combinations(
     snp2: str,
     target_name: str,
     allele_maps: dict[str, dict[str, str]],
-):
+) -> pd.DataFrame:
     results = []
     allele_order = ["REF", "HET", "ALT"]
     total_samples = len(df)

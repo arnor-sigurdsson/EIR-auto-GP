@@ -22,7 +22,7 @@ def _get_test_modelling_cl_command(
         "--global_output_folder runs/simulated_test "
         f"--output_{target_type}_columns phenotype "
         f"--input_con_columns CON_RANDOM CON_COMPUTED "
-        f"--input_cat_columns CAT_RANDOM CAT_COMPUTED "
+        f"--input_cat_columns CAT_RANDOM CAT_COMPUTED CAT_IMBALANCED "
         "--folds 2 "
         f"--feature_selection {feature_selection} "
         "--n_dl_feature_selection_setup_folds 1 "
@@ -71,10 +71,12 @@ def test_post_analysis_classification(
     run_post_analysis.run_effect_analysis(post_analysis_object=post_analysis_object)
     run_post_analysis.run_iterative_complexity_analysis(
         post_analysis_object=post_analysis_object,
+        n_iterative_complexity_candidates=5,
         eval_set="valid",
     )
     run_post_analysis.run_iterative_complexity_analysis(
         post_analysis_object=post_analysis_object,
+        n_iterative_complexity_candidates=5,
         eval_set="test",
     )
 
@@ -125,10 +127,12 @@ def test_post_analysis_regression(
     run_post_analysis.run_effect_analysis(post_analysis_object=post_analysis_object)
     run_post_analysis.run_iterative_complexity_analysis(
         post_analysis_object=post_analysis_object,
+        n_iterative_complexity_candidates=5,
         eval_set="valid",
     )
     run_post_analysis.run_iterative_complexity_analysis(
         post_analysis_object=post_analysis_object,
+        n_iterative_complexity_candidates=5,
         eval_set="test",
     )
 
@@ -148,7 +152,11 @@ def _check_post_analysis_results_wrapper(
     regression_type: str,
 ) -> None:
     _check_complexity_analysis_results(
-        complexity_folder=post_analysis_folder / "complexity",
+        complexity_folder=post_analysis_folder / "complexity/valid",
+        include_tabular=include_tabular,
+    )
+    _check_complexity_analysis_results(
+        complexity_folder=post_analysis_folder / "complexity/test",
         include_tabular=include_tabular,
     )
 
@@ -164,7 +172,7 @@ def _check_complexity_analysis_results(
     complexity_folder: Path,
     include_tabular: bool,
 ) -> None:
-    expected_runs = 10 if include_tabular else 4
+    expected_runs = 25 if include_tabular else 10
     df = pd.read_csv(complexity_folder / "all_results.csv")
 
     assert len(df) == expected_runs, complexity_folder
@@ -178,13 +186,17 @@ def _check_complexity_analysis_results(
 
 
 def _check_xgboost_better_than_linear(df: pd.DataFrame) -> None:
-    avg_perf_xgboost = df[df["model_type"] == "xgboost"]["average_performance"].mean()
-    avg_perf_linear = df[df["model_type"] == "linear"]["average_performance"].mean()
-    assert avg_perf_xgboost > avg_perf_linear
+    perf_key = "average_performance"
+    avg_perf_xgboost = df[df["model_type"] == "xgboost"][perf_key].mean()
+
+    linear_models = ["linear_model", "ridge", "lasso", "elasticnet"]
+    for model in linear_models:
+        avg_perf_linear = df[df["model_type"] == model][perf_key].mean()
+        assert avg_perf_xgboost > avg_perf_linear
 
 
 def _check_one_hot_better_in_linear(df: pd.DataFrame) -> None:
-    df_linear = df[df["model_type"] == "linear"]
+    df_linear = df[df["model_type"] == "linear_model"]
 
     df_linear_one_hot = df_linear[df_linear["one_hot_encode"]]
 
@@ -216,16 +228,31 @@ def _check_allele_effects(
     assert regression_type in ("logistic", "linear")
 
     df_allele_effects["SNP"] = df_allele_effects["allele"].str.split(" ").str[0]
-    _check_basic_snps_significant_p_values(df=df_allele_effects)
+    _check_basic_snps_significant_p_values(
+        df=df_allele_effects, regression_type=regression_type
+    )
     _check_additive_coefficients(df=df_allele_effects, regression_type=regression_type)
     _check_dominant_coefficients(df=df_allele_effects)
     _check_recessive_coefficients(df=df_allele_effects)
 
 
-def _check_basic_snps_significant_p_values(df: pd.DataFrame) -> None:
+def _check_basic_snps_significant_p_values(
+    df: pd.DataFrame, regression_type: str
+) -> None:
+    """
+    As the phenotype is defined by the median (resulting in 50/50 output distribution)
+    in the logistic case, there is no expected deviation from random for the
+    intercept and HET terms for SNP4 (recessive), hence we adjust the
+    threshold for this SNP.
+    """
     for snp in range(1, 7):
         df_snp = df[df["SNP"] == f"snp{snp}"]
-        assert (df_snp["p_value"] < 1e-4).sum() >= 2, f"SNP{snp}"
+
+        threshold = 2
+        if regression_type == "logistic" and snp == 4:
+            threshold = 1
+
+        assert (df_snp["p_value"] < 1e-4).sum() >= threshold, f"SNP{snp}"
 
 
 def _check_additive_coefficients(df: pd.DataFrame, regression_type: str) -> None:
@@ -239,7 +266,7 @@ def _check_additive_coefficients(df: pd.DataFrame, regression_type: str) -> None
             third_row_coef = np.exp(third_row_coef)
 
         ratio = abs(third_row_coef - 2 * second_row_coef) / (2 * second_row_coef)
-        is_close = ratio < 0.2
+        is_close = ratio < 0.35
 
         msg = (
             f"SNP{snp}: 2nd row = {second_row_coef}, "

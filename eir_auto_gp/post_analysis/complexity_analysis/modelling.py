@@ -1,26 +1,40 @@
 import warnings
 from dataclasses import dataclass
 from itertools import product
-from typing import TYPE_CHECKING, Any, Dict, Generator, Optional
+from typing import TYPE_CHECKING, Any, Dict, Generator, Literal, Optional, Union
 
 import numpy as np
 import pandas as pd
 import xgboost
 from aislib.misc_utils import get_logger
 from eir.train_utils import metrics as eir_metrics
+from scipy import stats
 from sklearn import metrics
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import (
     ElasticNetCV,
+    LassoCV,
     LinearRegression,
     LogisticRegression,
     LogisticRegressionCV,
+    RidgeClassifierCV,
+    RidgeCV,
 )
 from sklearn.model_selection import PredefinedSplit
 from sklearn.preprocessing import LabelEncoder
 
 if TYPE_CHECKING:
     from eir_auto_gp.post_analysis.run_complexity_analysis import ModelReadyObject
+
+al_linear_models = (
+    ElasticNetCV
+    | LassoCV
+    | LinearRegression
+    | LogisticRegression
+    | LogisticRegressionCV
+    | RidgeClassifierCV
+    | RidgeCV
+)
 
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
@@ -38,20 +52,32 @@ class TrainEvalResults:
 def train_and_evaluate_xgboost(
     modelling_data: "ModelReadyObject",
     target_type: str,
+    eval_set: Literal["valid", "test"],
 ) -> TrainEvalResults:
+
+    assert target_type in {"classification", "regression"}
+    assert eval_set in {"valid", "test"}
+
     df_target = modelling_data.target_train
     num_classes = df_target[df_target.columns[0]].nunique()
     params = get_xgboost_params(task_type=target_type, num_classes=num_classes)
 
     x_train = modelling_data.input_train.values
     y_train = modelling_data.target_train.values
+    d_train = xgboost.DMatrix(data=x_train, label=y_train)
+
     x_val = modelling_data.input_val.values
     y_val = modelling_data.target_val.values
-
-    d_train = xgboost.DMatrix(data=x_train, label=y_train)
     d_val = xgboost.DMatrix(data=x_val, label=y_val)
 
-    watchlist = [(d_train, "train"), (d_val, "eval")]
+    x_test = modelling_data.input_test.values
+    y_test = modelling_data.target_test.values
+    d_test = xgboost.DMatrix(data=x_test, label=y_test)
+
+    eval_data = d_test if eval_set == "test" else d_val
+    eval_labels = y_test if eval_set == "test" else y_val
+
+    watchlist = [(d_train, "train"), (eval_data, "eval")]
     trained_model = xgboost.train(
         params=params,
         dtrain=d_train,
@@ -61,16 +87,12 @@ def train_and_evaluate_xgboost(
         early_stopping_rounds=100,
     )
 
-    x_test = modelling_data.input_test.values
-    y_test = modelling_data.target_test.values
-
-    d_test = xgboost.DMatrix(data=x_test, label=y_test)
-    y_score = trained_model.predict(data=d_test, output_margin=True)
+    y_score = trained_model.predict(data=eval_data, output_margin=True)
     if target_type == "regression":
         y_score = y_score.reshape(-1, 1)
 
     performance = evaluate_model_performance(
-        y_true=y_test,
+        y_true=eval_labels,
         y_score=y_score,
         task_type=target_type,
     )
@@ -78,15 +100,17 @@ def train_and_evaluate_xgboost(
 
     df_predictions, df_predictions_raw = parse_predictions(
         modelling_data=modelling_data,
-        y_test=y_test,
+        y_test=eval_labels,
         y_score=y_score,
-        eval_set="test",
+        eval_set=eval_set,
     )
 
+    feature_names = modelling_data.input_train.columns
+    booster_fi = trained_model.get_score(importance_type="gain")
     feature_importance = pd.DataFrame(
-        data=trained_model.get_score(importance_type="gain").items(),
+        [(feature_names[int(k[1:])], v) for k, v in booster_fi.items()],
         columns=["Feature", "Importance"],
-    )
+    ).sort_values(by="Importance", ascending=False)
 
     results = TrainEvalResults(
         df_predictions=df_predictions,
@@ -101,8 +125,10 @@ def train_and_evaluate_xgboost(
 def train_and_evaluate_linear(
     modelling_data: "ModelReadyObject",
     target_type: str,
-    eval_set: str = "test",
-    cv_use_val_split: bool = False,
+    eval_set: str,
+    cv_use_val_split: bool,
+    model_type: str = "linear_model",
+    with_fallback: bool = False,
 ) -> TrainEvalResults:
     if target_type not in ["classification", "regression"]:
         raise ValueError("target_type must be 'classification' or 'regression'")
@@ -110,9 +136,9 @@ def train_and_evaluate_linear(
     if eval_set not in ["test", "valid"]:
         raise ValueError("eval_set must be 'test' or 'valid'")
 
-    x_train, y_train = _select_training_data(
+    x_train, y_train = _get_training_data(
         modelling_data=modelling_data,
-        eval_set=eval_set,
+        model_type=model_type,
     )
 
     cv = _get_cv_split(
@@ -120,14 +146,22 @@ def train_and_evaluate_linear(
         cv_use_val_split=cv_use_val_split,
     )
 
-    model = _initialize_linear_model(target_type=target_type, cv=cv)
+    model = _initialize_linear_model(
+        target_type=target_type,
+        cv=cv,
+        model_type=model_type,
+    )
 
     try:
         model.fit(X=x_train, y=y_train.ravel())
     except Exception as e:
         logger.error(f"Encountered error when fitting simple linear model: {e}")
-        model = _initialize_fallback_model(target_type=target_type, cv=cv)
-        model.fit(X=x_train, y=y_train.ravel())
+        if with_fallback:
+            logger.warning("Falling back to ElasticNetCV.")
+            model = _initialize_fallback_model(target_type=target_type, cv=cv)
+            model.fit(X=x_train, y=y_train.ravel())
+        else:
+            raise e
 
     x_eval, y_eval = _select_evaluation_set(
         modelling_data=modelling_data,
@@ -156,10 +190,19 @@ def train_and_evaluate_linear(
 
     feature_names = modelling_data.input_train.columns.tolist()
 
+    y_score_train = _predict_with_linear(
+        model=model,
+        x_eval=x_train,
+        target_type=target_type,
+    )
     df_feature_importance = _extract_linear_feature_importance(
         model=model,
         feature_names=feature_names,
+        x=x_train,
+        y=y_train,
+        model_predictions=y_score_train,
         target_type=target_type,
+        model_type=model_type,
     )
 
     results = TrainEvalResults(
@@ -172,11 +215,55 @@ def train_and_evaluate_linear(
     return results
 
 
-def _select_training_data(modelling_data: "ModelReadyObject", eval_set: str) -> tuple:
-    if eval_set == "valid":
+def _validate_linear_training_data(modelling_data: "ModelReadyObject") -> None:
+    input_train = modelling_data.input_train
+    input_val = modelling_data.input_val
+    input_test = modelling_data.input_test
+
+    names = ["input_train", "input_val", "input_test"]
+
+    for df, name in zip([input_train, input_val, input_test], names):
+        _check_and_report_values(df=df, df_name=name)
+
+
+def _check_and_report_values(df: pd.DataFrame, df_name: str) -> None:
+    nan_info = df.isna().sum()
+    nan_info_as_dict = nan_info.to_dict()
+    has_nan = nan_info.any()
+
+    inf_info = df.replace([np.inf, -np.inf], np.nan).isna().sum() - nan_info
+    inf_info_as_dict = inf_info.to_dict()
+    has_inf = inf_info.any()
+
+    if has_nan or has_inf:
+        for column, nan_count in nan_info_as_dict.items():
+            if nan_count > 0:
+                logger.error(
+                    f"Found NaN in column '{column}': {nan_count} entries in {df_name}."
+                )
+        for column, inf_count in inf_info_as_dict.items():
+            if inf_count > 0:
+                logger.error(
+                    f"Found Inf in column '{column}': {inf_count} entries in {df_name}."
+                )
+
+        error_message = (
+            "Data contains invalid values (NaN/Inf), "
+            "which are not permitted. "
+            "This is a bug as they should have been imputed "
+            "or managed already."
+        )
+        raise AssertionError(error_message)
+
+
+def _get_training_data(modelling_data: "ModelReadyObject", model_type: str) -> tuple:
+
+    _validate_linear_training_data(modelling_data=modelling_data)
+
+    if model_type == "linear_model":
         x_train = modelling_data.input_train.values
         y_train = modelling_data.target_train.values
-    elif eval_set == "test":
+    else:
         x_train = pd.concat(
             [
                 modelling_data.input_train,
@@ -189,8 +276,6 @@ def _select_training_data(modelling_data: "ModelReadyObject", eval_set: str) -> 
                 modelling_data.target_val,
             ]
         ).values
-    else:
-        raise ValueError("eval_set must be 'test' or 'valid'")
 
     return x_train, y_train
 
@@ -210,7 +295,8 @@ def _get_cv_split(
 
 
 def _select_evaluation_set(
-    modelling_data: "ModelReadyObject", eval_set: str
+    modelling_data: "ModelReadyObject",
+    eval_set: str,
 ) -> tuple[np.ndarray, np.ndarray]:
     if eval_set == "test":
         x_eval = modelling_data.input_test.values
@@ -224,16 +310,62 @@ def _select_evaluation_set(
     return x_eval, y_eval
 
 
-def _initialize_linear_model(target_type: str, cv: int | PredefinedSplit) -> Any:
+def _initialize_linear_model(
+    target_type: str,
+    cv: Union[int, PredefinedSplit],
+    model_type: str,
+) -> Any:
+
+    alphas = [0.001, 0.01, 0.1, 1.0, 2.0, 5.0, 10.0]
+
     if target_type == "classification":
-        return LogisticRegression(
-            solver="saga",
-            n_jobs=-1,
-        )
+        if model_type == "linear_model":
+            return LogisticRegression(solver="saga", n_jobs=-1)
+        elif model_type == "ridge":
+            return RidgeClassifierCV(cv=cv, alphas=alphas)
+        elif model_type == "lasso":
+            return LogisticRegressionCV(
+                cv=cv,
+                penalty="l1",
+                solver="saga",
+                n_jobs=-1,
+            )
+        elif model_type == "elasticnet":
+            return LogisticRegressionCV(
+                cv=cv,
+                penalty="elasticnet",
+                Cs=10,
+                l1_ratios=[0.1, 0.5, 0.7, 0.9, 0.95, 0.99],
+                solver="saga",
+                n_jobs=-1,
+            )
+        else:
+            raise ValueError("Invalid model type for classification.")
+
     elif target_type == "regression":
-        return LinearRegression()
+        if model_type == "linear_model":
+            return LinearRegression()
+        elif model_type == "ridge":
+            return RidgeCV(
+                cv=cv,
+                alphas=alphas,
+            )
+        elif model_type == "lasso":
+            return LassoCV(
+                cv=cv,
+                alphas=alphas,
+            )
+        elif model_type == "elasticnet":
+            return ElasticNetCV(
+                cv=cv,
+                l1_ratio=[0.1, 0.5, 0.7, 0.9, 0.95, 0.99],
+                alphas=alphas,
+            )
+        else:
+            raise ValueError("Invalid model type for regression.")
+
     else:
-        raise ValueError()
+        raise ValueError("Invalid target type.")
 
 
 def _initialize_fallback_model(
@@ -272,37 +404,95 @@ def _initialize_fallback_model(
 
 
 def _predict_with_linear(
-    model: LogisticRegressionCV | ElasticNetCV, x_eval: np.ndarray, target_type: str
+    model: Union[LogisticRegressionCV, ElasticNetCV],
+    x_eval: np.ndarray,
+    target_type: str,
 ) -> np.ndarray:
+
     if target_type == "classification":
-        return model.predict_proba(x_eval)
+        if hasattr(model, "predict_proba"):
+            return model.predict_proba(x_eval)
+        elif hasattr(model, "_predict_proba_lr"):
+            return model._predict_proba_lr(x_eval)
+        else:
+            raise ValueError()
+
     elif target_type == "regression":
         return model.predict(x_eval).reshape(-1, 1)
     else:
-        raise ValueError()
+        raise ValueError("Invalid target type.")
 
 
 def _extract_linear_feature_importance(
-    model: LogisticRegressionCV | ElasticNetCV,
+    model: al_linear_models,
+    x: np.ndarray,
+    y: np.ndarray,
+    model_predictions: np.ndarray,
     feature_names: list[str],
     target_type: str,
+    model_type: str,
 ) -> pd.DataFrame:
+    """
+    Adapted from https://stackoverflow.com/questions/27928275
+    """
     if target_type == "classification":
         coef = model.coef_[0]
         feature_importance = abs(model.coef_[0])
+        model_predictions = model_predictions[:, 1]
     elif target_type == "regression":
         coef = model.coef_
         feature_importance = abs(model.coef_)
+        model_predictions = model_predictions.ravel()
     else:
         raise ValueError()
 
-    return pd.DataFrame(
-        {
-            "Feature": feature_names,
-            "Importance": feature_importance,
-            "Coef": coef,
-        }
-    ).sort_values(by="Importance", ascending=False)
+    dataframe_entries = {
+        "Feature": ["Intercept"] + feature_names,
+        "Coefficient": np.append(model.intercept_, coef),
+        "Importance": np.append(abs(model.intercept_), feature_importance),
+    }
+
+    if model_type == "linear_model":
+
+        x = x.astype(float)
+        residuals = y.ravel() - model_predictions
+        mse = np.sum(residuals**2) / (len(x) - len(feature_names) - 1)
+
+        new_x = np.append(np.ones((len(x), 1)), x, axis=1)
+
+        used_pinv = False
+        try:
+            var_b = mse * (np.linalg.inv(np.dot(new_x.T, new_x)).diagonal())
+        except np.linalg.LinAlgError:
+            logger.warning(
+                "Singular matrix encountered when calculating standard errors, "
+                "falling back to using pseudo-inverse. "
+                "This may lead to inaccurate results."
+            )
+            var_b = mse * (np.linalg.pinv(np.dot(new_x.T, new_x)).diagonal())
+            used_pinv = True
+
+        se_b = np.sqrt(var_b)
+
+        coefficients = np.append(model.intercept_, coef)
+        t_values = coefficients / se_b
+        p_values = 2 * (1 - stats.t.cdf(abs(t_values), len(x) - len(feature_names) - 1))
+
+        ci_lower = coefficients - 1.96 * se_b
+        ci_upper = coefficients + 1.96 * se_b
+
+        dataframe_entries.update(
+            {
+                "Standard Error": se_b,
+                "t-Value": t_values,
+                "P-Value": p_values,
+                "95% CI Lower": ci_lower,
+                "95% CI Upper": ci_upper,
+                "Used Pseudo-Inverse": [used_pinv] + [used_pinv] * len(feature_names),
+            }
+        )
+
+    return pd.DataFrame(dataframe_entries).sort_values(by="Importance", ascending=False)
 
 
 def parse_predictions(
@@ -413,7 +603,7 @@ def get_training_eval_iterator(
     any_tabular_input: bool,
 ) -> Generator[Dict[str, Any], None, None]:
     condition_lists = [
-        ["xgboost", "linear"],
+        ["xgboost", "linear_model", "ridge", "lasso", "elasticnet"],
         [True, False],
         [True, False],
         [True, False],

@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Generator
+from typing import TYPE_CHECKING, Callable, Generator, Optional
+from warnings import simplefilter
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,6 +20,8 @@ from eir_auto_gp.post_analysis.run_complexity_analysis import (
 if TYPE_CHECKING:
     from eir_auto_gp.post_analysis.run_post_analysis import PostAnalysisObject
 
+simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
+
 logger = get_logger(name=__name__)
 
 
@@ -31,18 +34,24 @@ class StepInformationObjects:
 
 def _get_step_information_objects(
     post_analysis_object: "PostAnalysisObject",
+    eval_set: str,
 ) -> StepInformationObjects:
+    assert eval_set in ["valid", "test"]
     output_root = post_analysis_object.data_paths.analysis_output_path
 
-    df_complexity = pd.read_csv(output_root / "complexity/all_results.csv")
+    df_complexity = pd.read_csv(output_root / f"complexity/{eval_set}/all_results.csv")
 
     df_allele_effects = pd.read_csv(
         output_root / "effect_analysis/allele_effects/allele_effects.csv"
     )
+    df_allele_effects = filter_snp_rows(df=df_allele_effects)
 
     df_interaction_effects = pd.read_csv(
         output_root / "effect_analysis/interaction_effects/interaction_effects.csv"
     )
+
+    if len(df_interaction_effects) != 0:
+        df_interaction_effects = filter_snp_rows(df=df_interaction_effects)
 
     return StepInformationObjects(
         complexity_results=df_complexity,
@@ -51,8 +60,14 @@ def _get_step_information_objects(
     )
 
 
+def filter_snp_rows(df: pd.DataFrame) -> pd.DataFrame:
+    df_filtered = df[~df["allele"].str.contains("COVAR")].copy()
+    return df_filtered
+
+
 def run_iterative_complexity_analysis(
     post_analysis_object: "PostAnalysisObject",
+    n_iterative_complexity_candidates: int,
     eval_set: str,
 ) -> None:
     if eval_set not in ["test", "valid"]:
@@ -62,7 +77,10 @@ def run_iterative_complexity_analysis(
 
     pao = post_analysis_object
     ei = pao.experiment_info
-    sidp = _get_step_information_objects(post_analysis_object=pao)
+    sidp = _get_step_information_objects(
+        post_analysis_object=pao,
+        eval_set=eval_set,
+    )
 
     outputs = ei.output_cat_columns + ei.output_con_columns
     if len(outputs) > 1:
@@ -80,13 +98,14 @@ def run_iterative_complexity_analysis(
 
     results = []
 
+    n = n_iterative_complexity_candidates
     data_iter = get_step_training_iterator(
         post_analysis_object=pao,
         step_information_objects=sidp,
-        max_one_hot=5,
-        max_interaction_exe=5,
-        max_interaction_gxe=5,
-        max_interaction_gxg=5,
+        max_one_hot=n,
+        max_interaction_exe=n,
+        max_interaction_gxe=n,
+        max_interaction_gxg=n,
         eval_set=eval_set,
     )
 
@@ -95,6 +114,9 @@ def run_iterative_complexity_analysis(
             modelling_data=mro,
             target_type=ei.target_type,
             eval_set=eval_set,
+            model_type="elasticnet",
+            cv_use_val_split=True,
+            with_fallback=True,
         )
         df_performance = train_eval_results.performance
         df_performance["model_type"] = model_type
@@ -244,13 +266,8 @@ def plot_metric_figure(
     sns.set(style="whitegrid", palette="deep")
 
     change_col = f"{metric}_change"
-    y_size = 0.75 * len(df["model_type"].unique())
-
-    longest_string = max(df["model_type"], key=len)
-    x_size = max(8, int(0.35 * len(longest_string)))
-    plt.figure(figsize=(x_size, y_size))
-
     direction = "min" if metric == "rmse" else "max"
+
     df_parsed = prepare_dataframe_with_other_terms(
         df=df,
         metric_change=change_col,
@@ -258,6 +275,11 @@ def plot_metric_figure(
         top_n=3,
         direction=direction,
     )
+
+    y_size = 0.75 * len(df_parsed["model_type"].unique())
+    longest_string = max(df_parsed["model_type"], key=len)
+    x_size = max(8, int(0.35 * len(longest_string)))
+    plt.figure(figsize=(x_size, y_size))
 
     ax = sns.barplot(
         data=df_parsed,
@@ -450,6 +472,8 @@ def get_step_training_iterator(
             modelling_data=mro_tabular,
             target_type=ei.target_type,
             eval_set=eval_set,
+            cv_use_val_split=True,
+            with_fallback=True,
         )
         tabular_feature_importance = tabular_results.feature_importance
         running_mro = mro_tabular
@@ -526,9 +550,10 @@ def get_step_training_iterator(
             top_n=max_interaction_exe,
         )
 
-        for mro_txt, model_type in txt_iterator:
-            yield mro_txt, "TxT", model_type
-            running_mro = mro_txt
+        if txt_iterator is not None:
+            for mro_txt, model_type in txt_iterator:
+                yield mro_txt, "TxT", model_type
+                running_mro = mro_txt
 
     # 8
     if run_tabular and run_genotype:
@@ -581,7 +606,12 @@ def _get_one_hot_iterator(
             inputs: pd.DataFrame, targets: pd.DataFrame
         ) -> tuple[pd.DataFrame, pd.DataFrame]:
             if snp in inputs.columns:
-                inputs = pd.get_dummies(inputs, columns=[snp], prefix=snp + "_OH")
+                inputs = pd.get_dummies(
+                    inputs,
+                    columns=[snp],
+                    prefix=snp + "_OH",
+                    drop_first=True,
+                )
             return inputs, targets
 
         running_mro = _merge_operate_and_split(
@@ -640,6 +670,7 @@ def one_hot_encode_all_snps(
                 data=inputs,
                 columns=snps_to_encode,
                 prefix={snp: snp + "_OH" for snp in snps_to_encode},
+                drop_first=True,
             )
         return inputs, targets
 
@@ -808,7 +839,7 @@ def get_txt_iterator(
     post_analysis_object: "PostAnalysisObject",
     running_mro: ModelReadyObject,
     top_n: int,
-) -> tuple[Generator, pd.DataFrame, ModelReadyObject]:
+) -> tuple[Optional[Generator], pd.DataFrame, ModelReadyObject]:
     pao = post_analysis_object
 
     target_type = pao.experiment_info.target_type
@@ -827,6 +858,10 @@ def get_txt_iterator(
         target_type=target_type,
         top_n=top_n,
     )
+
+    if txt_candidates.empty:
+        logger.warning("No TxT candidates found, skipping.")
+        return None, pd.DataFrame(), running_mro
 
     logger.debug(
         "Top %d TxT candidates: %s", top_n, txt_candidates["interaction"].tolist()
@@ -897,11 +932,16 @@ def _find_txt_candidates(
             modelling_data=modified_mro,
             target_type=target_type,
             eval_set="valid",
+            cv_use_val_split=True,
+            with_fallback=True,
         )
         df_performance = train_eval_results.performance
         df_performance["interaction"] = f"{col1}_x_{col2}"
 
         results.append(df_performance)
+
+    if not results:
+        return pd.DataFrame()
 
     df_results = pd.concat(results)
     metric = "r2" if target_type == "regression" else "mcc"
@@ -997,6 +1037,9 @@ def _find_gxt_candidates(
         top_n=top_n,
     )
 
+    df_tabular_feature_importance = df_tabular_feature_importance[
+        df_tabular_feature_importance["Feature"] != "Intercept"
+    ]
     top_tabular_columns = df_tabular_feature_importance.head(top_n)["Feature"].tolist()
 
     logger.debug(
@@ -1029,6 +1072,8 @@ def _find_gxt_candidates(
                 modelling_data=modified_mro,
                 target_type=target_type,
                 eval_set="valid",
+                cv_use_val_split=True,
+                with_fallback=True,
             )
             df_performance = train_eval_results.performance
             df_performance["interaction"] = f"{snp_column}_x_{tab_column}"

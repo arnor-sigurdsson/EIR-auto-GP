@@ -530,7 +530,11 @@ def _prepare_df_columns_for_gwas(
                     n_unique,
                 )
 
-    df = pd.get_dummies(df, columns=one_hot_target_columns, drop_first=True)
+    df = pd.get_dummies(
+        df,
+        columns=one_hot_target_columns,
+        drop_first=True,
+    )
 
     df.columns = [parse_target_for_plink(target=col) for col in df.columns]
     df = df.fillna(-9)
