@@ -138,6 +138,7 @@ def train_and_evaluate_linear(
 
     x_train, y_train = _get_training_data(
         modelling_data=modelling_data,
+        model_type=model_type,
     )
 
     cv = _get_cv_split(
@@ -255,22 +256,26 @@ def _check_and_report_values(df: pd.DataFrame, df_name: str) -> None:
         raise AssertionError(error_message)
 
 
-def _get_training_data(modelling_data: "ModelReadyObject") -> tuple:
+def _get_training_data(modelling_data: "ModelReadyObject", model_type: str) -> tuple:
 
     _validate_linear_training_data(modelling_data=modelling_data)
 
-    x_train = pd.concat(
-        [
-            modelling_data.input_train,
-            modelling_data.input_val,
-        ]
-    ).values
-    y_train = pd.concat(
-        [
-            modelling_data.target_train,
-            modelling_data.target_val,
-        ]
-    ).values
+    if model_type == "linear_model":
+        x_train = modelling_data.input_train.values
+        y_train = modelling_data.target_train.values
+    else:
+        x_train = pd.concat(
+            [
+                modelling_data.input_train,
+                modelling_data.input_val,
+            ]
+        ).values
+        y_train = pd.concat(
+            [
+                modelling_data.target_train,
+                modelling_data.target_val,
+            ]
+        ).values
 
     return x_train, y_train
 
@@ -290,7 +295,8 @@ def _get_cv_split(
 
 
 def _select_evaluation_set(
-    modelling_data: "ModelReadyObject", eval_set: str
+    modelling_data: "ModelReadyObject",
+    eval_set: str,
 ) -> tuple[np.ndarray, np.ndarray]:
     if eval_set == "test":
         x_eval = modelling_data.input_test.values
@@ -309,13 +315,21 @@ def _initialize_linear_model(
     cv: Union[int, PredefinedSplit],
     model_type: str,
 ) -> Any:
+
+    alphas = [0.001, 0.01, 0.1, 1.0, 2.0, 5.0, 10.0]
+
     if target_type == "classification":
         if model_type == "linear_model":
             return LogisticRegression(solver="saga", n_jobs=-1)
         elif model_type == "ridge":
-            return RidgeClassifierCV(cv=cv, alphas=[0.1, 1.0, 10.0])
+            return RidgeClassifierCV(cv=cv, alphas=alphas)
         elif model_type == "lasso":
-            return LogisticRegressionCV(cv=cv, penalty="l1", solver="saga", n_jobs=-1)
+            return LogisticRegressionCV(
+                cv=cv,
+                penalty="l1",
+                solver="saga",
+                n_jobs=-1,
+            )
         elif model_type == "elasticnet":
             return LogisticRegressionCV(
                 cv=cv,
@@ -332,11 +346,21 @@ def _initialize_linear_model(
         if model_type == "linear_model":
             return LinearRegression()
         elif model_type == "ridge":
-            return RidgeCV(cv=cv, alphas=[0.1, 1.0, 10.0])
+            return RidgeCV(
+                cv=cv,
+                alphas=alphas,
+            )
         elif model_type == "lasso":
-            return LassoCV(cv=cv, alphas=[0.001, 0.01, 0.1, 1.0])
+            return LassoCV(
+                cv=cv,
+                alphas=alphas,
+            )
         elif model_type == "elasticnet":
-            return ElasticNetCV(cv=cv, l1_ratio=[0.1, 0.5, 0.7, 0.9, 0.95, 0.99])
+            return ElasticNetCV(
+                cv=cv,
+                l1_ratio=[0.1, 0.5, 0.7, 0.9, 0.95, 0.99],
+                alphas=alphas,
+            )
         else:
             raise ValueError("Invalid model type for regression.")
 

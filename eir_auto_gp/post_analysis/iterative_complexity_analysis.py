@@ -114,6 +114,7 @@ def run_iterative_complexity_analysis(
             modelling_data=mro,
             target_type=ei.target_type,
             eval_set=eval_set,
+            model_type="elasticnet",
             cv_use_val_split=True,
             with_fallback=True,
         )
