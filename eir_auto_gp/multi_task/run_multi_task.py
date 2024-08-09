@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import shutil
 from argparse import RawTextHelpFormatter
 from copy import copy
@@ -10,12 +11,15 @@ import luigi
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists
 
-from eir_auto_gp.analysis.run_analysis import RunAnalysisWrapper
+from eir_auto_gp.multi_task.analysis.run_analysis import RunAnalysisWrapper
 from eir_auto_gp.preprocess.converge import ParseDataWrapper
 from eir_auto_gp.preprocess.gwas_pre_selection import validate_geno_data_path
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
+
+luigi_logger = logging.getLogger("luigi")
+luigi_logger.setLevel(logging.INFO)
 
 
 def get_argument_parser() -> argparse.ArgumentParser:
@@ -66,35 +70,6 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--data_output_folder",
-        type=str,
-        required=False,
-        help="Folder to save the processed data in and also to read the data from"
-        "if it already exists.",
-    )
-
-    parser.add_argument(
-        "--feature_selection_output_folder",
-        type=str,
-        required=False,
-        help="Folder to save feature selection results in.",
-    )
-
-    parser.add_argument(
-        "--modelling_output_folder",
-        type=str,
-        required=False,
-        help="Folder to save modelling results in.",
-    )
-
-    parser.add_argument(
-        "--analysis_output_folder",
-        type=str,
-        required=False,
-        help="Folder to save analysis results in.",
-    )
-
-    parser.add_argument(
         "--output_name",
         type=str,
         default="genotype",
@@ -132,53 +107,6 @@ def get_argument_parser() -> argparse.ArgumentParser:
         "you can use the --no-freeze_validation_set flag.",
         default=True,
         action="store_true",
-    )
-
-    parser.add_argument(
-        "--no-freeze_validation_set",
-        dest="freeze_validation_set",
-        action="store_false",
-    )
-
-    parser.add_argument(
-        "--feature_selection",
-        default="gwas+bo",
-        choices=["dl", "gwas", "gwas->dl", "dl+gwas", "gwas+bo", None],
-        required=False,
-        help="What kind of feature selection strategy to use for SNP selection:\n"
-        "  - If None, no feature selection is performed.\n"
-        "  - If 'dl', feature selection is performed using DL feature importance,\n"
-        "    and the top SNPs are selected iteratively using Bayesian optimization.\n"
-        "  - If 'gwas', feature selection is performed using GWAS p-values,\n"
-        "    as specified by the --gwas_p_value_threshold parameter.\n"
-        "  - If 'gwas->dl', feature selection is first performed using GWAS p-values,\n"
-        "    and then the top SNPs are selected iteratively using the DL "
-        "importance method,\n"
-        "    but only on the SNPs under the GWAS threshold.\n"
-        "  - If 'gwas+bo', feature selection is performed using a combination of\n"
-        "    GWAS p-values and Bayesian optimization. The upper bound of the fraction\n"
-        "    of SNPs to include is determined by the fraction corresponding to a\n"
-        "    computed one based on the gwas_p_value_threshold.",
-    )
-
-    parser.add_argument(
-        "--n_dl_feature_selection_setup_folds",
-        type=int,
-        default=3,
-        required=False,
-        help="How many folds to run DL attribution calculation on genotype data\n"
-        "before using results from attributions for feature selection.\n"
-        "Applicable only if using 'dl' or 'gwas->dl' feature_selection options.",
-    )
-
-    parser.add_argument(
-        "--gwas_p_value_threshold",
-        type=float,
-        required=False,
-        default=1e-04,
-        help="GWAS p-value threshold for filtering if using "
-        "'gwas', 'gwas+bo' or 'gwas->dl'\n"
-        "feature_selection options.",
     )
 
     parser.add_argument(
@@ -276,13 +204,6 @@ def validate_targets(
             "At least one output column must be specified as continuous or categorical."
         )
 
-    if len(output_con_columns) + len(output_cat_columns) > 1:
-        raise ValueError(
-            "Currently only one target column per run is supported. Got "
-            f"{output_con_columns} continuous and {output_cat_columns} "
-            "categorical target columns."
-        )
-
 
 def validate_plink2_exists_in_path() -> None:
     if shutil.which("plink2") is None:
@@ -340,13 +261,11 @@ def run(cl_args: argparse.Namespace) -> None:
     cl_args = _add_pre_split_folder_if_present(cl_args=cl_args)
 
     data_config = build_data_config(cl_args=cl_args)
-    feature_selection_config = build_feature_selection_config(cl_args=cl_args)
     modelling_config = build_modelling_config(cl_args=cl_args)
     analysis_config = build_analysis_config(cl_args=cl_args)
     root_task = get_root_task(
         folds=cl_args.folds,
         data_config=data_config,
-        feature_selection_config=feature_selection_config,
         modelling_config=modelling_config,
         analysis_config=analysis_config,
     )
@@ -355,13 +274,13 @@ def run(cl_args: argparse.Namespace) -> None:
         tasks=[root_task],
         workers=1,
         local_scheduler=True,
+        log_level="INFO",
     )
 
 
 def get_root_task(
     data_config: Dict,
     folds: int,
-    feature_selection_config: Dict,
     modelling_config: Dict,
     analysis_config: Dict,
 ) -> RunAnalysisWrapper | ParseDataWrapper:
@@ -371,7 +290,6 @@ def get_root_task(
     return RunAnalysisWrapper(
         folds=folds,
         data_config=data_config,
-        feature_selection_config=feature_selection_config,
         modelling_config=modelling_config,
         analysis_config=analysis_config,
     )
@@ -390,10 +308,7 @@ def store_experiment_config(
 ) -> None:
     config_dict = vars(cl_args)
 
-    if cl_args.global_output_folder is None:
-        output_folder = Path(cl_args.modelling_output_folder).parent
-    else:
-        output_folder = Path(cl_args.global_output_folder)
+    output_folder = Path(cl_args.global_output_folder)
 
     ensure_path_exists(path=output_folder, is_folder=True)
     output_path = output_folder / "config.json"
@@ -412,34 +327,13 @@ def parse_output_folders(cl_args: argparse.Namespace) -> argparse.Namespace:
     if cl_args_copy.global_output_folder:
         gof = cl_args_copy.global_output_folder.rstrip("/")
         cl_args_copy.data_output_folder = gof + "/data"
-        cl_args_copy.feature_selection_output_folder = gof + "/feature_selection"
         cl_args_copy.modelling_output_folder = gof + "/modelling"
         cl_args_copy.analysis_output_folder = gof + "/analysis"
     else:
-        if not cl_args_copy.data_output_folder:
-            raise ValueError(
-                "Missing data output folder. "
-                "Either a global output folder or a "
-                "data output folder must be provided."
-            )
-        if not cl_args_copy.feature_selection_output_folder:
-            raise ValueError(
-                "Missing feature selection output folder. "
-                "Either a global output folder or a "
-                "feature selection output folder must be provided."
-            )
-        if not cl_args_copy.modelling_output_folder:
-            raise ValueError(
-                "Missing modelling output folder. "
-                "Either a global output folder or a "
-                "modelling output folder must be provided."
-            )
-        if not cl_args_copy.analysis_output_folder:
-            raise ValueError(
-                "Missing analysis output folder. "
-                "Either a global output folder or a "
-                "analysis output folder must be provided."
-            )
+        raise ValueError(
+            "Global output folder must be specified. "
+            "Please specify the --global_output_folder parameter."
+        )
 
     return cl_args_copy
 
@@ -483,17 +377,6 @@ def build_data_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
     base["output_format"] = "deeplake"
 
     return base
-
-
-def build_feature_selection_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
-    feature_selection_keys = [
-        "feature_selection_output_folder",
-        "feature_selection",
-        "n_dl_feature_selection_setup_folds",
-        "gwas_p_value_threshold",
-    ]
-
-    return extract_from_namespace(namespace=cl_args, keys=feature_selection_keys)
 
 
 def build_modelling_config(cl_args: argparse.Namespace) -> Dict[str, Any]:

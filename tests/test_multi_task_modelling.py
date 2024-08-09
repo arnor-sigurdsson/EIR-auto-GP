@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 
-from eir_auto_gp.single_task.run_single_task import get_argument_parser, run
+from eir_auto_gp.multi_task.run_multi_task import get_argument_parser, run
 
 
 def _get_test_cl_commands() -> list[str]:
@@ -15,25 +15,14 @@ def _get_test_cl_commands() -> list[str]:
         "--label_file_path tests/test_data/penncath.csv  "
         "--global_output_folder runs/penncath "
         "--output_cat_columns CAD "
-        "--input_con_columns tg hdl ldl age "
+        "--output_con_columns tg hdl ldl "
+        "--input_con_columns age "
         "--input_cat_columns sex "
         "--folds 0-2 "
         "--do_test"
     )
 
-    feature_selections = [
-        "",
-        "--feature_selection gwas ",
-        "--feature_selection gwas+bo ",
-        "--feature_selection dl --n_dl_feature_selection_setup_folds 1 ",
-        "--feature_selection gwas->dl --n_dl_feature_selection_setup_folds 1 ",
-        "--feature_selection dl+gwas --n_dl_feature_selection_setup_folds 1 ",
-    ]
-
-    commands = []
-
-    for feature_selection in feature_selections:
-        commands.append(f"{base} {feature_selection}")
+    commands = [base]
 
     return commands
 
@@ -53,7 +42,7 @@ def test_modelling(command: str, tmp_path: Path) -> None:
 
 def check_modelling_results(run_folder: Path, check_test: bool) -> None:
     for file in ["validation_average_history.log"]:
-        check_average_performances(file_path=run_folder / file)
+        check_average_performances(file_path=run_folder / file, threshold=0.1)
 
     assert (run_folder / "completed_train.txt").exists()
 
@@ -67,7 +56,7 @@ def check_modelling_results(run_folder: Path, check_test: bool) -> None:
         metrics = json.loads(metrics_file.read_text())
         metric_values = find_numeric_values(input_dict=metrics, accumulator=[])
         avg = mean(metric_values)
-        assert avg >= 0.5
+        assert avg >= 0.1
 
 
 def check_average_performances(file_path: Path, threshold: float = 0.5) -> None:

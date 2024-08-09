@@ -5,7 +5,7 @@ import pandas as pd
 from aislib.misc_utils import ensure_path_exists
 from skopt import Optimizer
 
-from eir_auto_gp.modelling.feature_selection_utils import (
+from eir_auto_gp.single_task.modelling.feature_selection_utils import (
     gather_fractions_and_performances,
     read_gwas_df,
 )
@@ -59,6 +59,7 @@ def get_gwas_bo_auto_top_n(
     feature_selection_output_folder: Path,
     fold: int,
     gwas_p_value_threshold: Optional[float],
+    min_n_snps: int = 16,
 ) -> Tuple[int, float]:
     max_fraction = _compute_max_fraction(
         df_gwas=df_gwas,
@@ -81,7 +82,7 @@ def get_gwas_bo_auto_top_n(
             manual_p_values[fold],
         )
     else:
-        threshold_snps = min(16, n_snps)
+        threshold_snps = min(min_n_snps, n_snps)
         min_fraction = threshold_snps / n_snps
         logger.debug("Setting minimum fraction to %.2e.", min_fraction)
 
@@ -103,18 +104,20 @@ def get_gwas_bo_auto_top_n(
 
     top_n = int(next_fraction * len(df_gwas))
 
-    if top_n < 16:
-        if n_snps >= 16:
-            top_n = 16
+    if top_n < min_n_snps:
+        if n_snps >= min_n_snps:
+            top_n = min_n_snps
             logger.info(
-                "Computed top_n for GWAS+BO %d is too small (< 16). Setting to 16.",
+                "Computed top_n for GWAS+BO %d is too small (< %d). Setting to 16.",
+                min_n_snps,
                 top_n,
             )
         else:
             top_n = n_snps
             logger.info(
-                "Dataset contains only %d SNPs, less than 16. Using all %d SNPs.",
+                "Dataset contains only %d SNPs, less than %d. Using all %d SNPs.",
                 n_snps,
+                min_n_snps,
                 top_n,
             )
 

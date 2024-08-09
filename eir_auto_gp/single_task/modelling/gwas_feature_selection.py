@@ -73,42 +73,51 @@ def run_gwas_feature_selection(
     )
 
     fam_file_path = next(Path(genotype_data_path).glob("*.fam"))
+    fs_output_folder = feature_selection_config["feature_selection_output_folder"]
+    gwas_output_path = Path(fs_output_folder, "gwas_output")
 
     gwas_label_path = Path(filter_config.output_path, "gwas_label_file.csv")
     ensure_path_exists(path=gwas_label_path)
     one_hot_mappings_file = None
-    if not gwas_label_path.exists():
+
+    gwas_finished = all_gwas_already_finished(
+        target_names=filter_config.target_names,
+        gwas_output_folder=gwas_output_path,
+    )
+
+    if not gwas_label_path.exists() and not gwas_finished:
         _, one_hot_mappings_file = gps.prepare_gwas_label_file(
             label_file_path=filter_config.label_file_path,
             fam_file_path=fam_file_path,
             output_path=gwas_label_path,
+            target_names=filter_config.target_names,
+            covariate_names=filter_config.covariate_names,
         )
 
-    base_path = fam_file_path.with_suffix("")
-    fs_output_folder = feature_selection_config["feature_selection_output_folder"]
-    gwas_output_path = Path(fs_output_folder, "gwas_output")
+    if not gwas_finished:
+        base_path = fam_file_path.with_suffix("")
 
-    target_names = gps.parse_gwas_label_file_column_names(
-        target_names=filter_config.target_names, gwas_label_file=gwas_label_path
-    )
-    maybe_prepare_plink_split_files(pre_split_folder=filter_config.pre_split_folder)
-    train_ids_file = Path(filter_config.pre_split_folder, "train_ids_plink.txt")
-    assert train_ids_file.exists(), f"Could not find train ids file at {train_ids_file}"
+        target_names = gps.parse_gwas_label_file_column_names(
+            target_names=filter_config.target_names,
+            gwas_label_file=gwas_label_path,
+        )
 
-    command = gps.get_plink_gwas_command(
-        base_path=base_path,
-        label_file_path=gwas_label_path,
-        target_names=target_names,
-        covariate_names=filter_config.covariate_names,
-        output_path=gwas_output_path,
-        ids_file=train_ids_file,
-        one_hot_mappings_file=one_hot_mappings_file,
-    )
+        maybe_prepare_plink_split_files(pre_split_folder=filter_config.pre_split_folder)
+        train_ids_file = Path(filter_config.pre_split_folder, "train_ids_plink.txt")
+        assert (
+            train_ids_file.exists()
+        ), f"Could not find train ids file at {train_ids_file}"
 
-    if not all_gwas_already_finished(
-        target_names=filter_config.target_names,
-        gwas_output_folder=gwas_output_path,
-    ):
+        command = gps.get_plink_gwas_command(
+            base_path=base_path,
+            label_file_path=gwas_label_path,
+            target_names=target_names,
+            covariate_names=filter_config.covariate_names,
+            output_path=gwas_output_path,
+            ids_file=train_ids_file,
+            one_hot_mappings_file=one_hot_mappings_file,
+        )
+
         logger.info("Running GWAS with command: %s", " ".join(command))
         subprocess.run(command, check=True)
         gps.plot_gwas_results(

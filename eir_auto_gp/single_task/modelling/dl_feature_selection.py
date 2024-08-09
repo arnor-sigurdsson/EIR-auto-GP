@@ -8,7 +8,7 @@ from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 from eir.visualization.interpretation_visualization import plot_snp_manhattan_plots
 from skopt import Optimizer
 
-from eir_auto_gp.modelling.feature_selection_utils import (
+from eir_auto_gp.single_task.modelling.feature_selection_utils import (
     gather_fractions_and_performances,
     read_gwas_df,
 )

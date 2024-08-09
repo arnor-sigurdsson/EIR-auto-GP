@@ -1,11 +1,11 @@
 from pathlib import Path
 from typing import Literal, Optional
 
-from eir_auto_gp.modelling.dl_feature_selection import (
+from eir_auto_gp.single_task.modelling.dl_feature_selection import (
     run_dl_bo_selection,
     run_dl_plus_gwas_bo_selection,
 )
-from eir_auto_gp.modelling.gwas_bo_feature_selection import (
+from eir_auto_gp.single_task.modelling.gwas_bo_feature_selection import (
     run_gwas_bo_feature_selection,
 )
 

@@ -8,9 +8,11 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from _operator import itemgetter
-from aislib.misc_utils import ensure_path_exists
+from aislib.misc_utils import ensure_path_exists, get_logger
 from eir.setup.input_setup_modules.setup_omics import read_bim
 from matplotlib import pyplot as plt
+
+logger = get_logger(name=__name__)
 
 
 def generate_interaction_snp_graph_figure(
@@ -21,19 +23,33 @@ def generate_interaction_snp_graph_figure(
     top_n_snps: Optional[int] = None,
     trait: Optional[str] = None,
 ) -> None:
+
+    df_interaction_effects_filtered = _filter_interaction_df_for_p_value(
+        df=df_interaction_effects,
+        p_threshold="auto",
+    )
+
+    if len(df_interaction_effects_filtered) == 0:
+        logger.info("No interactions found for SNP interaction graph figure, skipping.")
+        return
+
     train_interaction_info = _extract_cluster_info_from_interaction_df(
-        df_interactions=df_interaction_effects, bim_file_path=bim_file_path
+        df_interactions=df_interaction_effects_filtered,
+        bim_file_path=bim_file_path,
     )
     df_interaction_coefficients = build_interaction_coefficient_df(
-        df_interaction_effects=df_interaction_effects, snps=train_interaction_info.snps
+        df_interaction_effects=df_interaction_effects_filtered,
+        snps=train_interaction_info.snps,
     )
 
     df_interaction_coefficients = filter_df_interactions_for_top_n_snps(
-        df_interactions=df_interaction_coefficients, top_n=top_n_snps
+        df_interactions=df_interaction_coefficients,
+        top_n=top_n_snps,
     )
 
     summed_interactions = _get_snp_interactions_from_coefficients(
-        df_cluster=df_interaction_coefficients, top_n=top_n_snps
+        df_cluster=df_interaction_coefficients,
+        top_n=top_n_snps,
     )
 
     graph = build_graph_from_summed_interactions(
@@ -54,6 +70,37 @@ def generate_interaction_snp_graph_figure(
     ensure_path_exists(path=cur_output_path)
 
     cur_fig.savefig(cur_output_path, bbox_inches="tight")
+
+
+def _filter_interaction_df_for_p_value(
+    df: pd.DataFrame, p_threshold: float | str = "auto"
+) -> pd.DataFrame:
+    interaction_df = df[df.index.str.contains("--:--")]
+
+    if p_threshold == "auto":
+        n_pairs_tested = df["KEY"].nunique()
+        p_threshold = 0.05 / n_pairs_tested
+
+        logger.info(
+            "Setting p-value threshold to %f for SNP interaction graph figure "
+            "based on %d pairs tested.",
+            p_threshold,
+            n_pairs_tested,
+        )
+
+    valid_interactions = interaction_df[interaction_df["P>|t|"] <= p_threshold]
+
+    valid_keys = set(valid_interactions["KEY"])
+
+    logger.info(
+        "Keeping %d interactions out of %d for SNP interaction graph figure.",
+        len(valid_keys),
+        len(interaction_df),
+    )
+
+    df_filtered = df[df["KEY"].isin(valid_keys)]
+
+    return df_filtered
 
 
 def build_interaction_coefficient_df(
@@ -165,8 +212,7 @@ def _extract_cluster_info_from_interaction_df(
 
     for key, df_slice in df_interactions.groupby("KEY"):
         df_slice = df_slice.reset_index()
-        snp_1 = df_slice.iloc[1]["allele"].split(" ")[0]
-        snp_2 = df_slice.iloc[-2]["allele"].split(" ")[0]
+        snp_1, snp_2 = str(key).split("--:--")
 
         snp_1_chr = snp_chr_map[snp_1]
         snp_2_chr = snp_chr_map[snp_2]

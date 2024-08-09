@@ -1,27 +1,33 @@
 import os
 import subprocess
 from dataclasses import dataclass, fields
-from functools import lru_cache
 from pathlib import Path
-from statistics import mean
 from tempfile import TemporaryDirectory
-from typing import Any, Dict, Iterable, Literal, Optional, Sequence
+from typing import Any, Dict, Iterable, Literal, Optional
 
 import luigi
 import pandas as pd
-import psutil
-import torch
 import yaml
 from aislib.misc_utils import ensure_path_exists
 from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_replace
 
-from eir_auto_gp.modelling.configs import AggregateConfig, get_aggregate_config
-from eir_auto_gp.modelling.feature_selection import get_genotype_subset_snps_file
-from eir_auto_gp.modelling.gwas_feature_selection import run_gwas_feature_selection
+from eir_auto_gp.multi_task.modelling.configs import (
+    AggregateConfig,
+    get_aggregate_config,
+)
 from eir_auto_gp.preprocess.converge import (
     ParseDataWrapper,
     get_batch_size,
     get_dynamic_valid_size,
+)
+from eir_auto_gp.single_task.modelling.run_modelling import (
+    get_bim_path,
+    get_dataloader_workers,
+    get_device,
+    get_memory_dataset,
+    get_num_iter_per_epoch,
+    get_samples_per_epoch,
+    lines_in_file,
 )
 from eir_auto_gp.utils.utils import get_logger
 
@@ -31,7 +37,6 @@ logger = get_logger(name=__name__)
 class RunModellingWrapper(luigi.Task):
     folds = luigi.Parameter()
     data_config = luigi.DictParameter()
-    feature_selection_config = luigi.DictParameter()
     modelling_config = luigi.DictParameter()
 
     def requires(self):
@@ -42,7 +47,6 @@ class RunModellingWrapper(luigi.Task):
             yield task_object(
                 fold=fold,
                 data_config=self.data_config,
-                feature_selection_config=self.feature_selection_config,
                 modelling_config=self.modelling_config,
             )
 
@@ -74,7 +78,6 @@ class TestSingleRun(luigi.Task):
     fold = luigi.IntParameter()
 
     data_config = luigi.DictParameter()
-    feature_selection_config = luigi.DictParameter()
     modelling_config = luigi.DictParameter()
 
     def requires(self):
@@ -83,7 +86,6 @@ class TestSingleRun(luigi.Task):
             "train_run": TrainSingleRun(
                 fold=self.fold,
                 data_config=self.data_config,
-                feature_selection_config=self.feature_selection_config,
                 modelling_config=self.modelling_config,
             ),
         }
@@ -96,12 +98,9 @@ class TestSingleRun(luigi.Task):
 
         injection_params = build_injection_params(
             fold=int(self.fold),
-            folder_with_runs=output_root.parent,
-            genotype_data_path=self.data_config["genotype_data_path"],
             data_input_dict=self.input()["data"][0],
             task="test",
             data_config=self.data_config,
-            feature_selection_config=self.feature_selection_config,
             modelling_config=self.modelling_config,
         )
 
@@ -110,7 +109,7 @@ class TestSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"],
         )
 
-        base_aggregate_config = get_aggregate_config()
+        base_aggregate_config = get_aggregate_config(output_head="linear")
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
             build_configs(
@@ -121,8 +120,11 @@ class TestSingleRun(luigi.Task):
 
             train_run_folder = Path(self.input()["train_run"].path).parent
             base_predict_command = get_testing_string_from_config_folder(
-                config_folder=temp_config_folder, train_run_folder=train_run_folder
+                config_folder=temp_config_folder,
+                train_run_folder=train_run_folder,
+                with_labels=True,
             )
+            logger.info("Testing command: %s", base_predict_command)
 
             base_command_split = base_predict_command.split()
             process_info = subprocess.run(
@@ -144,11 +146,14 @@ class TestSingleRun(luigi.Task):
 
 
 def get_testing_string_from_config_folder(
-    config_folder: Path, train_run_folder: Path
+    config_folder: Path,
+    train_run_folder: Path,
+    with_labels: bool,
 ) -> str:
     base_string = "eirpredict"
     globals_string = " --global_configs "
     inputs_string = " --input_configs "
+    fusion_string = " --fusion_configs "
     output_string = " --output_configs "
 
     for file in config_folder.iterdir():
@@ -157,15 +162,21 @@ def get_testing_string_from_config_folder(
                 globals_string += " " + f"{str(file)}" + " "
             elif "input" in file.stem:
                 inputs_string += " " + f"{str(file)}" + " "
+            elif "fusion" in file.stem:
+                fusion_string += " " + f"{str(file)}" + " "
             elif "output" in file.stem:
                 output_string += " " + f"{str(file)}" + " "
 
-    final_string = base_string + globals_string + inputs_string + output_string
+    final_string = (
+        base_string + globals_string + inputs_string + fusion_string + output_string
+    )
 
     saved_models = list((train_run_folder / "saved_models").iterdir())
     assert len(saved_models) == 1, "Expected only one saved model."
 
-    final_string += f" --model_path {saved_models[0]} --evaluate"
+    final_string += f" --model_path {saved_models[0]}"
+    if with_labels:
+        final_string += " --evaluate"
 
     test_output_folder = train_run_folder / "test_set_predictions"
     ensure_path_exists(path=test_output_folder, is_folder=True)
@@ -178,7 +189,6 @@ def get_testing_string_from_config_folder(
 class TrainSingleRun(luigi.Task):
     fold = luigi.IntParameter()
     data_config = luigi.DictParameter()
-    feature_selection_config = luigi.DictParameter()
     modelling_config = luigi.DictParameter()
 
     def requires(self):
@@ -187,7 +197,6 @@ class TrainSingleRun(luigi.Task):
             base[f"train_{i}"] = TrainSingleRun(
                 fold=i,
                 data_config=self.data_config,
-                feature_selection_config=self.feature_selection_config,
                 modelling_config=self.modelling_config,
             )
         return base
@@ -198,12 +207,9 @@ class TrainSingleRun(luigi.Task):
 
         injection_params = build_injection_params(
             fold=int(self.fold),
-            folder_with_runs=output_root.parent,
-            genotype_data_path=self.data_config["genotype_data_path"],
             data_input_dict=self.input()["data"][0],
             task="train",
             data_config=self.data_config,
-            feature_selection_config=self.feature_selection_config,
             modelling_config=self.modelling_config,
         )
 
@@ -212,7 +218,7 @@ class TrainSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"],
         )
 
-        base_aggregate_config = get_aggregate_config()
+        base_aggregate_config = get_aggregate_config(output_head="linear")
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
             build_configs(
@@ -224,6 +230,7 @@ class TrainSingleRun(luigi.Task):
             base_train_command = get_training_string_from_config_folder(
                 config_folder=temp_config_folder
             )
+            logger.info("Training command: %s", base_train_command)
 
             base_command_split = base_train_command.split()
             process_info = subprocess.run(
@@ -252,65 +259,29 @@ class ModelInjectionParams:
     output_folder: str
     manual_valid_ids_file: Optional[str]
     genotype_input_source: str
-    genotype_subset_snps_file: Optional[str]
     label_file_path: str
     input_cat_columns: list[str]
     input_con_columns: list[str]
     output_cat_columns: list[str]
     output_con_columns: list[str]
-    compute_attributions: bool
     weighted_sampling_columns: list[str]
 
 
 def build_injection_params(
     fold: int,
-    folder_with_runs: Path,
-    genotype_data_path: str,
     data_input_dict: Dict[str, luigi.LocalTarget],
     task: Literal["train", "test"],
     data_config: Dict[str, Any],
-    feature_selection_config: Dict[str, Any],
     modelling_config: Dict[str, Any],
 ) -> ModelInjectionParams:
-    compute_attributions = should_compute_attributions(
-        task=task, feature_selection_config=feature_selection_config, fold=fold
-    )
     weighted_sampling_columns = get_weighted_sampling_columns(
         modelling_config=modelling_config
-    )
-    gwas_manual_subset_file = get_gwas_manual_subset_file(
-        task=task,
-        feature_selection_config=feature_selection_config,
-        genotype_data_path=genotype_data_path,
-        data_config=data_config,
-        modelling_config=modelling_config,
-    )
-
-    bim_file = _get_bim_path(genotype_data_path=genotype_data_path)
-    n_act_folds = feature_selection_config["n_dl_feature_selection_setup_folds"]
-    snp_subset_file = get_genotype_subset_snps_file(
-        fold=fold,
-        folder_with_runs=folder_with_runs,
-        feature_selection_approach=feature_selection_config["feature_selection"],
-        feature_selection_output_folder=Path(
-            feature_selection_config["feature_selection_output_folder"]
-        ),
-        bim_file=bim_file,
-        n_dl_feature_selection_setup_folds=n_act_folds,
-        manual_subset_from_gwas=gwas_manual_subset_file,
-        gwas_p_value_threshold=feature_selection_config["gwas_p_value_threshold"],
     )
 
     base_output_folder = modelling_config["modelling_output_folder"]
     cur_run_output_folder = f"{base_output_folder}/fold_{fold}"
 
-    label_file_path = build_tmp_label_file(
-        label_file_path=data_input_dict[f"{task}_tabular"].path,
-        output_cat_columns=modelling_config["output_cat_columns"],
-        tmp_dir=Path(base_output_folder, "tmp"),
-        output_con_columns=modelling_config["output_con_columns"],
-        prefix_name=task,
-    )
+    label_file_path = data_input_dict[f"{task}_tabular"].path
 
     manual_valid_ids_file = get_manual_valid_ids_file(
         task=task,
@@ -324,63 +295,21 @@ def build_injection_params(
         output_folder=cur_run_output_folder,
         manual_valid_ids_file=str(manual_valid_ids_file),
         genotype_input_source=data_input_dict[f"{task}_genotype"].path,
-        genotype_subset_snps_file=snp_subset_file,
         label_file_path=label_file_path,
         input_cat_columns=modelling_config["input_cat_columns"],
         input_con_columns=modelling_config["input_con_columns"],
         output_cat_columns=modelling_config["output_cat_columns"],
         output_con_columns=modelling_config["output_con_columns"],
-        compute_attributions=compute_attributions,
         weighted_sampling_columns=weighted_sampling_columns,
     )
 
     return params
 
 
-def should_compute_attributions(
-    task: str, feature_selection_config: Dict[str, Any], fold: int
-) -> bool:
-    fs = feature_selection_config["feature_selection"]
-    n_act_folds = feature_selection_config["n_dl_feature_selection_setup_folds"]
-    return (
-        task == "train" and fs in ("dl", "gwas->dl", "dl+gwas") and fold < n_act_folds
-    )
-
-
 def get_weighted_sampling_columns(
     modelling_config: Dict[str, Any]
 ) -> Optional[list[str]]:
     return ["all"] if modelling_config["output_cat_columns"] else None
-
-
-def get_gwas_manual_subset_file(
-    task: str,
-    feature_selection_config: Dict[str, Any],
-    genotype_data_path: str,
-    data_config: Dict[str, Any],
-    modelling_config: Dict[str, Any],
-) -> Optional[Path]:
-    feature_selection_tasks = feature_selection_config["feature_selection"]
-    if feature_selection_tasks is None:
-        return None
-
-    if "gwas" in feature_selection_tasks:
-        if task == "train":
-            gwas_snps_to_keep_path = run_gwas_feature_selection(
-                genotype_data_path=genotype_data_path,
-                data_config=data_config,
-                modelling_config=modelling_config,
-                feature_selection_config=feature_selection_config,
-            )
-            return gwas_snps_to_keep_path
-        elif task == "test":
-            fs_output_folder = Path(
-                feature_selection_config["feature_selection_output_folder"]
-            )
-            gwas_output_folder = fs_output_folder / "gwas_output"
-            return Path(gwas_output_folder, "snps_to_keep.txt")
-
-    return None
 
 
 def get_manual_valid_ids_file(
@@ -434,11 +363,6 @@ def build_tmp_label_file(
         ids_test = set(df["ID"].tolist())
         assert len(ids_train.intersection(ids_test)) == 0
 
-    if output_cat_columns:
-        df = df.dropna(subset=output_cat_columns)
-    if output_con_columns:
-        df = df.dropna(subset=output_con_columns)
-
     ensure_path_exists(path=tmp_label_file_path.parent, is_folder=True)
     df.to_csv(tmp_label_file_path, index=False)
 
@@ -481,6 +405,7 @@ def get_training_string_from_config_folder(config_folder: Path) -> str:
     base_string = "eirtrain"
     globals_string = " --global_configs "
     inputs_string = " --input_configs "
+    fusion_string = " --fusion_configs "
     output_string = " --output_configs "
 
     for file in config_folder.iterdir():
@@ -489,10 +414,14 @@ def get_training_string_from_config_folder(config_folder: Path) -> str:
                 globals_string += " " + f"{str(file)}" + " "
             elif "input" in file.stem:
                 inputs_string += " " + f"{str(file)}" + " "
+            elif "fusion" in file.stem:
+                fusion_string += " " + f"{str(file)}" + " "
             elif "output" in file.stem:
                 output_string += " " + f"{str(file)}" + " "
 
-    final_string = base_string + globals_string + inputs_string + output_string
+    final_string = (
+        base_string + globals_string + inputs_string + fusion_string + output_string
+    )
 
     return final_string
 
@@ -505,22 +434,23 @@ def _get_global_injections(
     manual_valid_ids_file: Optional[str],
     n_snps: int,
     n_samples: int,
-    compute_attributions: bool,
     iter_per_epoch: int,
     weighted_sampling_columns: list[str],
 ) -> Dict[str, Any]:
     mixing_candidates = [0.0]
     cur_mixing = mixing_candidates[fold % len(mixing_candidates)]
 
-    device = _get_device()
-    memory_dataset = _get_memory_dataset(n_snps=n_snps, n_samples=n_samples)
-    n_workers = _get_dataloader_workers(memory_dataset=memory_dataset)
+    device = get_device()
+    memory_dataset = get_memory_dataset(n_snps=n_snps, n_samples=n_samples)
+    n_workers = get_dataloader_workers(memory_dataset=memory_dataset, device=device)
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
     early_stopping_buffer = max(early_stopping_buffer, 1000)
     sample_interval = min(2000, iter_per_epoch)
+    lr = _get_learning_rate(n_snps=n_snps)
 
     injections = {
         "output_folder": output_folder,
+        "lr": lr,
         "device": device,
         "batch_size": batch_size,
         "valid_size": valid_size,
@@ -531,81 +461,41 @@ def _get_global_injections(
         "sample_interval": sample_interval,
         "checkpoint_interval": sample_interval,
         "early_stopping_buffer": early_stopping_buffer,
-        "compute_attributions": compute_attributions,
         "weighted_sampling_columns": weighted_sampling_columns,
     }
 
     return injections
 
 
-def _get_memory_dataset(n_snps: int, n_samples: int) -> bool:
-    available_memory = psutil.virtual_memory().available
-    upper_bound = 0.6 * available_memory
+def _get_learning_rate(n_snps: int) -> float:
+    if n_snps < 1_000:
+        lr = 1e-03
+    elif n_snps < 10_000:
+        lr = 5e-04
+    elif n_snps < 100_000:
+        lr = 2e-04
+    elif n_snps < 500_000:
+        lr = 1e-04
+    elif n_snps < 2_000_000:
+        lr = 5e-05
+    else:
+        lr = 1e-05
 
-    # 4 for one-hot encoding
-    total_size = n_snps * n_samples * 4
+    logger.info("Setting learning rate to %f due to %d SNPs.", lr, n_snps)
 
-    percent = total_size / available_memory
-    if total_size < upper_bound:
-        logger.info(
-            "Estimated dataset size %.4f GB is %.4f%% of available memory %.4f GB, "
-            "using memory dataset.",
-            total_size / 1e9,
-            percent * 100,
-            available_memory / 1e9,
-        )
-        return True
-
-    logger.info(
-        "Estimated dataset size %.4f GB is %.4f%% of available memory %.4f GB, "
-        "using disk dataset.",
-        total_size / 1e9,
-        percent * 100,
-        available_memory / 1e9,
-    )
-    return False
-
-
-def _get_device() -> str:
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
-    if device == "cpu":
-        logger.warning(
-            "Using CPU as no CUDA device found, "
-            "this might be much slower than using a CUDA device."
-        )
-    elif device == "cuda:0":
-        logger.info("Using CUDA device 0 for modelling.")
-
-    return device
-
-
-def _get_dataloader_workers(memory_dataset: bool) -> int:
-    if memory_dataset:
-        return 0
-
-    n_cores = os.cpu_count()
-    n_workers = int(0.8 * n_cores / 2)
-
-    if n_workers <= 2:
-        n_workers = 0
-
-    logger.info(
-        "Using %d workers for data loading based on %d available cores.",
-        n_workers,
-        n_cores,
-    )
-    return n_workers
+    return lr
 
 
 def _get_genotype_injections(
     input_source: str,
-    genotype_use_snps_file: Optional[str],
 ) -> Dict[str, Any]:
     base_snp_path = (
         Path(input_source).parent.parent / "processed/parsed_files/data_final.bim"
     )
     assert base_snp_path.exists(), f"SNP file not found at {base_snp_path}"
+
+    n_snps = lines_in_file(file_path=base_snp_path)
+    kernel_width, first_kernel_expansion = get_gln_kernel_parameters(n_snps=n_snps)
 
     injections = {
         "input_info": {
@@ -614,12 +504,39 @@ def _get_genotype_injections(
         "input_type_info": {
             "snp_file": str(base_snp_path),
         },
+        "model_config": {
+            "model_init_config": {
+                "kernel_width": kernel_width,
+                "first_kernel_expansion": first_kernel_expansion,
+            }
+        },
     }
 
-    if genotype_use_snps_file is not None:
-        injections["input_type_info"]["subset_snps_file"] = str(genotype_use_snps_file)
-
     return injections
+
+
+def get_gln_kernel_parameters(n_snps: int) -> tuple[int, int]:
+    if n_snps < 1000:
+        params = 16, -4
+    elif n_snps < 10000:
+        params = 16, -2
+    elif n_snps < 100000:
+        params = 16, 1
+    elif n_snps < 500000:
+        params = 16, 2
+    elif n_snps < 2000000:
+        params = 16, 4
+    else:
+        params = 16, 8
+
+    logger.info(
+        "Setting kernel width to %d and first kernel expansion to %d due to %d SNPs.",
+        params[0],
+        params[1],
+        n_snps,
+    )
+
+    return params
 
 
 def _get_tabular_injections(
@@ -647,6 +564,7 @@ def _get_output_injections(
         "output_type_info": {
             "target_cat_columns": output_cat_columns,
             "target_con_columns": output_con_columns,
+            "uncertainty_weighted_mt_loss": False,
         },
     }
 
@@ -671,13 +589,11 @@ def _get_all_dynamic_injections(
         batch_size=batch_size,
         valid_size=valid_size,
     )
-    bim_path = _get_bim_path(genotype_data_path=genotype_data_path)
+    bim_path = get_bim_path(genotype_data_path=genotype_data_path)
 
-    n_snps = _lines_in_file(file_path=bim_path)
-    if mip.genotype_subset_snps_file is not None:
-        n_snps = _lines_in_file(file_path=mip.genotype_subset_snps_file)
+    n_snps = lines_in_file(file_path=bim_path)
 
-    n_samples = _lines_in_file(file_path=mip.label_file_path) - 1
+    n_samples = lines_in_file(file_path=mip.label_file_path) - 1
 
     injections = {
         "global_config": _get_global_injections(
@@ -689,13 +605,12 @@ def _get_all_dynamic_injections(
             iter_per_epoch=iter_per_epoch,
             n_snps=n_snps,
             n_samples=n_samples,
-            compute_attributions=mip.compute_attributions,
             weighted_sampling_columns=mip.weighted_sampling_columns,
         ),
         "input_genotype_config": _get_genotype_injections(
             input_source=mip.genotype_input_source,
-            genotype_use_snps_file=mip.genotype_subset_snps_file,
         ),
+        "fusion_config": {},
         "output_config": _get_output_injections(
             label_file_path=mip.label_file_path,
             output_cat_columns=list(mip.output_cat_columns),
@@ -711,66 +626,3 @@ def _get_all_dynamic_injections(
         )
 
     return injections
-
-
-@lru_cache()
-def _lines_in_file(file_path: str | Path) -> int:
-    with open(file_path, "r") as f:
-        num_lines = sum(1 for _ in f)
-    return num_lines
-
-
-def _get_bim_path(genotype_data_path: str) -> str:
-    bim_files = [i for i in Path(genotype_data_path).glob("*.bim")]
-    assert len(bim_files) == 1, bim_files
-
-    path = bim_files[0]
-    assert path.exists(), f".bim file not found at {path}"
-    return str(path)
-
-
-def get_samples_per_epoch(model_injection_params: ModelInjectionParams) -> int:
-    mip = model_injection_params
-
-    if not mip.weighted_sampling_columns:
-        num_samples = _lines_in_file(file_path=mip.label_file_path) - 1
-        return num_samples
-
-    logger.info(
-        "Setting up weighted sampling for categorical output columns: %s.",
-        mip.output_cat_columns,
-    )
-    label_counts = get_column_label_counts(
-        label_file_path=mip.label_file_path, output_cat_columns=mip.output_cat_columns
-    )
-
-    mean_per_target = (min(i.values()) for i in label_counts.values())
-    mean_all_outputs = int(mean(mean_per_target))
-
-    return mean_all_outputs
-
-
-def get_column_label_counts(
-    label_file_path: str | Path, output_cat_columns: Sequence[str]
-) -> Dict[str, Dict[str, int]]:
-    columns = ["ID"] + list(output_cat_columns)
-    df = pd.read_csv(label_file_path, index_col=["ID"], usecols=columns)
-
-    label_counts = {}
-
-    for col in output_cat_columns:
-        label_counts[col] = df[col].value_counts().to_dict()
-
-    return label_counts
-
-
-def get_num_iter_per_epoch(
-    num_samples_per_epoch: int, batch_size: int, valid_size: int
-) -> int:
-    iter_per_epoch = (num_samples_per_epoch - valid_size) // batch_size
-    iter_per_epoch = max(50, iter_per_epoch)
-    return iter_per_epoch
-
-
-if __name__ == "__main__":
-    luigi.build([RunModellingWrapper()], local_scheduler=True)
