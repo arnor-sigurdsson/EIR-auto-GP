@@ -143,7 +143,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--feature_selection",
         default="gwas+bo",
-        choices=["dl", "gwas", "gwas->dl", "dl+gwas", "gwas+bo", None],
+        choices=["dl", "gwas", "gwas->dl", "dl+gwas", "gwas+bo", None, "None"],
         required=False,
         help="What kind of feature selection strategy to use for SNP selection:\n"
         "  - If None, no feature selection is performed.\n"
@@ -493,7 +493,11 @@ def build_feature_selection_config(cl_args: argparse.Namespace) -> Dict[str, Any
         "gwas_p_value_threshold",
     ]
 
-    return extract_from_namespace(namespace=cl_args, keys=feature_selection_keys)
+    fs_config = extract_from_namespace(namespace=cl_args, keys=feature_selection_keys)
+    if fs_config["feature_selection"] in [None, "None"]:
+        fs_config["feature_selection"] = None
+
+    return fs_config
 
 
 def build_modelling_config(cl_args: argparse.Namespace) -> Dict[str, Any]:

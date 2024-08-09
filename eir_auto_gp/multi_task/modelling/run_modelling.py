@@ -468,16 +468,18 @@ def _get_global_injections(
 
 
 def _get_learning_rate(n_snps: int) -> float:
-    if n_snps < 1000:
-        lr = 0.001
-    elif n_snps < 10000:
-        lr = 0.0005
-    elif n_snps < 100000:
-        lr = 0.0002
-    elif n_snps < 500000:
-        lr = 0.0001
+    if n_snps < 1_000:
+        lr = 1e-03
+    elif n_snps < 10_000:
+        lr = 5e-04
+    elif n_snps < 100_000:
+        lr = 2e-04
+    elif n_snps < 500_000:
+        lr = 1e-04
+    elif n_snps < 2_000_000:
+        lr = 5e-05
     else:
-        lr = 0.00001
+        lr = 1e-05
 
     logger.info("Setting learning rate to %f due to %d SNPs.", lr, n_snps)
 
