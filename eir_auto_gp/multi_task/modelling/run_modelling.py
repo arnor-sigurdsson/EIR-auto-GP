@@ -379,7 +379,8 @@ def build_configs(
         config = getattr(aggregate_config_base, config_name)
         if config_name in injections:
             config = recursive_dict_replace(
-                dict_=config, dict_to_inject=injections[config_name]
+                dict_=config,
+                dict_to_inject=injections[config_name],
             )
         else:
             continue
@@ -449,19 +450,27 @@ def _get_global_injections(
     lr = _get_learning_rate(n_snps=n_snps)
 
     injections = {
-        "output_folder": output_folder,
-        "lr": lr,
-        "device": device,
-        "batch_size": batch_size,
-        "valid_size": valid_size,
-        "manual_valid_ids_file": manual_valid_ids_file,
-        "dataloader_workers": n_workers,
-        "memory_dataset": memory_dataset,
-        "mixing_alpha": cur_mixing,
-        "sample_interval": sample_interval,
-        "checkpoint_interval": sample_interval,
-        "early_stopping_buffer": early_stopping_buffer,
-        "weighted_sampling_columns": weighted_sampling_columns,
+        "basic_experiment": {
+            "output_folder": output_folder,
+            "device": device,
+            "batch_size": batch_size,
+            "valid_size": valid_size,
+            "manual_valid_ids_file": manual_valid_ids_file,
+            "dataloader_workers": n_workers,
+            "memory_dataset": memory_dataset,
+        },
+        "optimization": {
+            "lr": lr,
+        },
+        "evaluation_checkpoint": {
+            "sample_interval": sample_interval,
+            "checkpoint_interval": sample_interval,
+        },
+        "training_control": {
+            "mixing_alpha": cur_mixing,
+            "early_stopping_buffer": early_stopping_buffer,
+            "weighted_sampling_columns": weighted_sampling_columns,
+        },
     }
 
     return injections

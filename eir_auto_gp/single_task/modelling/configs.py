@@ -8,27 +8,40 @@ logger = get_logger(name=__name__)
 
 def get_base_global_config() -> Dict[str, Any]:
     base = {
-        "output_folder": "FILL",
-        "checkpoint_interval": "FILL",
-        "batch_size": "FILL",
-        "sample_interval": "FILL",
-        "save_evaluation_sample_results": False,
-        "lr": 0.0002,
-        "lr_plateau_patience": 4,
-        "gradient_clipping": 1.0,
-        "valid_size": "FILL",
-        "n_epochs": 5000,
-        "dataloader_workers": "FILL",
-        "device": "FILL",
-        "early_stopping_buffer": "FILL",
-        "early_stopping_patience": 6,
-        "compute_attributions": False,
-        "attribution_background_samples": 64,
-        "max_attributions_per_class": 1000,
-        "attributions_every_sample_factor": 5,
-        "no_pbar": False,
-        "mixing_alpha": "FILL",
-        "optimizer": "adabelief",
+        "basic_experiment": {
+            "output_folder": "FILL",
+            "batch_size": "FILL",
+            "valid_size": "FILL",
+            "n_epochs": 5000,
+            "dataloader_workers": "FILL",
+            "device": "FILL",
+        },
+        "evaluation_checkpoint": {
+            "checkpoint_interval": "FILL",
+            "sample_interval": "FILL",
+        },
+        "optimization": {
+            "lr": 0.0002,
+            "gradient_clipping": 1.0,
+            "optimizer": "adabelief",
+        },
+        "lr_schedule": {
+            "lr_plateau_patience": 4,
+        },
+        "training_control": {
+            "early_stopping_buffer": "FILL",
+            "early_stopping_patience": 6,
+            "mixing_alpha": "FILL",
+        },
+        "attribution_analysis": {
+            "compute_attributions": False,
+            "attribution_background_samples": 64,
+            "max_attributions_per_class": 1000,
+            "attributions_every_sample_factor": 5,
+        },
+        "visualization_logging": {
+            "no_pbar": False,
+        },
     }
     return base
 
