@@ -39,6 +39,6 @@ jobs:
           plink2 --version
       - name: Run tests with Python ${{ matrix.python-version }} on ${{ matrix.os }}
         run: |
-          pip install tox==4.12.1
-          pip install poetry==1.7.1
+          pip install tox==4.17.1
+          pip install poetry==1.8.3
           tox -e py
