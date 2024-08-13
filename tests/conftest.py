@@ -16,7 +16,7 @@ def simulate_genetic_data_to_bed(tmp_path: Path) -> Callable[[int, int, str], Pa
             phenotype=phenotype,
         )
 
-        ind_ids = [f"ind{i+1}" for i in range(n_individuals)]
+        ind_ids = [f"ind{i + 1}" for i in range(n_individuals)]
         properties: Dict[str, List[str]] = {
             "sid": df_snp.columns.tolist(),
             "iid": ind_ids,
@@ -143,7 +143,7 @@ def _get_snp_list(n_snps: int) -> list[str]:
         "rs75-51#801",
     ]
 
-    snp_base_cases = [f"snp{i+1}" for i in range(n_snps - len(snp_edge_cases))]
+    snp_base_cases = [f"snp{i + 1}" for i in range(n_snps - len(snp_edge_cases))]
 
     snp_list = snp_base_cases + snp_edge_cases
     assert len(snp_list) == n_snps

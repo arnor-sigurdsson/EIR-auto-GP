@@ -4571,6 +4571,20 @@ pytest = ">=4.6"
 testing = ["fields", "hunter", "process-tests", "pytest-xdist", "virtualenv"]
 
 [[package]]
+name = "pytest-split"
+version = "0.9.0"
+description = "Pytest plugin which splits the test suite to equally sized sub suites based on test execution time."
+optional = false
+python-versions = "<4.0,>=3.8.1"
+files = [
+    {file = "pytest_split-0.9.0-py3-none-any.whl", hash = "sha256:9e197df601828d76a1ab615158d9c6253ec9f96e46c1d3ea27187aa5ac0ef9de"},
+    {file = "pytest_split-0.9.0.tar.gz", hash = "sha256:ca52527e4d9024f6ec3aba723527bd276d12096024999b1f5b8445a38da1e81c"},
+]
+
+[package.dependencies]
+pytest = ">=5,<9"
+
+[[package]]
 name = "python-daemon"
 version = "3.0.1"
 description = "Library to implement a well-behaved Unix daemon process."
@@ -7363,4 +7377,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.12.0,<3.13"
-content-hash = "0799568bbced27af298b19b5398c65d00f3b3a30c217df6bf475cdbcde5778d6"
+content-hash = "0b4e66368d33b6bd9d448b1bafbae2b669d9b89a21e8528154efc81ad4b70406"

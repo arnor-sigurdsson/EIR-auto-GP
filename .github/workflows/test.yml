@@ -11,6 +11,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04, macos-latest]
         python-version: ['3.12']
+        group: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
@@ -38,7 +39,9 @@ jobs:
           mv plink2 ~/.local/bin
           plink2 --version
       - name: Run tests with Python ${{ matrix.python-version }} on ${{ matrix.os }}
+        env:
+          PYTEST_GROUP: ${{ matrix.group }}
         run: |
           pip install tox==4.17.1
           pip install poetry==1.8.3
-          tox -e py
+          tox -e py_partial

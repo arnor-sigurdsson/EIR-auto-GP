@@ -2,9 +2,12 @@ name: Coverage
 on: [push, pull_request]
 jobs:
 
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-20.04
+  test:
+    strategy:
+      matrix:
+        group: [1, 2, 3, 4, 5]
+    name: Test group ${{ matrix.group }}
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - name: Setup Python
@@ -25,11 +28,13 @@ jobs:
           ./plink2 --version
           mv plink2 ~/.local/bin
           plink2 --version
-      - name: Run tests with Python
+      - name: Install and Run Tox
+        env:
+          PYTEST_GROUP: ${{ matrix.group }}
         run: |
           pip install tox==4.17.1
           pip install poetry==1.8.3
-          tox -e py
+          tox -e py_partial
       - name: Generate report
         uses: codecov/codecov-action@v4
         with:
