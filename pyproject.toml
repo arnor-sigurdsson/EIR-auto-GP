@@ -7,8 +7,8 @@ readme = "README.md"
 packages = [{include = "eir_auto_gp"}]
 
 [tool.poetry.dependencies]
-python = ">=3.11.0,<3.12"
-eir-dl = "^0.1.43"
+python = ">=3.12.0,<3.13"
+eir-dl = "^0.4.0"
 plink-pipelines = "^0.2.0"
 scikit-optimize = "^0.9.0"
 qmplot = "^0.3.2"
@@ -36,6 +36,7 @@ pdf2image = "^1.17.0"
 gdown = "^5.2.0"
 coverage = "^7.5.3"
 isort = "^5.13.2"
+pytest-split = "^0.9.0"
 
 [build-system]
 requires = ["poetry-core"]

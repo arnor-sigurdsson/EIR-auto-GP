@@ -9,7 +9,7 @@
         <img src="https://img.shields.io/badge/License-APGL-5B2D5B.svg" /></a>
   
   <a href="https://www.python.org/downloads/" alt="Python">
-        <img src="https://img.shields.io/badge/python-3.11-blue.svg" /></a>
+        <img src="https://img.shields.io/badge/python-3.12-blue.svg" /></a>
   
   <a href="https://pypi.org/project/eir-auto-gp/" alt="Python">
         <img src="https://img.shields.io/pypi/v/eir-auto-gp.svg" /></a>
@@ -48,7 +48,7 @@ Then, install `EIR-auto-GP` using `pip`:
 
 `pip install eir-auto-gp`
 
-**Important:** The latest version of EIR-auto-GP supports [Python 3.11](https://www.python.org/downloads/). Using an older version of Python will install a outdated version of EIR-auto-GP, which likely be incompatible with the current documentation and might contain bugs. Please ensure that you are installing EIR-auto-GP in a Python 3.11 environment.
+**Important:** The latest version of EIR-auto-GP supports [Python 3.12](https://www.python.org/downloads/). Using an older version of Python will install a outdated version of EIR-auto-GP, which likely be incompatible with the current documentation and might contain bugs. Please ensure that you are installing EIR-auto-GP in a Python 3.12 environment.
 
 
 ## Usage
