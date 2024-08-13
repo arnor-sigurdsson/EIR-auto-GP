@@ -7,8 +7,8 @@ readme = "README.md"
 packages = [{include = "eir_auto_gp"}]
 
 [tool.poetry.dependencies]
-python = ">=3.11.0,<3.12"
-eir-dl = "^0.3.1"
+python = ">=3.12.0,<3.13"
+eir-dl = "^0.4.0"
 plink-pipelines = "^0.2.0"
 scikit-optimize = "^0.9.0"
 qmplot = "^0.3.2"
