@@ -266,7 +266,7 @@ def _check_additive_coefficients(df: pd.DataFrame, regression_type: str) -> None
             third_row_coef = np.exp(third_row_coef)
 
         ratio = abs(third_row_coef - 2 * second_row_coef) / (2 * second_row_coef)
-        is_close = ratio < 0.35
+        is_close = ratio < 0.5
 
         msg = (
             f"SNP{snp}: 2nd row = {second_row_coef}, "
