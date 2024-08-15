@@ -110,6 +110,15 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--genotype_feature_selection",
+        type=str,
+        default="",
+        help="Feature selection method to use for genotype data.\n"
+        "Options are:\n"
+        "  - 'random': Randomly choose 10% of each chromosome.\n",
+    )
+
+    parser.add_argument(
         "--folds",
         type=str,
         default="0-5",
@@ -386,6 +395,7 @@ def build_modelling_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "input_con_columns",
         "output_cat_columns",
         "output_con_columns",
+        "genotype_feature_selection",
         "do_test",
     ]
 

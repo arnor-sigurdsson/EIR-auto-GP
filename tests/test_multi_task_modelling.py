@@ -13,6 +13,7 @@ def _get_test_cl_commands() -> list[str]:
     base = (
         "--genotype_data_path tests/test_data/ "
         "--label_file_path tests/test_data/penncath.csv  "
+        "--genotype_feature_selection random "
         "--global_output_folder runs/penncath "
         "--output_cat_columns CAD "
         "--output_con_columns tg hdl ldl "
