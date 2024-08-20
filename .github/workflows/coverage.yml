@@ -28,6 +28,15 @@ jobs:
           ./plink2 --version
           mv plink2 ~/.local/bin
           plink2 --version
+      - name: Download and extract plink1
+        run: |
+          curl -LJO https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20240818.zip
+          unzip plink_*.zip
+          rm plink_*.zip
+          chmod +x plink
+          ./plink --version
+          mv plink ~/.local/bin
+          plink --version
       - name: Install and Run Tox
         env:
           PYTEST_GROUP: ${{ matrix.group }}
