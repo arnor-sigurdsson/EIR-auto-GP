@@ -38,6 +38,10 @@ def test_modelling(command: str, tmp_path: Path) -> None:
     model_folder = tmp_path / "modelling"
     check_test = True if "do_test" in command else False
     for modelling_run in _iterdir_ignore_hidden(path=model_folder):
+
+        if not modelling_run.name.startswith("fold_"):
+            continue
+
         check_modelling_results(run_folder=modelling_run, check_test=check_test)
 
 
