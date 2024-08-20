@@ -117,6 +117,10 @@ def gather_test_predictions(
 
     metric_funcs = None
     for fold in _iterdir_ignore_hidden(path=folder_with_folds):
+
+        if not fold.name.startswith("fold_"):
+            continue
+
         targets_folder = Path(fold, "test_set_predictions", "eir_auto_gp")
 
         if metric_funcs is None:
@@ -276,7 +280,12 @@ def _gather_validation_results(
     folder_with_folds: Path,
 ) -> Iterator[Tuple[str, pd.DataFrame]]:
     results = {}
-    for fold_folder in _iterdir_ignore_hidden(path=folder_with_folds):
+    for maybe_fold_folder in _iterdir_ignore_hidden(path=folder_with_folds):
+
+        if not maybe_fold_folder.name.startswith("fold_"):
+            continue
+
+        fold_folder = maybe_fold_folder
         targets_folder = Path(fold_folder, "results", "eir_auto_gp")
 
         avg_file = Path(fold_folder, "validation_average_history.log")

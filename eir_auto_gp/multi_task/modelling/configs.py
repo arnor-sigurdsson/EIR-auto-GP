@@ -19,7 +19,7 @@ def get_base_global_config() -> Dict[str, Any]:
         "evaluation_checkpoint": {
             "checkpoint_interval": "FILL",
             "sample_interval": "FILL",
-            "saved_result_detail_level": 1,
+            "saved_result_detail_level": 2,
         },
         "optimization": {
             "lr": "FILL",
@@ -27,11 +27,11 @@ def get_base_global_config() -> Dict[str, Any]:
             "optimizer": "adabelief",
         },
         "lr_schedule": {
-            "lr_plateau_patience": 4,
+            "lr_plateau_patience": 6,
         },
         "training_control": {
             "early_stopping_buffer": "FILL",
-            "early_stopping_patience": 6,
+            "early_stopping_patience": 8,
             "mixing_alpha": "FILL",
         },
         "attribution_analysis": {
@@ -75,6 +75,16 @@ def get_base_input_genotype_config() -> Dict[str, Any]:
                 "attention_inclusion_cutoff": 0,
             },
         },
+        "tensor_broker_config": {
+            "message_configs": [
+                {
+                    "name": "first_layer_tensor",
+                    "layer_path": "input_modules.genotype.fc_0",
+                    "cache_tensor": True,
+                    "layer_cache_target": "input",
+                }
+            ]
+        },
     }
 
     return base
@@ -114,6 +124,18 @@ def get_base_fusion_config(model_type: str = "mlp-residual") -> Dict[str, Any]:
                 "stochastic_depth_p": 0.1,
             },
             "model_type": "mlp-residual",
+            "tensor_broker_config": {
+                "message_configs": [
+                    {
+                        "name": "first_fusion_residual_block",
+                        "layer_path": "fusion_modules.computed.fusion_modules."
+                        "fusion.0.0",
+                        "use_from_cache": ["first_layer_tensor"],
+                        "projection_type": "lcl_residual",
+                        "cache_fusion_type": "sum",
+                    }
+                ]
+            },
         }
     elif model_type == "mgmoe":
         base = {
@@ -126,6 +148,18 @@ def get_base_fusion_config(model_type: str = "mlp-residual") -> Dict[str, Any]:
                 "mg_num_experts": 8,
             },
             "model_type": "mgmoe",
+            "tensor_broker_config": {
+                "message_configs": [
+                    {
+                        "name": "first_fusion_residual_block",
+                        "layer_path": "fusion_modules.computed.fusion_modules."
+                        "fusion.0.0",
+                        "use_from_cache": ["first_layer_tensor"],
+                        "projection_type": "lcl_residual",
+                        "cache_fusion_type": "sum",
+                    }
+                ]
+            },
         }
     else:
         raise ValueError()

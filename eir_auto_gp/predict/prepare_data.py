@@ -23,4 +23,10 @@ def run_prepare_data(final_genotype_data_path: str, output_folder: str) -> Path:
 
     subprocess.run(command, check=True)
 
+    output_path = get_prepared_folder_path(output_folder=output_folder)
+
+    return output_path
+
+
+def get_prepared_folder_path(output_folder: str) -> Path:
     return Path(output_folder, "processed/full_inds/full_chrs/encoded_outputs")

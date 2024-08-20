@@ -502,25 +502,13 @@ def _get_learning_rate(n_snps: int) -> float:
 
 def _get_genotype_injections(
     input_source: str,
-    genotype_feature_selection: str,
-    tmp_folder: Path,
-    fold: int,
+    n_snps: int,
+    subset_snp_path: Optional[Path],
 ) -> Dict[str, Any]:
     base_snp_path = (
         Path(input_source).parent.parent / "processed/parsed_files/data_final.bim"
     )
     assert base_snp_path.exists(), f"SNP file not found at {base_snp_path}"
-
-    subset_snp_path = None
-    if genotype_feature_selection == "random":
-        n_snps, subset_snp_path = build_random_snp_subset_file(
-            original_bim_path=base_snp_path,
-            tmp_folder=tmp_folder,
-            fold=fold,
-        )
-    else:
-        assert not genotype_feature_selection
-        n_snps = lines_in_file(file_path=base_snp_path)
 
     kernel_width, first_kernel_expansion = get_gln_kernel_parameters(n_snps=n_snps)
 
@@ -539,8 +527,7 @@ def _get_genotype_injections(
         },
     }
 
-    if genotype_feature_selection:
-        assert subset_snp_path is not None
+    if subset_snp_path:
         injections["input_type_info"]["subset_snps_file"] = str(subset_snp_path)
 
     return injections
@@ -623,9 +610,20 @@ def _get_all_dynamic_injections(
     )
     bim_path = get_bim_path(genotype_data_path=genotype_data_path)
 
-    n_snps = lines_in_file(file_path=bim_path)
-
     n_samples = lines_in_file(file_path=mip.label_file_path) - 1
+
+    subset_folder = Path(mip.modelling_base_output_folder) / "snp_subset_files"
+
+    subset_snp_path = None
+    if mip.genotype_feature_selection == "random":
+        n_snps, subset_snp_path = build_random_snp_subset_file(
+            original_bim_path=Path(bim_path),
+            output_folder=subset_folder,
+            fold=mip.fold,
+        )
+    else:
+        assert not mip.genotype_feature_selection
+        n_snps = lines_in_file(file_path=bim_path)
 
     injections = {
         "global_config": _get_global_injections(
@@ -641,9 +639,8 @@ def _get_all_dynamic_injections(
         ),
         "input_genotype_config": _get_genotype_injections(
             input_source=mip.genotype_input_source,
-            genotype_feature_selection=mip.genotype_feature_selection,
-            fold=mip.fold,
-            tmp_folder=Path(mip.modelling_base_output_folder) / "tmp",
+            n_snps=n_snps,
+            subset_snp_path=subset_snp_path,
         ),
         "fusion_config": {},
         "output_config": _get_output_injections(
@@ -665,7 +662,7 @@ def _get_all_dynamic_injections(
 
 def build_random_snp_subset_file(
     original_bim_path: Path,
-    tmp_folder: Path,
+    output_folder: Path,
     fold: int,
     fraction_per_chr: float = 0.1,
 ) -> tuple[int, Path]:
@@ -686,8 +683,10 @@ def build_random_snp_subset_file(
 
     df_sampled = pd.concat(sampled_dfs).sort_values(["CHR_CODE", "BP_COORD"])
 
-    output_file = tmp_folder / f"random_subset_fold={fold}.bim"
+    output_file = output_folder / f"random_subset_fold={fold}.txt"
     ensure_path_exists(path=output_file.parent, is_folder=True)
+
+    df_sampled = df_sampled[["VAR_ID"]]
 
     df_sampled.to_csv(
         output_file,

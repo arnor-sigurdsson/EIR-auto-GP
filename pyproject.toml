@@ -47,6 +47,8 @@ eirautogp = "eir_auto_gp.single_task.run_single_task:main"
 eirautogpmulti = "eir_auto_gp.multi_task.run_multi_task:main"
 eirautogwas = "eir_auto_gp.preprocess.gwas_pre_selection:main"
 eirautopostanalysis = "eir_auto_gp.post_analysis.run_post_analysis:main"
+eirautogppack = "eir_auto_gp.predict.pack:main"
+eirautogppredict = "eir_auto_gp.predict.run_predict:main"
 
 [tool.isort]
 profile = "black"

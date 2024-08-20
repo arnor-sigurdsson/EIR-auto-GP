@@ -365,7 +365,7 @@ def run_subprocess(command: list[str]) -> None:
             text=True,
         )
     except CalledProcessError as e:
-        print(f"Command failed with exit code {e.returncode}")
-        print(f"Output: {e.output}")
-        print(f"Error: {e.stderr}")
+        logger.error(f"Command failed with exit code {e.returncode}")
+        logger.error(f"Output: {e.output}")
+        logger.error(f"Error: {e.stderr}")
         raise
