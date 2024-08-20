@@ -22,7 +22,7 @@ jobs:
       - name: Download and extract plink2
         run: |
           curl -LJO https://s3.amazonaws.com/plink2-assets/alpha5/plink2_linux_avx2_20240105.zip
-          unzip plink2_*.zip
+          unzip -o plink2_*.zip
           rm plink2_*.zip
           chmod +x plink2
           ./plink2 --version
@@ -31,7 +31,7 @@ jobs:
       - name: Download and extract plink1
         run: |
           curl -LJO https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20240818.zip
-          unzip plink_*.zip
+          unzip -o plink_*.zip
           rm plink_*.zip
           chmod +x plink
           ./plink --version

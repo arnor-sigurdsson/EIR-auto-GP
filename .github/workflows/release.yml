@@ -34,7 +34,7 @@ jobs:
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             curl -LJO https://s3.amazonaws.com/plink2-assets/alpha5/plink2_mac_20240105.zip
           fi
-          unzip plink2_*.zip
+          unzip -o plink2_*.zip
           rm plink2_*.zip
           chmod +x plink2
           ./plink2 --version
@@ -47,7 +47,7 @@ jobs:
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             curl -LJO https://s3.amazonaws.com/plink1-assets/plink_mac_20240818.zip
           fi
-          unzip plink_*.zip
+          unzip -o plink_*.zip
           rm plink_*.zip
           chmod +x plink
           ./plink --version
