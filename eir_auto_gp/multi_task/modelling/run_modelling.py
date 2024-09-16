@@ -582,7 +582,7 @@ def _get_output_injections(
         "output_type_info": {
             "target_cat_columns": output_cat_columns,
             "target_con_columns": output_con_columns,
-            "uncertainty_weighted_mt_loss": False,
+            "uncertainty_weighted_mt_loss": True,
         },
     }
 
@@ -620,6 +620,7 @@ def _get_all_dynamic_injections(
             original_bim_path=Path(bim_path),
             output_folder=subset_folder,
             fold=mip.fold,
+            fraction_per_chr=0.1,
         )
     else:
         assert not mip.genotype_feature_selection
@@ -684,6 +685,12 @@ def build_random_snp_subset_file(
     df_sampled = pd.concat(sampled_dfs).sort_values(["CHR_CODE", "BP_COORD"])
 
     output_file = output_folder / f"random_subset_fold={fold}.txt"
+
+    if output_file.exists():
+        logger.info("%s already exists, using file.", output_file)
+        n_snps = lines_in_file(file_path=output_file)
+        return n_snps, output_file
+
     ensure_path_exists(path=output_file.parent, is_folder=True)
 
     df_sampled = df_sampled[["VAR_ID"]]

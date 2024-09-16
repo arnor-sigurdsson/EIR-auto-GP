@@ -1,5 +1,6 @@
 import argparse
 import json
+import re
 import subprocess
 from argparse import ArgumentParser
 from dataclasses import dataclass
@@ -50,6 +51,7 @@ def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
         output_root=Path(filter_config.output_path),
         pre_split_folder=filter_config.pre_split_folder,
         freeze_validation_set=True,
+        check_valid_and_test_ids=False,
     )
     train_ids_plink, *_ = add_plink_format_train_test_files(
         fam_file=fam_file_path,
@@ -74,9 +76,12 @@ def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
 
     logger.info("Running GWAS with command: %s", " ".join(command))
     subprocess.run(command, check=True)
-    plot_gwas_results(
-        gwas_output_path=gwas_output_path, p_value_line=filter_config.p_value_threshold
-    )
+    if filter_config.do_plot:
+        plot_gwas_results(
+            gwas_output_path=gwas_output_path,
+            p_value_line=filter_config.p_value_threshold,
+        )
+
     gwas_label_path.unlink()
 
     snps_to_keep_path = gather_all_snps_to_keep(
@@ -172,8 +177,10 @@ def get_plink_gwas_command(
         " --1"
         f" --pheno {label_file_path}"
         f" --pheno-name {' '.join(pheno_names)}"
+        f" --no-input-missing-phenotype"
         f" --glm "
-        f"firth-fallback hide-covar omit-ref no-x-sex allow-no-covars"
+        f"firth-fallback hide-covar omit-ref no-x-sex allow-no-covars "
+        f"qt-residualize cc-residualize skip-invalid-pheno"
         f" --out {output_path}/gwas"
     )
 
@@ -421,7 +428,7 @@ def gather_all_ids(fam_file_path: str | Path, label_file_path: str | Path) -> li
     genotype_ids = set(df_fam[1].astype(str))
 
     labelled_ids = set(
-        gather_ids_from_csv_file(file_path=label_file_path, drop_nas=True)
+        gather_ids_from_csv_file(file_path=label_file_path, drop_nas=False)
     )
 
     common_ids_to_keep = set().union(genotype_ids, labelled_ids)
@@ -537,7 +544,7 @@ def _prepare_df_columns_for_gwas(
     )
 
     df.columns = [parse_target_for_plink(target=col) for col in df.columns]
-    df = df.fillna(-9)
+    df = df.fillna("NA")
 
     one_hot_mappings_converted = _convert_int64(obj=one_hot_mappings)
 
@@ -557,6 +564,8 @@ def _convert_int64(obj: Any) -> Any:
 
 def parse_target_for_plink(target: str) -> str:
     target = target.replace(" ", "_").replace("-", "_")
+    target = target.replace(",", "_")
+    target = re.sub(r"_{2,}", "_", target)
     return target
 
 
@@ -567,6 +576,15 @@ def plot_gwas_results(
         if "linear" not in f.name and "logistic" not in f.name:
             continue
 
+        manhattan_output_path = Path(
+            gwas_output_path, "plots", f"{f.name}_manhattan.png"
+        )
+        qq_output_path = Path(gwas_output_path, "plots", f"{f.name}_qq.png")
+
+        if manhattan_output_path.exists() and qq_output_path.exists():
+            logger.info("Manhattan and QQ plots already exist for %s. Skipping.", f)
+            continue
+
         df = pd.read_csv(f, sep="\t", low_memory=False)
         df = df.dropna(how="any", axis=0)
 
@@ -574,9 +592,7 @@ def plot_gwas_results(
 
         try:
             fig_manhattan = get_manhattan_plot(df=df, p_value_line=p_value_line)
-            manhattan_output_path = Path(
-                gwas_output_path, "plots", f"{f.name}_manhattan.png"
-            )
+
             ensure_path_exists(path=manhattan_output_path)
             fig_manhattan.savefig(fname=manhattan_output_path, dpi=300)
         except Exception as e:
@@ -584,7 +600,6 @@ def plot_gwas_results(
 
         try:
             fig_qq = get_qq_plot(df=df)
-            qq_output_path = Path(gwas_output_path, "plots", f"{f.name}_qq.png")
             ensure_path_exists(path=qq_output_path)
             fig_qq.savefig(fname=qq_output_path, dpi=300)
         except Exception as e:
@@ -661,6 +676,7 @@ class GWASPreFilterConfig:
     pre_split_folder: Optional[str]
     only_gwas: bool
     p_value_threshold: float = 1e-04
+    do_plot: bool = True
 
 
 def get_gwas_parser() -> ArgumentParser:
@@ -727,6 +743,12 @@ def get_gwas_parser() -> ArgumentParser:
         help="Only perform GWAS and do not filter genotype data.",
     )
 
+    parser.add_argument(
+        "--do_plot",
+        action="store_true",
+        help="Whether to plot GWAS results.",
+    )
+
     return parser
 
 
@@ -740,6 +762,7 @@ def get_gwas_pre_filter_config(cl_args: argparse.Namespace) -> GWASPreFilterConf
         pre_split_folder=cl_args.pre_split_folder,
         p_value_threshold=cl_args.gwas_p_value_threshold,
         only_gwas=cl_args.only_gwas,
+        do_plot=cl_args.do_plot,
     )
 
 

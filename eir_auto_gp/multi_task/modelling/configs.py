@@ -56,9 +56,9 @@ def get_base_input_genotype_config() -> Dict[str, Any]:
             "input_inner_key": "genotype",
         },
         "input_type_info": {
-            "mixing_subtype": "cutmix-block",
-            "na_augment_alpha": 1.0,
-            "na_augment_beta": 19.0,
+            "mixing_subtype": "mixup",
+            "na_augment_alpha": 0.6,
+            "na_augment_beta": 2.0,
             "shuffle_augment_alpha": 1.0,
             "shuffle_augment_beta": 49.0,
             "snp_file": "FILL",
@@ -66,7 +66,7 @@ def get_base_input_genotype_config() -> Dict[str, Any]:
         "model_config": {
             "model_type": "genome-local-net",
             "model_init_config": {
-                "rb_do": 0.1,
+                "rb_do": 0.0,
                 "channel_exp_base": 3,
                 "kernel_width": "FILL",
                 "first_kernel_expansion": "FILL",
@@ -114,57 +114,134 @@ def get_base_tabular_input_config() -> Dict[str, Any]:
 
 
 def get_base_fusion_config(model_type: str = "mlp-residual") -> Dict[str, Any]:
+
+    n_layers = 24
+    fc_dim = 2048
+
+    config_base = {
+        "fc_do": 0.0,
+        "fc_task_dim": fc_dim,
+        "layers": [n_layers],
+        "rb_do": 0.0,
+        "stochastic_depth_p": 0.0,
+    }
+
     if model_type == "mlp-residual":
+        tb_base = generate_tb_base_config(
+            num_layers=n_layers,
+            tb_block_frequency=4,
+        )
         base = {
-            "model_config": {
-                "fc_do": 0.1,
-                "fc_task_dim": 512,
-                "layers": [4],
-                "rb_do": 0.1,
-                "stochastic_depth_p": 0.1,
-            },
+            "model_config": config_base,
             "model_type": "mlp-residual",
-            "tensor_broker_config": {
-                "message_configs": [
-                    {
-                        "name": "first_fusion_residual_block",
-                        "layer_path": "fusion_modules.computed.fusion_modules."
-                        "fusion.0.0",
-                        "use_from_cache": ["first_layer_tensor"],
-                        "projection_type": "lcl_residual",
-                        "cache_fusion_type": "sum",
-                    }
-                ]
-            },
+            "tensor_broker_config": tb_base,
         }
+
     elif model_type == "mgmoe":
+        config_base["mg_num_experts"] = 8
+        config_base["fc_task_dim"] = fc_dim // 4
+        tb_mgmoe = generate_tb_mgmoe_config(
+            num_layers=n_layers,
+            tb_block_frequency=2,
+            num_experts=8,
+        )
         base = {
-            "model_config": {
-                "fc_do": 0.1,
-                "fc_task_dim": 512,
-                "layers": [4],
-                "rb_do": 0.1,
-                "stochastic_depth_p": 0.1,
-                "mg_num_experts": 8,
-            },
+            "model_config": config_base,
             "model_type": "mgmoe",
-            "tensor_broker_config": {
-                "message_configs": [
-                    {
-                        "name": "first_fusion_residual_block",
-                        "layer_path": "fusion_modules.computed.fusion_modules."
-                        "fusion.0.0",
-                        "use_from_cache": ["first_layer_tensor"],
-                        "projection_type": "lcl_residual",
-                        "cache_fusion_type": "sum",
-                    }
-                ]
-            },
+            "tensor_broker_config": tb_mgmoe,
         }
     else:
         raise ValueError()
 
     return base
+
+
+def generate_tb_base_config(
+    num_layers: int, tb_block_frequency: int
+) -> dict[str, list[dict[str, Any]]]:
+    message_configs: list[dict[str, Any]] = [
+        {
+            "name": "base_fusion_residual_block",
+            "layer_path": "fusion_modules.computed.fusion_modules.fusion.0.0",
+            "use_from_cache": ["first_layer_tensor"],
+            "projection_type": "lcl_residual",
+            "cache_fusion_type": "sum",
+        }
+    ]
+
+    num_layers_adjusted = num_layers - 2
+
+    for layer in range(0, num_layers_adjusted + 1):
+        if layer % tb_block_frequency == 0:
+            message_configs.append(
+                {
+                    "name": f"{layer}_fusion_residual_block",
+                    "layer_path": f"fusion_modules.computed.fusion_modules"
+                    f".fusion.1.{layer}",
+                    "use_from_cache": ["first_layer_tensor"],
+                    "projection_type": "lcl_residual",
+                    "cache_fusion_type": "sum",
+                }
+            )
+
+    message_configs.append(
+        {
+            "name": "final_layer",
+            "layer_path": "output_modules.eir_auto_gp.linear_layer",
+            "use_from_cache": ["first_layer_tensor"],
+            "projection_type": "lcl_residual",
+            "cache_fusion_type": "sum",
+        }
+    )
+
+    return {"message_configs": message_configs}
+
+
+def generate_tb_mgmoe_config(
+    num_layers: int,
+    tb_block_frequency: int,
+    num_experts: int,
+) -> dict[str, list[dict[str, Any]]]:
+    message_configs: list[dict[str, Any]] = []
+
+    for expert in range(num_experts):
+        message_configs.append(
+            {
+                "name": f"expert_{expert}_0_fusion_residual_block",
+                "layer_path": f"fusion_modules.computed.expert_branches"
+                f".expert_{expert}.0.0",
+                "use_from_cache": ["first_layer_tensor"],
+                "projection_type": "lcl_residual",
+                "cache_fusion_type": "sum",
+            }
+        )
+
+    num_layers_adjusted = num_layers - 2
+    for layer in range(0, num_layers_adjusted + 1):
+        if layer % tb_block_frequency == 0:
+            for expert in range(num_experts):
+                message_configs.append(
+                    {
+                        "name": f"expert_{expert}_{layer}_fusion_residual_block",
+                        "layer_path": f"fusion_modules.computed.expert_branches"
+                        f".expert_{expert}.1.{layer - 1}",
+                        "use_from_cache": ["first_layer_tensor"],
+                        "projection_type": "lcl_residual",
+                        "cache_fusion_type": "sum",
+                    }
+                )
+
+    message_configs.append(
+        {
+            "name": "final_layer",
+            "layer_path": "output_modules.eir_auto_gp.linear_layer",
+            "use_from_cache": ["first_layer_tensor"],
+            "projection_type": "lcl_residual",
+            "cache_fusion_type": "sum",
+        }
+    )
+
+    return {"message_configs": message_configs}
 
 
 def get_base_output_config(output_head: str = "mlp") -> Dict[str, Any]:
@@ -212,7 +289,7 @@ class AggregateConfig:
 
 
 def get_aggregate_config(
-    output_head: str = "mlp",
+    output_head: str = "linear",
     fusion_type: str = "mlp-residual",
 ) -> AggregateConfig:
     global_config = get_base_global_config()

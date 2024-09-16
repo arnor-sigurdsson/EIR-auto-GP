@@ -171,6 +171,7 @@ def _id_setup_wrapper(
     common_ids_to_keep: Sequence[str],
     freeze_validation_set: bool,
     pre_split_folder: Optional[str] = None,
+    check_valid_and_test_ids: bool = True,
 ) -> tuple[list[str], list[str], list[str]]:
     valid_path = None
     valid_path_exists = False
@@ -199,11 +200,12 @@ def _id_setup_wrapper(
         test_ids = (
             pd.read_csv(test_path, header=None).astype(str).squeeze("columns").tolist()
         )
-        check_extra_ids(
-            ids_to_check=test_ids,
-            id_set_name="test",
-            common_ids=common_ids_to_keep,
-        )
+        if check_valid_and_test_ids:
+            check_extra_ids(
+                ids_to_check=test_ids,
+                id_set_name="test",
+                common_ids=common_ids_to_keep,
+            )
 
         valid_path = pre_split_folder / "valid_ids.txt"
         valid_path_exists = valid_path.exists()
@@ -234,11 +236,12 @@ def _id_setup_wrapper(
                 .squeeze("columns")
                 .tolist()
             )
-            check_extra_ids(
-                ids_to_check=valid_ids,
-                id_set_name="valid",
-                common_ids=common_ids_to_keep,
-            )
+            if check_valid_and_test_ids:
+                check_extra_ids(
+                    ids_to_check=valid_ids,
+                    id_set_name="valid",
+                    common_ids=common_ids_to_keep,
+                )
 
         _save_ids_to_text_file(
             ids=valid_ids, path=output_root / "ids" / "valid_ids.txt"
@@ -272,7 +275,7 @@ def check_extra_ids(
     if extra_ids:
         preview = extra_ids[:preview_limit]
         raise ValueError(
-            f"{id_set_name} contains IDs not in common IDs from "
+            f"{id_set_name} contains {len(extra_ids)} IDs not in common IDs from "
             f"genotype data and label file."
             f"Preview of extra IDs: {preview}."
             f"Please check that the IDs in {id_set_name} "
