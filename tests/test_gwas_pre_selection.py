@@ -25,7 +25,8 @@ def _get_test_cl_commands() -> list[str]:
         "--output_path runs/penncath_gwas "
         "--covariate_names age sex ldl hdl tg "
         "--gwas_p_value_threshold 1e-04 "
-        "--target_names CAD"
+        "--target_names CAD "
+        "--do_plot"
     )
 
     commands = [
@@ -147,12 +148,16 @@ def test_get_plink_gwas_command():
         "--pheno-name",
         "A",
         "B",
+        "--no-input-missing-phenotype",
         "--glm",
         "firth-fallback",
         "hide-covar",
         "omit-ref",
         "no-x-sex",
         "allow-no-covars",
+        "qt-residualize",
+        "cc-residualize",
+        "skip-invalid-pheno",
         "--out",
         "output_path/gwas",
         "--covar",

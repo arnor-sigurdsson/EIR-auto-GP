@@ -160,6 +160,14 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--model_size",
+        type=str,
+        default="small",
+        help="Model size to use for training.",
+        choices=["nano", "small", "medium", "large", "xlarge"],
+    )
+
+    parser.add_argument(
         "--do_test",
         action="store_true",
         help="Whether to run test set prediction.",
@@ -396,6 +404,7 @@ def build_modelling_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "output_cat_columns",
         "output_con_columns",
         "genotype_feature_selection",
+        "model_size",
         "do_test",
     ]
 

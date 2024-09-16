@@ -32,7 +32,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN python3.12 -m pip install --upgrade pip && \
     python3.12 -m pip install eir-auto-gp
 
-RUN curl -LJO https://s3.amazonaws.com/plink2-assets/alpha5/plink2_linux_avx2_20240105.zip && \
+RUN curl -LJO https://s3.amazonaws.com/plink2-assets/plink2_linux_avx2_20240818.zip && \
     unzip plink2_*.zip && \
     rm plink2_*.zip && \
     chmod +x plink2 && \

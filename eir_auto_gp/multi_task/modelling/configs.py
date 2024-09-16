@@ -113,23 +113,25 @@ def get_base_tabular_input_config() -> Dict[str, Any]:
     return base
 
 
-def get_base_fusion_config(model_type: str = "mlp-residual") -> Dict[str, Any]:
+def get_base_fusion_config(
+    model_type: str = "mlp-residual",
+    model_size: "str" = "nano",
+) -> Dict[str, Any]:
 
-    n_layers = 24
-    fc_dim = 2048
+    mp = get_model_size_params(model_size=model_size)
 
     config_base = {
         "fc_do": 0.0,
-        "fc_task_dim": fc_dim,
-        "layers": [n_layers],
+        "fc_task_dim": mp.fc_dim,
+        "layers": [mp.n_layers],
         "rb_do": 0.0,
         "stochastic_depth_p": 0.0,
     }
 
     if model_type == "mlp-residual":
         tb_base = generate_tb_base_config(
-            num_layers=n_layers,
-            tb_block_frequency=4,
+            num_layers=mp.n_layers,
+            tb_block_frequency=mp.tb_block_frequency,
         )
         base = {
             "model_config": config_base,
@@ -139,10 +141,10 @@ def get_base_fusion_config(model_type: str = "mlp-residual") -> Dict[str, Any]:
 
     elif model_type == "mgmoe":
         config_base["mg_num_experts"] = 8
-        config_base["fc_task_dim"] = fc_dim // 4
+        config_base["fc_task_dim"] = mp.fc_dim // 4
         tb_mgmoe = generate_tb_mgmoe_config(
-            num_layers=n_layers,
-            tb_block_frequency=2,
+            num_layers=mp.n_layers,
+            tb_block_frequency=mp.tb_block_frequency,
             num_experts=8,
         )
         base = {
@@ -154,6 +156,25 @@ def get_base_fusion_config(model_type: str = "mlp-residual") -> Dict[str, Any]:
         raise ValueError()
 
     return base
+
+
+@dataclass
+class ModelSizeParams:
+    n_layers: int
+    fc_dim: int
+    tb_block_frequency: int
+
+
+def get_model_size_params(model_size: str) -> ModelSizeParams:
+    param_dict = {
+        "nano": ModelSizeParams(n_layers=2, fc_dim=128, tb_block_frequency=1),
+        "small": ModelSizeParams(n_layers=8, fc_dim=512, tb_block_frequency=2),
+        "medium": ModelSizeParams(n_layers=16, fc_dim=1024, tb_block_frequency=2),
+        "large": ModelSizeParams(n_layers=24, fc_dim=2048, tb_block_frequency=4),
+        "xlarge": ModelSizeParams(n_layers=32, fc_dim=4096, tb_block_frequency=4),
+    }
+
+    return param_dict[model_size]
 
 
 def generate_tb_base_config(
@@ -289,13 +310,16 @@ class AggregateConfig:
 
 
 def get_aggregate_config(
+    model_size: str,
     output_head: str = "linear",
     fusion_type: str = "mlp-residual",
 ) -> AggregateConfig:
     global_config = get_base_global_config()
     input_genotype_config = get_base_input_genotype_config()
     input_tabular_config = get_base_tabular_input_config()
-    fusion_config = get_base_fusion_config(model_type=fusion_type)
+    fusion_config = get_base_fusion_config(
+        model_type=fusion_type, model_size=model_size
+    )
     output_config = get_base_output_config(output_head=output_head)
 
     return AggregateConfig(

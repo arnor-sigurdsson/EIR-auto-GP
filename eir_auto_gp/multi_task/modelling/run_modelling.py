@@ -110,7 +110,10 @@ class TestSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"],
         )
 
-        base_aggregate_config = get_aggregate_config(output_head="linear")
+        base_aggregate_config = get_aggregate_config(
+            output_head="linear",
+            model_size=self.modelling_config["model_size"],
+        )
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
             build_configs(
@@ -219,7 +222,10 @@ class TrainSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"],
         )
 
-        base_aggregate_config = get_aggregate_config(output_head="linear")
+        base_aggregate_config = get_aggregate_config(
+            output_head="linear",
+            model_size=self.modelling_config["model_size"],
+        )
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
             build_configs(
