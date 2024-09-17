@@ -168,6 +168,14 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--data_format",
+        type=str,
+        default="disk",
+        help="Which format to store the data in during modelling.",
+        choices=["disk", "memory", "auto"],
+    )
+
+    parser.add_argument(
         "--do_test",
         action="store_true",
         help="Whether to run test set prediction.",
@@ -388,6 +396,7 @@ def build_data_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "pre_split_folder",
         "freeze_validation_set",
         "genotype_processing_chunk_size",
+        "data_format",
     ]
 
     base = extract_from_namespace(namespace=cl_args, keys=data_keys)

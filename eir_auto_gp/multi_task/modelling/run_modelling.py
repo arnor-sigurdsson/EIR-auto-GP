@@ -273,6 +273,7 @@ class ModelInjectionParams:
     output_cat_columns: list[str]
     output_con_columns: list[str]
     weighted_sampling_columns: list[str]
+    data_format: str
 
 
 def build_injection_params(
@@ -311,6 +312,7 @@ def build_injection_params(
         output_cat_columns=modelling_config["output_cat_columns"],
         output_con_columns=modelling_config["output_con_columns"],
         weighted_sampling_columns=weighted_sampling_columns,
+        data_format=data_config["data_format"],
     )
 
     return params
@@ -447,12 +449,22 @@ def _get_global_injections(
     n_samples: int,
     iter_per_epoch: int,
     weighted_sampling_columns: list[str],
+    data_format: str,
 ) -> Dict[str, Any]:
     mixing_candidates = [0.0]
     cur_mixing = mixing_candidates[fold % len(mixing_candidates)]
 
     device = get_device()
-    memory_dataset = get_memory_dataset(n_snps=n_snps, n_samples=n_samples)
+
+    if data_format == "auto":
+        memory_dataset = get_memory_dataset(n_snps=n_snps, n_samples=n_samples)
+    elif data_format == "disk":
+        memory_dataset = False
+    elif data_format == "memory":
+        memory_dataset = True
+    else:
+        raise ValueError(f"Unknown data format: '{data_format}'.")
+
     n_workers = get_dataloader_workers(memory_dataset=memory_dataset, device=device)
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
     early_stopping_buffer = max(early_stopping_buffer, 1000)
@@ -642,6 +654,7 @@ def _get_all_dynamic_injections(
             n_snps=n_snps,
             n_samples=n_samples,
             weighted_sampling_columns=mip.weighted_sampling_columns,
+            data_format=mip.data_format,
         ),
         "input_genotype_config": _get_genotype_injections(
             input_source=mip.genotype_input_source,
