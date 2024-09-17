@@ -115,7 +115,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
         default="",
         help="Feature selection method to use for genotype data.\n"
         "Options are:\n"
-        "  - 'random': Randomly choose 10% of each chromosome.\n",
+        "  - 'random': Randomly choose 10%% of each chromosome.\n",
     )
 
     parser.add_argument(

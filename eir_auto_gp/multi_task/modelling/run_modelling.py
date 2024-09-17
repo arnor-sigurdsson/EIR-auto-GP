@@ -26,7 +26,6 @@ from eir_auto_gp.single_task.modelling.run_modelling import (
     get_dataloader_workers,
     get_device,
     get_memory_dataset,
-    get_num_iter_per_epoch,
     get_samples_per_epoch,
     lines_in_file,
 )
@@ -665,6 +664,14 @@ def _get_all_dynamic_injections(
         )
 
     return injections
+
+
+def get_num_iter_per_epoch(
+    num_samples_per_epoch: int, batch_size: int, valid_size: int
+) -> int:
+    iter_per_epoch = (num_samples_per_epoch - valid_size) // batch_size
+    iter_per_epoch = max(500, iter_per_epoch)
+    return iter_per_epoch
 
 
 def build_random_snp_subset_file(
