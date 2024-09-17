@@ -162,9 +162,16 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model_size",
         type=str,
-        default="small",
+        default="mini",
         help="Model size to use for training.",
-        choices=["nano", "small", "medium", "large", "xlarge"],
+        choices=[
+            "nano",
+            "mini",
+            "small",
+            "medium",
+            "large",
+            "xlarge",
+        ],
     )
 
     parser.add_argument(

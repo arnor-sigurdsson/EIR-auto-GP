@@ -168,6 +168,7 @@ class ModelSizeParams:
 def get_model_size_params(model_size: str) -> ModelSizeParams:
     param_dict = {
         "nano": ModelSizeParams(n_layers=2, fc_dim=128, tb_block_frequency=1),
+        "mini": ModelSizeParams(n_layers=4, fc_dim=256, tb_block_frequency=2),
         "small": ModelSizeParams(n_layers=8, fc_dim=512, tb_block_frequency=2),
         "medium": ModelSizeParams(n_layers=16, fc_dim=1024, tb_block_frequency=2),
         "large": ModelSizeParams(n_layers=24, fc_dim=2048, tb_block_frequency=4),

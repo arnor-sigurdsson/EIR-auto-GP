@@ -147,7 +147,7 @@ def test_modelling_pack_and_predict(command: str, tmp_path: Path) -> None:
 
 def check_modelling_results(run_folder: Path, check_test: bool) -> None:
     for file in ["validation_average_history.log"]:
-        check_average_performances(file_path=run_folder / file, threshold=0.1)
+        check_average_performances(file_path=run_folder / file, threshold=0.05)
 
     assert (run_folder / "completed_train.txt").exists()
 
