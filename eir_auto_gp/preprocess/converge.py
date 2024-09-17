@@ -85,6 +85,7 @@ class CommonSplitIntoTestSet(luigi.Task):
     freeze_validation_set = luigi.BoolParameter()
     only_data = luigi.BoolParameter()
     genotype_processing_chunk_size = luigi.IntParameter()
+    data_format = luigi.Parameter(default="disk")
 
     def requires(self):
         """
