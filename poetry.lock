@@ -1331,13 +1331,13 @@ files = [
 
 [[package]]
 name = "eir-dl"
-version = "0.4.0"
+version = "0.5.0"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.12.0"
 files = [
-    {file = "eir_dl-0.4.0-py3-none-any.whl", hash = "sha256:38d96dfd46f20c7bb4f00a3c00448ec060f58ad36918984e89a9dd643116d1f6"},
-    {file = "eir_dl-0.4.0.tar.gz", hash = "sha256:7a9ffc8735edbb441a2fd6dc3382b31b7b440d94d390866df5e274689e640b3b"},
+    {file = "eir_dl-0.5.0-py3-none-any.whl", hash = "sha256:c895aeda6b9d47458be54d1a30fecfe876630ce9bdcf130a5e6e524c19675852"},
+    {file = "eir_dl-0.5.0.tar.gz", hash = "sha256:88309fe68f217bbd90fda5406c5786d4a4f1081e061ad46efd8dcb734a5f9863"},
 ]
 
 [package.dependencies]
@@ -7427,4 +7427,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.12.0,<3.13"
-content-hash = "0b4e66368d33b6bd9d448b1bafbae2b669d9b89a21e8528154efc81ad4b70406"
+content-hash = "9b0677df58cb0b6a8510a5c99ce5a62f7e78e5d483ca8b853ef80ae5021861d3"
