@@ -9,7 +9,7 @@ import luigi
 import pandas as pd
 import yaml
 from aislib.misc_utils import ensure_path_exists
-from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_replace
+from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_inject
 from eir.setup.input_setup_modules.setup_omics import read_bim
 
 from eir_auto_gp.multi_task.modelling.configs import (
@@ -402,7 +402,7 @@ def build_configs(
         config_name = config_field.name
         config = getattr(aggregate_config_base, config_name)
         if config_name in injections:
-            config = recursive_dict_replace(
+            config = recursive_dict_inject(
                 dict_=config,
                 dict_to_inject=injections[config_name],
             )
