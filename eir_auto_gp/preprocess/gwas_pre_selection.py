@@ -32,6 +32,15 @@ def main():
 def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
     fam_file_path = next(Path(filter_config.genotype_data_path).glob("*.fam"))
 
+    if len(filter_config.target_names) > 1:
+        logger.warning(
+            "Multiple target names provided, this generally works"
+            "for continuous targets only. For binary targets, "
+            "use only one target name, if not, the first target "
+            "will likely work fine, but successive targets may not and"
+            "PLINK will raise an error."
+        )
+
     gwas_label_path = Path(filter_config.output_path, "gwas_label_file.csv")
     _, one_hot_mappings_file = prepare_gwas_label_file(
         label_file_path=filter_config.label_file_path,

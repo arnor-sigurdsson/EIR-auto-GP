@@ -114,8 +114,10 @@ def get_base_tabular_input_config() -> Dict[str, Any]:
 
 
 def get_base_fusion_config(
+    target_columns: list[str],
     model_type: str = "mlp-residual",
     model_size: "str" = "nano",
+    output_head: str = "linear",
 ) -> Dict[str, Any]:
 
     mp = get_model_size_params(model_size=model_size)
@@ -132,6 +134,8 @@ def get_base_fusion_config(
         tb_base = generate_tb_base_config(
             num_layers=mp.n_layers,
             tb_block_frequency=mp.tb_block_frequency,
+            output_head=output_head,
+            target_columns=target_columns,
         )
         base = {
             "model_config": config_base,
@@ -146,6 +150,7 @@ def get_base_fusion_config(
             num_layers=mp.n_layers,
             tb_block_frequency=mp.tb_block_frequency,
             num_experts=8,
+            output_head=output_head,
         )
         base = {
             "model_config": config_base,
@@ -179,7 +184,10 @@ def get_model_size_params(model_size: str) -> ModelSizeParams:
 
 
 def generate_tb_base_config(
-    num_layers: int, tb_block_frequency: int
+    num_layers: int,
+    tb_block_frequency: int,
+    output_head: str,
+    target_columns: list[str],
 ) -> dict[str, list[dict[str, Any]]]:
     message_configs: list[dict[str, Any]] = [
         {
@@ -206,15 +214,28 @@ def generate_tb_base_config(
                 }
             )
 
-    message_configs.append(
-        {
-            "name": "final_layer",
-            "layer_path": "output_modules.eir_auto_gp.linear_layer",
-            "use_from_cache": ["first_layer_tensor"],
-            "projection_type": "lcl_residual",
-            "cache_fusion_type": "sum",
-        }
-    )
+    if output_head == "linear":
+        message_configs.append(
+            {
+                "name": "final_layer",
+                "layer_path": "output_modules.eir_auto_gp.linear_layer",
+                "use_from_cache": ["first_layer_tensor"],
+                "projection_type": "lcl_residual",
+                "cache_fusion_type": "sum",
+            }
+        )
+    elif output_head == "mlp":
+        for target_column in target_columns:
+            message_configs.append(
+                {
+                    "name": f"final_layer_{target_column}",
+                    "layer_path": f"output_modules.eir_auto_gp.multi_task_branches."
+                    f"{target_column}.0.1",
+                    "use_from_cache": ["first_layer_tensor"],
+                    "projection_type": "lcl_residual",
+                    "cache_fusion_type": "sum",
+                }
+            )
 
     return {"message_configs": message_configs}
 
@@ -223,6 +244,7 @@ def generate_tb_mgmoe_config(
     num_layers: int,
     tb_block_frequency: int,
     num_experts: int,
+    output_head: str,
 ) -> dict[str, list[dict[str, Any]]]:
     message_configs: list[dict[str, Any]] = []
 
@@ -253,15 +275,16 @@ def generate_tb_mgmoe_config(
                     }
                 )
 
-    message_configs.append(
-        {
-            "name": "final_layer",
-            "layer_path": "output_modules.eir_auto_gp.linear_layer",
-            "use_from_cache": ["first_layer_tensor"],
-            "projection_type": "lcl_residual",
-            "cache_fusion_type": "sum",
-        }
-    )
+    if output_head == "linear":
+        message_configs.append(
+            {
+                "name": "final_layer",
+                "layer_path": "output_modules.eir_auto_gp.linear_layer",
+                "use_from_cache": ["first_layer_tensor"],
+                "projection_type": "lcl_residual",
+                "cache_fusion_type": "sum",
+            }
+        )
 
     return {"message_configs": message_configs}
 
@@ -271,11 +294,11 @@ def get_base_output_config(output_head: str = "mlp") -> Dict[str, Any]:
         head_config = {
             "model_type": "mlp_residual",
             "model_init_config": {
-                "rb_do": 0.2,
-                "fc_do": 0.2,
-                "fc_task_dim": 512,
+                "rb_do": 0.05,
+                "fc_do": 0.05,
+                "fc_task_dim": 128,
                 "layers": [2],
-                "stochastic_depth_p": 0.2,
+                "stochastic_depth_p": 0.0,
                 "final_layer_type": "linear",
             },
         }
@@ -312,6 +335,7 @@ class AggregateConfig:
 
 def get_aggregate_config(
     model_size: str,
+    target_columns: list[str],
     output_head: str = "linear",
     fusion_type: str = "mlp-residual",
 ) -> AggregateConfig:
@@ -319,7 +343,10 @@ def get_aggregate_config(
     input_genotype_config = get_base_input_genotype_config()
     input_tabular_config = get_base_tabular_input_config()
     fusion_config = get_base_fusion_config(
-        model_type=fusion_type, model_size=model_size
+        model_type=fusion_type,
+        model_size=model_size,
+        output_head=output_head,
+        target_columns=target_columns,
     )
     output_config = get_base_output_config(output_head=output_head)
 

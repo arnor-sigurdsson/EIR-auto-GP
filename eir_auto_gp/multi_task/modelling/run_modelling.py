@@ -109,9 +109,15 @@ class TestSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"],
         )
 
+        all_target_columns = (
+            self.modelling_config["output_cat_columns"]
+            + self.modelling_config["output_con_columns"]
+        )
+
         base_aggregate_config = get_aggregate_config(
             output_head="linear",
             model_size=self.modelling_config["model_size"],
+            target_columns=all_target_columns,
         )
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
@@ -221,9 +227,15 @@ class TrainSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"],
         )
 
+        all_target_columns = (
+            self.modelling_config["output_cat_columns"]
+            + self.modelling_config["output_con_columns"]
+        )
+
         base_aggregate_config = get_aggregate_config(
             output_head="linear",
             model_size=self.modelling_config["model_size"],
+            target_columns=all_target_columns,
         )
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
@@ -468,7 +480,7 @@ def _get_global_injections(
     n_workers = get_dataloader_workers(memory_dataset=memory_dataset, device=device)
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
     early_stopping_buffer = max(early_stopping_buffer, 1000)
-    sample_interval = min(2000, iter_per_epoch)
+    sample_interval = min(1000, iter_per_epoch)
     lr = _get_learning_rate(n_snps=n_snps)
 
     injections = {
