@@ -160,6 +160,21 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--output_groups",
+        type=str,
+        required=False,
+        help="A .yaml file containing the groups for output targets, each group "
+        "will use a shared output branch in the model. The file should be in the "
+        "following format:\n"
+        "group_1:\n"
+        "  - target_1\n"
+        "  - target_2\n"
+        "group_2:\n"
+        "  - target_3\n"
+        "  - target_4\n",
+    )
+
+    parser.add_argument(
         "--model_size",
         type=str,
         default="mini",
@@ -419,6 +434,7 @@ def build_modelling_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "input_con_columns",
         "output_cat_columns",
         "output_con_columns",
+        "output_groups",
         "genotype_feature_selection",
         "model_size",
         "do_test",

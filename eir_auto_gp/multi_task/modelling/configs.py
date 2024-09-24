@@ -1,5 +1,8 @@
+import random
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Sequence
+
+import yaml
 
 from eir_auto_gp.utils.utils import get_logger
 
@@ -115,6 +118,7 @@ def get_base_tabular_input_config() -> Dict[str, Any]:
 
 def get_base_fusion_config(
     target_columns: list[str],
+    output_groups: Optional[dict[str, list[str]]],
     model_type: str = "mlp-residual",
     model_size: "str" = "nano",
     output_head: str = "linear",
@@ -136,6 +140,7 @@ def get_base_fusion_config(
             tb_block_frequency=mp.tb_block_frequency,
             output_head=output_head,
             target_columns=target_columns,
+            output_groups=output_groups,
         )
         base = {
             "model_config": config_base,
@@ -188,6 +193,7 @@ def generate_tb_base_config(
     tb_block_frequency: int,
     output_head: str,
     target_columns: list[str],
+    output_groups: Optional[dict[str, list[str]]],
 ) -> dict[str, list[dict[str, Any]]]:
     message_configs: list[dict[str, Any]] = [
         {
@@ -231,6 +237,19 @@ def generate_tb_base_config(
                     "name": f"final_layer_{target_column}",
                     "layer_path": f"output_modules.eir_auto_gp.multi_task_branches."
                     f"{target_column}.0.1",
+                    "use_from_cache": ["first_layer_tensor"],
+                    "projection_type": "lcl_residual",
+                    "cache_fusion_type": "sum",
+                }
+            )
+    elif output_head == "shared_mlp_residual":
+        assert output_groups is not None
+        for group_name, group_columns in output_groups.items():
+            message_configs.append(
+                {
+                    "name": f"final_layer_{group_name}",
+                    "layer_path": f"output_modules.eir_auto_gp_{group_name}"
+                    f".shared_branch",
                     "use_from_cache": ["first_layer_tensor"],
                     "projection_type": "lcl_residual",
                     "cache_fusion_type": "sum",
@@ -289,9 +308,14 @@ def generate_tb_mgmoe_config(
     return {"message_configs": message_configs}
 
 
-def get_base_output_config(output_head: str = "mlp") -> Dict[str, Any]:
-    if output_head == "mlp":
-        head_config = {
+def get_output_configs(
+    output_groups: Optional[dict[str, list[str]]],
+    output_cat_columns: list[str],
+    output_con_columns: list[str],
+    output_head: str = "mlp",
+) -> list[dict[str, Any]]:
+    head_configs = {
+        "mlp": {
             "model_type": "mlp_residual",
             "model_init_config": {
                 "rb_do": 0.05,
@@ -301,59 +325,202 @@ def get_base_output_config(output_head: str = "mlp") -> Dict[str, Any]:
                 "stochastic_depth_p": 0.0,
                 "final_layer_type": "linear",
             },
-        }
-    elif output_head == "linear":
-        head_config = {
+        },
+        "linear": {
             "model_type": "linear",
-        }
+        },
+        "shared_mlp_residual": {
+            "model_type": "shared_mlp_residual",
+            "model_init_config": {
+                "layers": [2],
+                "fc_task_dim": 128,
+                "rb_do": 0.05,
+                "fc_do": 0.05,
+                "stochastic_depth_p": 0.0,
+            },
+        },
+    }
+
+    if output_head not in head_configs:
+        raise ValueError(f"Output head {output_head} not recognized.")
+
+    head_config = head_configs[output_head]
+
+    if output_head in ["linear", "mlp"]:
+        return [
+            create_base_config(
+                head_config=head_config,
+                output_cat_columns=output_cat_columns,
+                output_con_columns=output_con_columns,
+            )
+        ]
+    elif output_head == "shared_mlp_residual":
+        return create_shared_mlp_configs(
+            head_config=head_config,
+            output_groups=output_groups,
+            output_cat_columns=output_cat_columns,
+            output_con_columns=output_con_columns,
+        )
     else:
         raise ValueError(f"Output head {output_head} not recognized.")
 
-    base = {
+
+def create_base_config(
+    head_config: dict[str, Any],
+    output_cat_columns: Sequence[str],
+    output_con_columns: Sequence[str],
+) -> dict[str, Any]:
+    return {
         "output_info": {
             "output_name": "eir_auto_gp",
             "output_source": "FILL",
             "output_type": "tabular",
         },
         "output_type_info": {
-            "target_con_columns": ["FILL"],
-            "target_cat_columns": ["FILL"],
+            "target_cat_columns": list(output_cat_columns),
+            "target_con_columns": list(output_con_columns),
         },
         "model_config": head_config,
     }
-    return base
+
+
+def create_shared_mlp_configs(
+    head_config: dict[str, Any],
+    output_groups: Optional[dict[str, list[str]]],
+    output_cat_columns: list[str],
+    output_con_columns: list[str],
+) -> list[dict[str, Any]]:
+    if output_groups is None:
+        raise ValueError("output_groups must be provided for shared_mlp_residual")
+
+    parsed_configs = []
+
+    for group_name, group_columns in output_groups.items():
+        cur_cat_columns = [col for col in output_cat_columns if col in group_columns]
+        cur_con_columns = [col for col in output_con_columns if col in group_columns]
+        parsed_configs.append(
+            {
+                "output_info": {
+                    "output_name": f"eir_auto_gp_{group_name}",
+                    "output_source": "FILL",
+                    "output_type": "tabular",
+                },
+                "output_type_info": {
+                    "target_cat_columns": cur_cat_columns,
+                    "target_con_columns": cur_con_columns,
+                },
+                "model_config": head_config,
+            }
+        )
+
+    return parsed_configs
 
 
 @dataclass(frozen=True)
 class AggregateConfig:
-    global_config: Dict[str, Any]
-    input_genotype_config: Dict[str, Any]
-    input_tabular_config: Dict[str, Any]
-    fusion_config: Dict[str, Any]
-    output_config: Dict[str, Any]
+    global_config: dict[str, Any]
+    input_genotype_config: dict[str, Any]
+    input_tabular_config: dict[str, Any]
+    fusion_config: dict[str, Any]
+    output_config: list[dict[str, Any]]
 
 
 def get_aggregate_config(
     model_size: str,
     target_columns: list[str],
+    output_cat_columns: list[str],
+    output_con_columns: list[str],
+    output_groups: str = "random",
     output_head: str = "linear",
     fusion_type: str = "mlp-residual",
 ) -> AggregateConfig:
     global_config = get_base_global_config()
     input_genotype_config = get_base_input_genotype_config()
     input_tabular_config = get_base_tabular_input_config()
+
+    if output_groups:
+        logger.info(
+            "Output groups detected. Using output groups and setting output"
+            "head to shared residual MLP."
+        )
+        output_head = "shared_mlp_residual"
+        output_groups = _build_output_groups(
+            output_groups=output_groups,
+            target_columns=target_columns,
+            num_groups=2,
+        )
+    else:
+        output_groups = None
+
     fusion_config = get_base_fusion_config(
         model_type=fusion_type,
         model_size=model_size,
         output_head=output_head,
         target_columns=target_columns,
+        output_groups=output_groups,
     )
-    output_config = get_base_output_config(output_head=output_head)
+    output_configs = get_output_configs(
+        output_head=output_head,
+        output_groups=output_groups,
+        output_cat_columns=output_cat_columns,
+        output_con_columns=output_con_columns,
+    )
 
     return AggregateConfig(
         global_config=global_config,
         input_genotype_config=input_genotype_config,
         input_tabular_config=input_tabular_config,
         fusion_config=fusion_config,
-        output_config=output_config,
+        output_config=output_configs,
     )
+
+
+def _build_output_groups(
+    output_groups: str | int,
+    target_columns: list[str],
+    num_groups: int,
+) -> dict[str, list[str]]:
+    if isinstance(output_groups, str):
+        if output_groups.lower() == "random":
+            return _create_random_groups(
+                target_columns=target_columns,
+                num_groups=num_groups,
+            )
+        else:
+            with open(output_groups, "r") as file:
+                return yaml.safe_load(file)
+    elif isinstance(output_groups, int):
+        return _create_random_groups(
+            target_columns=target_columns, num_groups=output_groups
+        )
+    else:
+        raise ValueError(
+            "output_groups must be either a string "
+            "(file path or 'random') or an integer"
+        )
+
+
+def _create_random_groups(
+    target_columns: Sequence[str],
+    num_groups: int,
+    seed: int = 42,
+) -> Dict[str, list[str]]:
+    target_columns = list(target_columns)
+
+    if num_groups > len(target_columns):
+        raise ValueError(
+            "Number of groups must be less than or equal to the "
+            "number of target columns."
+        )
+
+    random.seed(seed)
+
+    random.shuffle(target_columns)
+    groups = {f"group_{i + 1}": [] for i in range(num_groups)}
+    for i, target in enumerate(target_columns):
+        group_key = f"group_{(i % num_groups) + 1}"
+        groups[group_key].append(target)
+
+    random.seed()
+
+    return groups

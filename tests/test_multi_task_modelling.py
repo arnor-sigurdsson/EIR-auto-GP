@@ -17,6 +17,7 @@ def _get_test_cl_commands() -> list[str]:
         "--global_output_folder runs/penncath "
         "--output_cat_columns CAD "
         "--output_con_columns tg hdl ldl "
+        "--output_groups random "
         "--input_con_columns age "
         "--input_cat_columns sex "
         "--folds 0-2 "

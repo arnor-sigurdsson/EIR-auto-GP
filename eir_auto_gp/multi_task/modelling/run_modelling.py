@@ -96,19 +96,6 @@ class TestSingleRun(luigi.Task):
         output_root = Path(self.output().path).parent
         ensure_path_exists(output_root, is_folder=True)
 
-        injection_params = build_injection_params(
-            fold=int(self.fold),
-            data_input_dict=self.input()["data"][0],
-            task="test",
-            data_config=self.data_config,
-            modelling_config=self.modelling_config,
-        )
-
-        injections = _get_all_dynamic_injections(
-            injection_params=injection_params,
-            genotype_data_path=self.data_config["genotype_data_path"],
-        )
-
         all_target_columns = (
             self.modelling_config["output_cat_columns"]
             + self.modelling_config["output_con_columns"]
@@ -116,9 +103,27 @@ class TestSingleRun(luigi.Task):
 
         base_aggregate_config = get_aggregate_config(
             output_head="linear",
+            output_groups=self.modelling_config["output_groups"],
             model_size=self.modelling_config["model_size"],
             target_columns=all_target_columns,
+            output_cat_columns=self.modelling_config["output_cat_columns"],
+            output_con_columns=self.modelling_config["output_con_columns"],
         )
+
+        injection_params = build_injection_params(
+            fold=int(self.fold),
+            data_input_dict=self.input()["data"][0],
+            task="test",
+            data_config=self.data_config,
+            modelling_config=self.modelling_config,
+            output_configs=base_aggregate_config.output_config,
+        )
+
+        injections = _get_all_dynamic_injections(
+            injection_params=injection_params,
+            genotype_data_path=self.data_config["genotype_data_path"],
+        )
+
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
             build_configs(
@@ -214,19 +219,6 @@ class TrainSingleRun(luigi.Task):
         output_root = Path(self.output().path).parent
         ensure_path_exists(output_root, is_folder=True)
 
-        injection_params = build_injection_params(
-            fold=int(self.fold),
-            data_input_dict=self.input()["data"][0],
-            task="train",
-            data_config=self.data_config,
-            modelling_config=self.modelling_config,
-        )
-
-        injections = _get_all_dynamic_injections(
-            injection_params=injection_params,
-            genotype_data_path=self.data_config["genotype_data_path"],
-        )
-
         all_target_columns = (
             self.modelling_config["output_cat_columns"]
             + self.modelling_config["output_con_columns"]
@@ -234,9 +226,27 @@ class TrainSingleRun(luigi.Task):
 
         base_aggregate_config = get_aggregate_config(
             output_head="linear",
+            output_groups=self.modelling_config["output_groups"],
             model_size=self.modelling_config["model_size"],
             target_columns=all_target_columns,
+            output_cat_columns=self.modelling_config["output_cat_columns"],
+            output_con_columns=self.modelling_config["output_con_columns"],
         )
+
+        injection_params = build_injection_params(
+            fold=int(self.fold),
+            data_input_dict=self.input()["data"][0],
+            task="train",
+            data_config=self.data_config,
+            modelling_config=self.modelling_config,
+            output_configs=base_aggregate_config.output_config,
+        )
+
+        injections = _get_all_dynamic_injections(
+            injection_params=injection_params,
+            genotype_data_path=self.data_config["genotype_data_path"],
+        )
+
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
             build_configs(
@@ -286,6 +296,7 @@ class ModelInjectionParams:
     output_con_columns: list[str]
     weighted_sampling_columns: list[str]
     data_format: str
+    output_configs: list[dict[str, Any]]
 
 
 def build_injection_params(
@@ -294,6 +305,7 @@ def build_injection_params(
     task: Literal["train", "test"],
     data_config: Dict[str, Any],
     modelling_config: Dict[str, Any],
+    output_configs: list[Dict[str, Any]],
 ) -> ModelInjectionParams:
     weighted_sampling_columns = get_weighted_sampling_columns(
         modelling_config=modelling_config
@@ -325,6 +337,7 @@ def build_injection_params(
         output_con_columns=modelling_config["output_con_columns"],
         weighted_sampling_columns=weighted_sampling_columns,
         data_format=data_config["data_format"],
+        output_configs=output_configs,
     )
 
     return params
@@ -402,16 +415,35 @@ def build_configs(
         config_name = config_field.name
         config = getattr(aggregate_config_base, config_name)
         if config_name in injections:
-            config = recursive_dict_inject(
-                dict_=config,
-                dict_to_inject=injections[config_name],
-            )
+
+            if config_name == "output_config":
+                assert isinstance(config, list)
+
+                for output_config in config:
+                    output_config_name = output_config["output_info"]["output_name"]
+                    cur_to_inject = injections[config_name][output_config_name]
+                    output_config = recursive_dict_inject(
+                        dict_=output_config,
+                        dict_to_inject=cur_to_inject,
+                    )
+
+                    validate_complete_config(config_element=output_config)
+
+                    out_path = output_folder / f"output_{output_config_name}.yaml"
+
+                    with open(out_path, "w") as f:
+                        yaml.dump(output_config, f)
+
+            else:
+                config = recursive_dict_inject(
+                    dict_=config,
+                    dict_to_inject=injections[config_name],
+                )
+                validate_complete_config(config_element=config)
+                with open(output_folder / f"{config_name}.yaml", "w") as f:
+                    yaml.dump(config, f)
         else:
             continue
-
-        validate_complete_config(config_element=config)
-        with open(output_folder / f"{config_name}.yaml", "w") as f:
-            yaml.dump(config, f)
 
 
 def validate_complete_config(config_element: dict | list | str) -> None:
@@ -602,7 +634,9 @@ def _get_tabular_injections(
 
 
 def _get_output_injections(
-    label_file_path: str, output_cat_columns: list[str], output_con_columns: list[str]
+    label_file_path: str,
+    output_cat_columns: list[str],
+    output_con_columns: list[str],
 ) -> Dict[str, Any]:
     injections = {
         "output_info": {
@@ -674,12 +708,22 @@ def _get_all_dynamic_injections(
             subset_snp_path=subset_snp_path,
         ),
         "fusion_config": {},
-        "output_config": _get_output_injections(
-            label_file_path=mip.label_file_path,
-            output_cat_columns=list(mip.output_cat_columns),
-            output_con_columns=list(mip.output_con_columns),
-        ),
+        "output_config": {},
     }
+
+    for output_config in mip.output_configs:
+        cat_cols = output_config["output_type_info"]["target_cat_columns"]
+        con_cols = output_config["output_type_info"]["target_con_columns"]
+
+        cur_config_name = output_config["output_info"]["output_name"]
+
+        cur_injections = _get_output_injections(
+            label_file_path=mip.label_file_path,
+            output_cat_columns=cat_cols,
+            output_con_columns=con_cols,
+        )
+
+        injections["output_config"][cur_config_name] = cur_injections
 
     if mip.input_cat_columns or mip.input_con_columns:
         injections["input_tabular_config"] = _get_tabular_injections(
@@ -692,10 +736,12 @@ def _get_all_dynamic_injections(
 
 
 def get_num_iter_per_epoch(
-    num_samples_per_epoch: int, batch_size: int, valid_size: int
+    num_samples_per_epoch: int,
+    batch_size: int,
+    valid_size: int,
 ) -> int:
     iter_per_epoch = (num_samples_per_epoch - valid_size) // batch_size
-    iter_per_epoch = max(500, iter_per_epoch)
+    iter_per_epoch = max(100, iter_per_epoch)
     return iter_per_epoch
 
 

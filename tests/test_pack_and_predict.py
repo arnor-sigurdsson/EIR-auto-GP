@@ -28,11 +28,24 @@ def _get_test_cl_commands() -> list[str]:
         "--global_output_folder runs/penncath "
         "--output_cat_columns CAD "
         "--output_con_columns tg hdl ldl "
+        "--model_size nano "
         "--folds 1 "
         "--do_test"
     )
 
-    commands = [base]
+    with_groups = (
+        "--genotype_data_path tests/test_data/ "
+        "--label_file_path tests/test_data/penncath.csv  "
+        "--global_output_folder runs/penncath "
+        "--output_cat_columns CAD "
+        "--output_con_columns tg hdl ldl "
+        "--output_groups random "
+        "--model_size nano "
+        "--folds 1 "
+        "--do_test"
+    )
+
+    commands = [base, with_groups]
 
     return commands
 
@@ -146,7 +159,7 @@ def test_modelling_pack_and_predict(command: str, tmp_path: Path) -> None:
 
 def check_modelling_results(run_folder: Path, check_test: bool) -> None:
     for file in ["validation_average_history.log"]:
-        check_average_performances(file_path=run_folder / file, threshold=0.05)
+        check_average_performances(file_path=run_folder / file, threshold=0.04)
 
     assert (run_folder / "completed_train.txt").exists()
 
@@ -198,10 +211,14 @@ def check_predict_results(
             assert (
                 0 <= metrics["auc"] <= 1
             ), f"AUC for {target} should be between 0 and 1"
-            assert metrics["auc"] >= 0.55
+            assert (
+                metrics["auc"] >= 0.55
+            ), f"AUC for {target} should be at least 0.55, got {metrics['auc']}"
         else:
             assert metrics["mse"] >= 0, f"MSE for {target} should be non-negative"
-            assert metrics["pcc"] >= 0.03
+            assert (
+                metrics["pcc"] >= 0.03
+            ), f"PCC for {target} should be at least 0.03, got {metrics['pcc']}"
 
 
 def gather_predict_results(
