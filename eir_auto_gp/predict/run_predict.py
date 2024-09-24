@@ -356,14 +356,6 @@ def build_predict_configs(
                 modified_files["fusion_config"] = new_path
 
             case "output_configs":
-                # assert len(configs_as_dict) == 1
-                # cur_config = configs_as_dict[0]
-                # cur_config["output_info"]["output_source"] = None
-                # new_path = output_folder / f.name
-                # new_path.write_text(yaml.dump(cur_config))
-                # modified_files["output_config"] = new_path
-
-                # we now support multiple output configs
                 for output_config in configs_as_dict:
                     cur_name = output_config["output_info"]["output_name"]
                     output_config["output_info"]["output_source"] = None
