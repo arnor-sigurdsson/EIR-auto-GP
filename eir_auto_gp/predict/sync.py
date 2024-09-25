@@ -157,6 +157,7 @@ def remove_extra_snps(
         genotype_data_path + "/" + genotype_base_name,
         "--exclude",
         snps_to_remove_filepath,
+        "--keep-allele-order",
         "--make-bed",
         "--out",
         filtered_path / genotype_base_name,
@@ -213,6 +214,7 @@ def add_missing_snps(
         str(Path(genotype_data_path) / genotype_base_name),
         "--bmerge",
         str(dummy_path / "dummy_dataset"),
+        "--keep-allele-order",
         "--make-bed",
         "--out",
         str(output_folder_missing_imputed / (genotype_base_name + "_with_missing")),
@@ -226,7 +228,7 @@ def get_experiment_bim_file(experiment_folder: Path) -> pd.DataFrame:
     bim_file = experiment_folder / "meta" / "snps.bim"
     assert bim_file.exists()
 
-    df_bim_experiment = read_bim(bim_file_path=str(bim_file))
+    df_bim_experiment = read_bim_and_cast_dtypes(bim_file_path=str(bim_file))
 
     return df_bim_experiment
 
@@ -237,7 +239,7 @@ def get_predict_bim_file(genotype_folder: Path) -> pd.DataFrame:
 
     bim_file = bim_files[0]
 
-    df_bim_predict = read_bim(bim_file_path=str(bim_file))
+    df_bim_predict = read_bim_and_cast_dtypes(bim_file_path=str(bim_file))
 
     return df_bim_predict
 
@@ -254,7 +256,7 @@ def update_and_reorder(
     bim_files = [i for i in genotype_input_path.iterdir() if i.suffix == ".bim"]
     assert len(bim_files) == 1, "There should be exactly one .bim file in the folder."
     bim_file = bim_files[0]
-    df_bim_original = read_bim(bim_file_path=str(bim_file))
+    df_bim_original = read_bim_and_cast_dtypes(bim_file_path=str(bim_file))
     df_bim = df_bim_original.copy()
 
     mapping = df_exp_bim.set_index(
@@ -286,7 +288,9 @@ def update_and_reorder(
 
 
 def create_and_merge_dummy_fileset(
-    genotype_input_folder: str, df_exp_bim: pd.DataFrame, output_folder: Path
+    genotype_input_folder: str,
+    df_exp_bim: pd.DataFrame,
+    output_folder: Path,
 ) -> Path:
     genotype_input_path = Path(genotype_input_folder)
     output_folder.mkdir(parents=True, exist_ok=True)
@@ -327,6 +331,7 @@ def create_and_merge_dummy_fileset(
         str(genotype_input_path / base_name),
         "--bmerge",
         str(dummy_path / "dummy_dataset"),
+        "--keep-allele-order",
         "--make-bed",
         "--out",
         str(merged_output_path),
@@ -339,6 +344,7 @@ def create_and_merge_dummy_fileset(
         str(merged_output_path),
         "--remove",
         str(dummy_path / "dummy_dataset.fam"),
+        "--keep-allele-order",
         "--make-bed",
         "--out",
         str(output_folder / f"{base_name}_reordered"),
@@ -369,3 +375,21 @@ def run_subprocess(command: list[str]) -> None:
         logger.error(f"Output: {e.output}")
         logger.error(f"Error: {e.stderr}")
         raise
+
+
+def read_bim_and_cast_dtypes(bim_file_path: Path | str) -> pd.DataFrame:
+
+    dtypes = {
+        "CHR_CODE": str,
+        "VAR_ID": str,
+        "POS_CM": float,
+        "BP_COORD": int,
+        "ALT": str,
+        "REF": str,
+    }
+
+    df_bim = read_bim(bim_file_path=str(bim_file_path))
+
+    df_bim = df_bim.astype(dtypes)
+
+    return df_bim

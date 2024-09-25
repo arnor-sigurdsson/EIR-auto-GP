@@ -4,12 +4,11 @@ import shutil
 import subprocess
 from pathlib import Path
 from statistics import mean
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 import pytest
 from eir.train_utils.metrics import calc_pcc
-from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 from sklearn.metrics import accuracy_score, mean_squared_error, roc_auc_score
 
 from eir_auto_gp.multi_task.run_multi_task import (
@@ -21,45 +20,33 @@ from eir_auto_gp.predict.pack import pack_experiment
 from eir_auto_gp.predict.run_predict import get_parser, run_sync_and_predict_wrapper
 
 
-def _get_test_cl_commands() -> list[str]:
+def _get_test_cl_commands(folder_path: Path) -> list[str]:
     base = (
-        "--genotype_data_path tests/test_data/ "
-        "--label_file_path tests/test_data/penncath.csv  "
-        "--global_output_folder runs/penncath "
-        "--output_cat_columns CAD "
-        "--output_con_columns tg hdl ldl "
+        f"--genotype_data_path {folder_path}/ "
+        f"--label_file_path {folder_path}/phenotype.csv "
+        "--global_output_folder runs/simulated_test "
+        "--output_cat_columns phenotype "
+        "--output_con_columns CON_COMPUTED "
         "--model_size nano "
         "--folds 1 "
         "--do_test"
     )
 
-    with_groups = (
-        "--genotype_data_path tests/test_data/ "
-        "--label_file_path tests/test_data/penncath.csv  "
-        "--global_output_folder runs/penncath "
-        "--output_cat_columns CAD "
-        "--output_con_columns tg hdl ldl "
-        "--output_groups random "
-        "--model_size nano "
-        "--folds 1 "
-        "--do_test"
-    )
+    with_groups = f"{base} " "--output_groups random"
 
-    commands = [base, with_groups]
-
-    return commands
+    return [base, with_groups]
 
 
 def _build_test_predict_data(
     tmp_path: Path,
     input_data_path: Path,
-    num_snps: int = 1000,
+    num_snps: int = 100,
 ) -> Path:
     output_dir = tmp_path / "subset_data"
     output_dir.mkdir(exist_ok=True)
 
-    input_prefix = input_data_path / "penncath"
-    output_prefix = output_dir / "penncath_subset"
+    input_prefix = input_data_path / "genetic_data"
+    output_prefix = output_dir / "simulated_subset"
 
     bim_file = input_prefix.with_suffix(".bim")
     with open(bim_file, "r") as f:
@@ -91,23 +78,28 @@ def _build_test_predict_data(
         print(f"STDERR: {e.stderr}")
         raise
 
-    shutil.copy2(input_data_path / "penncath.csv", output_dir / "penncath.csv")
+    shutil.copy2(input_data_path / "phenotype.csv", output_dir / "phenotype.csv")
 
+    id_root = input_data_path / "data/ids"
     for file_name in [
         "test_ids.txt",
-        "test_ids_plink.txt",
         "train_ids.txt",
-        "train_ids_plink.txt",
         "valid_ids.txt",
-        "valid_ids_plink.txt",
     ]:
-        shutil.copy2(input_data_path / "ids" / file_name, output_dir / file_name)
+        shutil.copy2(id_root / file_name, output_dir / file_name)
 
     return output_dir
 
 
-@pytest.mark.parametrize("command", _get_test_cl_commands())
-def test_modelling_pack_and_predict(command: str, tmp_path: Path) -> None:
+@pytest.mark.parametrize("command", _get_test_cl_commands(Path("placeholder")))
+def test_modelling_pack_and_predict(
+    command: str,
+    tmp_path: Path,
+    simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
+) -> None:
+    simulated_path = simulate_genetic_data_to_bed(5000, 50, "binary")
+
+    command = command.replace("placeholder", str(simulated_path))
 
     parser = get_argument_parser()
     cl_args = parser.parse_args(command.split())
@@ -117,8 +109,8 @@ def test_modelling_pack_and_predict(command: str, tmp_path: Path) -> None:
     run(cl_args=cl_args)
 
     model_folder = tmp_path / "modelling"
-    check_test = True if "do_test" in command else False
-    for modelling_run in _iterdir_ignore_hidden(path=model_folder):
+    check_test = True if "--do_test" in command else False
+    for modelling_run in Path(model_folder).iterdir():
         if not modelling_run.name.startswith("fold_"):
             continue
 
@@ -135,8 +127,8 @@ def test_modelling_pack_and_predict(command: str, tmp_path: Path) -> None:
 
     test_predict_subset_folder = _build_test_predict_data(
         tmp_path=tmp_path,
-        input_data_path=Path("tests/test_data"),
-        num_snps=200,
+        input_data_path=simulated_path,
+        num_snps=25,
     )
 
     predict_output_folder = tmp_path / "predict_output"
@@ -149,7 +141,7 @@ def test_modelling_pack_and_predict(command: str, tmp_path: Path) -> None:
     run_sync_and_predict_wrapper(cl_args=predict_test_cl_args)
 
     predict_output_folder = tmp_path / "predict_output" / "results"
-    actual_data_path = Path("tests/test_data/penncath.csv")
+    actual_data_path = simulated_path / "phenotype.csv"
 
     check_predict_results(
         predict_output_folder=predict_output_folder,
@@ -204,7 +196,7 @@ def check_predict_results(
     )
 
     for target, metrics in gathered_results.items():
-        if target in ["CAD"]:
+        if target in ["phenotype"]:
             assert (
                 0 <= metrics["accuracy"] <= 1
             ), f"Accuracy for {target} should be between 0 and 1"
@@ -231,7 +223,7 @@ def gather_predict_results(
 
     results = {}
 
-    cat_targets = ["CAD"]
+    cat_targets = ["phenotype"]
     for target in cat_targets:
         if (predict_output_folder / f"{target}.csv").exists():
             pred_data = pd.read_csv(predict_output_folder / f"{target}.csv")
@@ -239,17 +231,18 @@ def gather_predict_results(
             pred_data.set_index("ID", inplace=True)
 
             merged_data = actual_data.join(pred_data, how="inner")
+            merged_data = merged_data.dropna(subset=[target])
 
             y_true = merged_data[target]
             y_pred = merged_data[f"{target} Predicted Class"]
-            y_prob = merged_data[f"{target} Ensemble Prob 1"]
+            y_prob = merged_data[f"{target} Ensemble Prob 1.0"]
 
             accuracy = accuracy_score(y_true=y_true, y_pred=y_pred)
             auc = roc_auc_score(y_true=y_true, y_score=y_prob)
 
             results[target] = {"accuracy": accuracy, "auc": auc}
 
-    cont_targets = ["hdl", "ldl", "tg"]
+    cont_targets = ["CON_COMPUTED"]
     for target in cont_targets:
         if (predict_output_folder / f"{target}.csv").exists():
             pred_data = pd.read_csv(predict_output_folder / f"{target}.csv")
