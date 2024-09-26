@@ -658,16 +658,17 @@ def _get_all_dynamic_injections(
 ) -> Dict[str, Any]:
     mip = injection_params
 
-    samples_per_epoch = get_samples_per_epoch(model_injection_params=mip)
+    spe = get_samples_per_epoch(model_injection_params=mip)
 
-    batch_size = get_batch_size(samples_per_epoch=samples_per_epoch)
+    batch_size = get_batch_size(samples_per_epoch=spe.samples_per_epoch)
 
     valid_size = get_dynamic_valid_size(
-        num_samples_per_epoch=samples_per_epoch,
+        num_samples_per_epoch=spe.samples_per_epoch,
         minimum=batch_size,
     )
     iter_per_epoch = get_num_iter_per_epoch(
-        num_samples_per_epoch=samples_per_epoch,
+        num_samples_per_epoch=spe.samples_per_epoch,
+        num_samples_total=spe.num_samples_total,
         batch_size=batch_size,
         valid_size=valid_size,
     )
@@ -737,11 +738,17 @@ def _get_all_dynamic_injections(
 
 def get_num_iter_per_epoch(
     num_samples_per_epoch: int,
+    num_samples_total: int,
     batch_size: int,
     valid_size: int,
 ) -> int:
+
+    min_iter_per_epoch = 500
+    if num_samples_total < 10_000:
+        min_iter_per_epoch = 100
+
     iter_per_epoch = (num_samples_per_epoch - valid_size) // batch_size
-    iter_per_epoch = max(100, iter_per_epoch)
+    iter_per_epoch = max(min_iter_per_epoch, iter_per_epoch)
     return iter_per_epoch
 
 

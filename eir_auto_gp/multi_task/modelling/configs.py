@@ -45,6 +45,7 @@ def get_base_global_config() -> Dict[str, Any]:
         },
         "visualization_logging": {
             "no_pbar": False,
+            "log_level": "DEBUG",
         },
     }
     return base
