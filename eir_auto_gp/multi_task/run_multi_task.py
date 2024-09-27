@@ -175,6 +175,13 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--n_random_output_groups",
+        type=int,
+        default=2,
+        help="Number of random groups to create when using 'random' for output_groups.",
+    )
+
+    parser.add_argument(
         "--model_size",
         type=str,
         default="mini",
@@ -435,6 +442,7 @@ def build_modelling_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "output_cat_columns",
         "output_con_columns",
         "output_groups",
+        "n_random_output_groups",
         "genotype_feature_selection",
         "model_size",
         "do_test",

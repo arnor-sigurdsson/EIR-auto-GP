@@ -45,7 +45,9 @@ def get_base_global_config() -> Dict[str, Any]:
         },
         "visualization_logging": {
             "no_pbar": False,
-            "log_level": "DEBUG",
+        },
+        "metrics": {
+            "con_averaging_metrics": ["pcc", "r2"],
         },
     }
     return base
@@ -125,20 +127,20 @@ def get_base_fusion_config(
     output_head: str = "linear",
 ) -> Dict[str, Any]:
 
-    mp = get_model_size_params(model_size=model_size)
+    fmsp = get_fusion_model_size_params(model_size=model_size)
 
     config_base = {
         "fc_do": 0.0,
-        "fc_task_dim": mp.fc_dim,
-        "layers": [mp.n_layers],
+        "fc_task_dim": fmsp.fc_dim,
+        "layers": [fmsp.n_layers],
         "rb_do": 0.0,
         "stochastic_depth_p": 0.0,
     }
 
     if model_type == "mlp-residual":
         tb_base = generate_tb_base_config(
-            num_layers=mp.n_layers,
-            tb_block_frequency=mp.tb_block_frequency,
+            num_layers=fmsp.n_layers,
+            tb_block_frequency=fmsp.tb_block_frequency,
             output_head=output_head,
             target_columns=target_columns,
             output_groups=output_groups,
@@ -151,10 +153,10 @@ def get_base_fusion_config(
 
     elif model_type == "mgmoe":
         config_base["mg_num_experts"] = 8
-        config_base["fc_task_dim"] = mp.fc_dim // 4
+        config_base["fc_task_dim"] = fmsp.fc_dim // 4
         tb_mgmoe = generate_tb_mgmoe_config(
-            num_layers=mp.n_layers,
-            tb_block_frequency=mp.tb_block_frequency,
+            num_layers=fmsp.n_layers,
+            tb_block_frequency=fmsp.tb_block_frequency,
             num_experts=8,
             output_head=output_head,
         )
@@ -170,20 +172,20 @@ def get_base_fusion_config(
 
 
 @dataclass
-class ModelSizeParams:
+class FusionModelSizeParams:
     n_layers: int
     fc_dim: int
     tb_block_frequency: int
 
 
-def get_model_size_params(model_size: str) -> ModelSizeParams:
+def get_fusion_model_size_params(model_size: str) -> FusionModelSizeParams:
     param_dict = {
-        "nano": ModelSizeParams(n_layers=2, fc_dim=128, tb_block_frequency=1),
-        "mini": ModelSizeParams(n_layers=4, fc_dim=256, tb_block_frequency=2),
-        "small": ModelSizeParams(n_layers=8, fc_dim=512, tb_block_frequency=2),
-        "medium": ModelSizeParams(n_layers=16, fc_dim=1024, tb_block_frequency=2),
-        "large": ModelSizeParams(n_layers=24, fc_dim=2048, tb_block_frequency=4),
-        "xlarge": ModelSizeParams(n_layers=32, fc_dim=4096, tb_block_frequency=4),
+        "nano": FusionModelSizeParams(n_layers=2, fc_dim=128, tb_block_frequency=1),
+        "mini": FusionModelSizeParams(n_layers=4, fc_dim=256, tb_block_frequency=2),
+        "small": FusionModelSizeParams(n_layers=8, fc_dim=512, tb_block_frequency=2),
+        "medium": FusionModelSizeParams(n_layers=16, fc_dim=1024, tb_block_frequency=2),
+        "large": FusionModelSizeParams(n_layers=24, fc_dim=2048, tb_block_frequency=4),
+        "xlarge": FusionModelSizeParams(n_layers=32, fc_dim=4096, tb_block_frequency=4),
     }
 
     return param_dict[model_size]
@@ -309,12 +311,37 @@ def generate_tb_mgmoe_config(
     return {"message_configs": message_configs}
 
 
+@dataclass()
+class SharedMLPResidualModelSizeParams:
+    n_layers: int
+    fc_dim: int
+
+
+def get_shared_mlp_residual_model_size_params(
+    model_size: str,
+) -> SharedMLPResidualModelSizeParams:
+    param_dict = {
+        "nano": SharedMLPResidualModelSizeParams(n_layers=1, fc_dim=32),
+        "mini": SharedMLPResidualModelSizeParams(n_layers=2, fc_dim=64),
+        "small": SharedMLPResidualModelSizeParams(n_layers=2, fc_dim=128),
+        "medium": SharedMLPResidualModelSizeParams(n_layers=4, fc_dim=256),
+        "large": SharedMLPResidualModelSizeParams(n_layers=4, fc_dim=512),
+        "xlarge": SharedMLPResidualModelSizeParams(n_layers=4, fc_dim=1024),
+    }
+
+    return param_dict[model_size]
+
+
 def get_output_configs(
     output_groups: Optional[dict[str, list[str]]],
     output_cat_columns: list[str],
     output_con_columns: list[str],
+    model_size: str,
     output_head: str = "mlp",
 ) -> list[dict[str, Any]]:
+
+    shared_mlp_params = get_shared_mlp_residual_model_size_params(model_size=model_size)
+
     head_configs = {
         "mlp": {
             "model_type": "mlp_residual",
@@ -333,10 +360,10 @@ def get_output_configs(
         "shared_mlp_residual": {
             "model_type": "shared_mlp_residual",
             "model_init_config": {
-                "layers": [2],
-                "fc_task_dim": 128,
-                "rb_do": 0.05,
-                "fc_do": 0.05,
+                "layers": [shared_mlp_params.n_layers],
+                "fc_task_dim": shared_mlp_params.fc_dim,
+                "rb_do": 0.00,
+                "fc_do": 0.00,
                 "stochastic_depth_p": 0.0,
             },
         },
@@ -431,6 +458,7 @@ def get_aggregate_config(
     target_columns: list[str],
     output_cat_columns: list[str],
     output_con_columns: list[str],
+    n_random_groups: int,
     output_groups: str = "random",
     output_head: str = "linear",
     fusion_type: str = "mlp-residual",
@@ -448,7 +476,7 @@ def get_aggregate_config(
         output_groups = _build_output_groups(
             output_groups=output_groups,
             target_columns=target_columns,
-            num_groups=2,
+            n_random_groups=n_random_groups,
         )
     else:
         output_groups = None
@@ -465,6 +493,7 @@ def get_aggregate_config(
         output_groups=output_groups,
         output_cat_columns=output_cat_columns,
         output_con_columns=output_con_columns,
+        model_size=model_size,
     )
 
     return AggregateConfig(
@@ -479,20 +508,21 @@ def get_aggregate_config(
 def _build_output_groups(
     output_groups: str | int,
     target_columns: list[str],
-    num_groups: int,
+    n_random_groups: int,
 ) -> dict[str, list[str]]:
     if isinstance(output_groups, str):
         if output_groups.lower() == "random":
             return _create_random_groups(
                 target_columns=target_columns,
-                num_groups=num_groups,
+                num_groups=n_random_groups,
             )
         else:
             with open(output_groups, "r") as file:
                 return yaml.safe_load(file)
     elif isinstance(output_groups, int):
         return _create_random_groups(
-            target_columns=target_columns, num_groups=output_groups
+            target_columns=target_columns,
+            num_groups=output_groups,
         )
     else:
         raise ValueError(

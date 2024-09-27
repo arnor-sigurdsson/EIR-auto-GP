@@ -108,6 +108,7 @@ class TestSingleRun(luigi.Task):
             target_columns=all_target_columns,
             output_cat_columns=self.modelling_config["output_cat_columns"],
             output_con_columns=self.modelling_config["output_con_columns"],
+            n_random_groups=self.modelling_config["n_random_output_groups"],
         )
 
         injection_params = build_injection_params(
@@ -231,6 +232,7 @@ class TrainSingleRun(luigi.Task):
             target_columns=all_target_columns,
             output_cat_columns=self.modelling_config["output_cat_columns"],
             output_con_columns=self.modelling_config["output_con_columns"],
+            n_random_groups=self.modelling_config["n_random_output_groups"],
         )
 
         injection_params = build_injection_params(
@@ -307,9 +309,7 @@ def build_injection_params(
     modelling_config: Dict[str, Any],
     output_configs: list[Dict[str, Any]],
 ) -> ModelInjectionParams:
-    weighted_sampling_columns = get_weighted_sampling_columns(
-        modelling_config=modelling_config
-    )
+    weighted_sampling_columns = None
 
     base_output_folder = modelling_config["modelling_output_folder"]
     cur_run_output_folder = f"{base_output_folder}/fold_{fold}"
