@@ -219,6 +219,25 @@ def get_cl_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     return cl_args
 
 
+def validate_cl_args(cl_args: argparse.Namespace) -> None:
+    if cl_args.global_output_folder:
+        if cl_args.data_output_folder:
+            raise ValueError(
+                "If --global_output_folder is provided, --data_output_folder "
+                "should not be provided."
+            )
+        if cl_args.modelling_output_folder:
+            raise ValueError(
+                "If --global_output_folder is provided, --modelling_output_folder "
+                "should not be provided."
+            )
+        if cl_args.analysis_output_folder:
+            raise ValueError(
+                "If --global_output_folder is provided, --analysis_output_folder "
+                "should not be provided."
+            )
+
+
 def validate_label_file(
     label_file_path: str,
     input_cat_columns: list[str],
@@ -295,6 +314,7 @@ def validate_pre_split_folder(pre_split_folder: Optional[str]) -> None:
 
 
 def run(cl_args: argparse.Namespace) -> None:
+    validate_cl_args(cl_args=cl_args)
     validate_geno_data_path(geno_data_path=cl_args.genotype_data_path)
     validate_label_file(
         label_file_path=cl_args.label_file_path,

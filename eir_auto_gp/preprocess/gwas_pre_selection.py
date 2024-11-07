@@ -34,10 +34,10 @@ def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
 
     if len(filter_config.target_names) > 1:
         logger.warning(
-            "Multiple target names provided, this generally works"
+            "Multiple target names provided, this generally works "
             "for continuous targets only. For binary targets, "
             "use only one target name, if not, the first target "
-            "will likely work fine, but successive targets may not and"
+            "will likely work fine, but successive targets may not and "
             "PLINK will raise an error."
         )
 

@@ -251,7 +251,7 @@ def _id_setup_wrapper(
     _save_ids_to_text_file(ids=train_ids, path=output_root / "ids" / "train_ids.txt")
     _save_ids_to_text_file(ids=test_ids, path=output_root / "ids" / "test_ids.txt")
 
-    logger.info("Train and valid IDs: %d", len(train_ids))
+    logger.info("Train and valid IDs: %d", len(train_ids) + len(valid_ids))
     logger.info("Test IDs: %d", len(test_ids))
 
     check_missing_ids(
