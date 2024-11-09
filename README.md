@@ -29,6 +29,8 @@
 
 **WARNING**: This project is in alpha phase. Expect backwards incompatible changes and API changes.
 
+**NOTE**: This project is specifically for genomic prediction. For more general and configurable deep learning tasks, please refer to [EIR](https://github.com/arnor-sigurdsson/EIR).
+
 ## Overview
 
 EIR-auto-GP is a comprehensive framework for genomic prediction (GP) tasks, built on top of the [EIR](https://github.com/arnor-sigurdsson/EIR) deep learning framework. EIR-auto-GP streamlines the process of preparing data, training, and evaluating models on genomic data, automating much of the process from raw input files to results analysis. Key features include:
