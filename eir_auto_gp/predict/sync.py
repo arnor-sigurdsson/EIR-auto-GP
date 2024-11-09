@@ -17,6 +17,7 @@ logger = get_logger(name=__name__)
 def run_sync(
     genotype_data_path: Path,
     experiment_folder: Path,
+    data_output_folder: Path,
     output_folder: Path,
 ) -> str:
     with Progress() as progress:
@@ -25,7 +26,7 @@ def run_sync(
         df_bim_exp = get_experiment_bim_file(experiment_folder=experiment_folder)
         df_bim_prd = get_predict_bim_file(genotype_folder=genotype_data_path)
 
-        log_output_path = output_folder / "snp_overlap_analysis.txt"
+        log_output_path = data_output_folder / "snp_overlap_analysis.txt"
         log_overlap(
             df_bim_prd=df_bim_prd,
             df_bim_exp=df_bim_exp,
@@ -61,14 +62,14 @@ def run_sync(
             df_add=df_add,
             genotype_data_path=filtered_genotype_data_path,
             genotype_base_name=genotype_base_name,
-            output_folder=output_folder,
+            output_folder=data_output_folder,
         )
         progress.advance(sync_task)
 
         reordered_genotype_data = update_and_reorder(
             genotype_input_folder=added_genotype_data,
             df_exp_bim=df_bim_exp,
-            output_folder=output_folder,
+            output_folder=data_output_folder,
         )
         progress.advance(sync_task)
 

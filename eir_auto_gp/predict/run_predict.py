@@ -70,7 +70,8 @@ def run_sync_and_predict_wrapper(
     final_genotype_path = run_sync(
         genotype_data_path=Path(cl_args.genotype_data_path),
         experiment_folder=Path(cl_args.output_folder + "/unpacked_experiment"),
-        output_folder=data_output_folder,
+        data_output_folder=data_output_folder,
+        output_folder=Path(cl_args.output_folder),
     )
 
     prepared_folder = run_prepare_data(
