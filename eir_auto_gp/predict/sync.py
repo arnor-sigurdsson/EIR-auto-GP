@@ -2,6 +2,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from subprocess import CalledProcessError
+from typing import Optional
 
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists, get_logger
@@ -24,7 +25,12 @@ def run_sync(
         df_bim_exp = get_experiment_bim_file(experiment_folder=experiment_folder)
         df_bim_prd = get_predict_bim_file(genotype_folder=genotype_data_path)
 
-        log_overlap(df_bim_prd=df_bim_prd, df_bim_exp=df_bim_exp)
+        log_output_path = output_folder / "snp_overlap_analysis.txt"
+        log_overlap(
+            df_bim_prd=df_bim_prd,
+            df_bim_exp=df_bim_exp,
+            output_path=log_output_path,
+        )
 
         sync_task = progress.add_task(
             description="[green]Synchronizing genotype data...",
@@ -78,7 +84,11 @@ def run_sync(
     return str(reordered_genotype_data)
 
 
-def log_overlap(df_bim_prd: pd.DataFrame, df_bim_exp: pd.DataFrame) -> None:
+def log_overlap(
+    df_bim_prd: pd.DataFrame,
+    df_bim_exp: pd.DataFrame,
+    output_path: Optional[str | Path] = None,
+) -> None:
     logger.info(
         "Examining SNP overlap between current prediction and previous experiment."
     )
@@ -103,6 +113,15 @@ def log_overlap(df_bim_prd: pd.DataFrame, df_bim_exp: pd.DataFrame) -> None:
     table.add_column("Metric", style="dim", width=40)
     table.add_column("Value", style="bold")
 
+    results = {
+        "overlapping_snps": overlap_count,
+        "overlap_percentage": f"{overlap_percentage:.2f}%",
+        "previous_experiment_snps": exp_count,
+        "current_prediction_snps": prd_count,
+        "snps_to_remove": to_remove_count,
+        "snps_to_add": to_add_count,
+    }
+
     table.add_row("Number of overlapping SNPs", f"[{color}]{overlap_count:,}[/]")
     table.add_row(
         "Percentage of current prediction SNPs overlapping",
@@ -116,6 +135,38 @@ def log_overlap(df_bim_prd: pd.DataFrame, df_bim_exp: pd.DataFrame) -> None:
     console.print("\n")
     console.print(table)
     console.print("\n")
+
+    if output_path:
+        try:
+            overlap_quality = (
+                "High"
+                if overlap_percentage > 75
+                else "Medium" if overlap_percentage > 50 else "Low"
+            )
+            results_formatted = [
+                f"{k.replace('_', ' ').title()}: {v}" for k, v in results.items()
+            ]
+            output_text = [
+                "SNP Overlap Analysis Results",
+                "=========================\n",
+                *results_formatted,
+                "\nDetailed Information:",
+                f"- The overlap between current prediction and previous experiment"
+                f" is {overlap_percentage:.2f}%",
+                f"- {to_remove_count:,} SNPs need to be removed from the current "
+                f"prediction",
+                f"- {to_add_count:,} SNPs need to be added from the previous "
+                f"experiment",
+                "\nQuality Assessment:",
+                f"- Overlap Quality: {overlap_quality}",
+            ]
+
+            with open(output_path, "w") as f:
+                f.write("\n".join(output_text))
+
+            logger.info(f"Results saved to {output_path}")
+        except Exception as e:
+            logger.error(f"Failed to save results to {output_path}: {str(e)}")
 
 
 def check_genotype_folder(genotype_folder: Path) -> str:
