@@ -29,6 +29,8 @@
 
 **WARNING**: This project is in alpha phase. Expect backwards incompatible changes and API changes.
 
+**NOTE**: This project is specifically for genomic prediction. For more general and configurable deep learning tasks, please refer to [EIR](https://github.com/arnor-sigurdsson/EIR).
+
 ## Overview
 
 EIR-auto-GP is a comprehensive framework for genomic prediction (GP) tasks, built on top of the [EIR](https://github.com/arnor-sigurdsson/EIR) deep learning framework. EIR-auto-GP streamlines the process of preparing data, training, and evaluating models on genomic data, automating much of the process from raw input files to results analysis. Key features include:
@@ -75,6 +77,10 @@ The rough workflow can be visualized as follows:
 
 If you use `EIR-auto-GP` in a scientific publication, we would appreciate if you could use one of the following citations:
 
+- [Deep integrative models for large-scale human genomics](https://academic.oup.com/nar/article/51/12/e67/7177885)
+- [Non-linear genetic regulation of the blood plasma proteome](https://www.medrxiv.org/content/10.1101/2024.07.04.24309942v1)
+- [Improved prediction of blood biomarkers using deep learning](https://www.medrxiv.org/content/10.1101/2022.10.27.22281549v1)
+
 ```
 @article{10.1093/nar/gkad373,
     author    = {Sigurdsson, Arn{\'o}r I and Louloudis, Ioannis and Banasik, Karina and Westergaard, David and Winther, Ole and Lund, Ole and Ostrowski, Sisse Rye and Erikstrup, Christian and Pedersen, Ole Birger Vesterager and Nyegaard, Mette and DBDS Genomic Consortium and Brunak, S{\o}ren and Vilhj{\'a}lmsson, Bjarni J and Rasmussen, Simon},
@@ -82,6 +88,15 @@ If you use `EIR-auto-GP` in a scientific publication, we would appreciate if you
     journal   = {Nucleic Acids Research},
     month     = {05},
     year      = {2023}
+}
+
+@article{sigurdsson2024non,
+  title={Non-linear genetic regulation of the blood plasma proteome},
+  author={Sigurdsson, Arnor I and Gr{\"a}f, Justus F and Yang, Zhiyu and Ravn, Kirstine and Meisner, Jonas and Thielemann, Roman and Webel, Henry and Smit, Roelof AJ and Niu, Lili and Mann, Matthias and others},
+  journal={medRxiv},
+  pages={2024--07},
+  year={2024},
+  publisher={Cold Spring Harbor Laboratory Press}
 }
 
 @article{sigurdsson2022improved,
