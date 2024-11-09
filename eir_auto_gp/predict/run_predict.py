@@ -48,6 +48,12 @@ def get_parser() -> argparse.ArgumentParser:
         type=str,
         help="The folder to output the results.",
     )
+
+    parser.add_argument(
+        "--genotype_processing_chunk_size",
+        type=int,
+        default=32,
+    )
     return parser
 
 
@@ -70,6 +76,7 @@ def run_sync_and_predict_wrapper(
     prepared_folder = run_prepare_data(
         final_genotype_data_path=final_genotype_path,
         output_folder=str(data_output_folder),
+        array_chunk_size=cl_args.genotype_processing_chunk_size,
     )
 
     run_predict(
