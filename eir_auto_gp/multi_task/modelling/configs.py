@@ -203,7 +203,7 @@ def generate_tb_base_config(
             "name": "base_fusion_residual_block",
             "layer_path": "fusion_modules.computed.fusion_modules.fusion.0.0",
             "use_from_cache": ["first_layer_tensor"],
-            "projection_type": "lcl_residual",
+            "projection_type": "lcl+mlp_residual",
             "cache_fusion_type": "sum",
         }
     ]
@@ -218,7 +218,7 @@ def generate_tb_base_config(
                     "layer_path": f"fusion_modules.computed.fusion_modules"
                     f".fusion.1.{layer}",
                     "use_from_cache": ["first_layer_tensor"],
-                    "projection_type": "lcl_residual",
+                    "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
                 }
             )
@@ -229,7 +229,7 @@ def generate_tb_base_config(
                 "name": "final_layer",
                 "layer_path": "output_modules.eir_auto_gp.linear_layer",
                 "use_from_cache": ["first_layer_tensor"],
-                "projection_type": "lcl_residual",
+                "projection_type": "lcl+mlp_residual",
                 "cache_fusion_type": "sum",
             }
         )
@@ -241,7 +241,7 @@ def generate_tb_base_config(
                     "layer_path": f"output_modules.eir_auto_gp.multi_task_branches."
                     f"{target_column}.0.1",
                     "use_from_cache": ["first_layer_tensor"],
-                    "projection_type": "lcl_residual",
+                    "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
                 }
             )
@@ -254,7 +254,7 @@ def generate_tb_base_config(
                     "layer_path": f"output_modules.eir_auto_gp_{group_name}"
                     f".shared_branch",
                     "use_from_cache": ["first_layer_tensor"],
-                    "projection_type": "lcl_residual",
+                    "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
                 }
             )
@@ -277,7 +277,7 @@ def generate_tb_mgmoe_config(
                 "layer_path": f"fusion_modules.computed.expert_branches"
                 f".expert_{expert}.0.0",
                 "use_from_cache": ["first_layer_tensor"],
-                "projection_type": "lcl_residual",
+                "projection_type": "lcl+mlp_residual",
                 "cache_fusion_type": "sum",
             }
         )
@@ -292,7 +292,7 @@ def generate_tb_mgmoe_config(
                         "layer_path": f"fusion_modules.computed.expert_branches"
                         f".expert_{expert}.1.{layer - 1}",
                         "use_from_cache": ["first_layer_tensor"],
-                        "projection_type": "lcl_residual",
+                        "projection_type": "lcl+mlp_residual",
                         "cache_fusion_type": "sum",
                     }
                 )
@@ -303,7 +303,7 @@ def generate_tb_mgmoe_config(
                 "name": "final_layer",
                 "layer_path": "output_modules.eir_auto_gp.linear_layer",
                 "use_from_cache": ["first_layer_tensor"],
-                "projection_type": "lcl_residual",
+                "projection_type": "lcl+mlp_residual",
                 "cache_fusion_type": "sum",
             }
         )
