@@ -12,7 +12,7 @@ def pack_experiment(experiment_folder: Path, output_path: Path) -> None:
     bim_file = get_run_bim_file(experiment_folder=experiment_folder)
 
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-        add_directory_to_zip(
+        add_modelling_folders_to_zip(
             zipf=zipf,
             root_dir=experiment_folder / "modelling",
             target_dirs=["serializations", "saved_models", "configs"],
@@ -22,8 +22,12 @@ def pack_experiment(experiment_folder: Path, output_path: Path) -> None:
         )
         add_bim_file_to_zip(zipf=zipf, bim_file=bim_file)
 
+        subset_folder = experiment_folder / "modelling" / "snp_subset_files"
+        if subset_folder.exists():
+            add_subset_folder_to_zip(zipf=zipf, subset_folder=subset_folder)
 
-def add_directory_to_zip(
+
+def add_modelling_folders_to_zip(
     zipf: zipfile.ZipFile, root_dir: Path, target_dirs: list[str]
 ) -> None:
     logger.info(f"Writing directories {target_dirs} from {root_dir}.")
@@ -62,6 +66,13 @@ def add_bim_file_to_zip(zipf: zipfile.ZipFile, bim_file: Path) -> None:
         zipf.write(bim_file, arcname=bim_target_path)
     else:
         raise ValueError(f"File {bim_file} does not exist.")
+
+
+def add_subset_folder_to_zip(zipf: zipfile.ZipFile, subset_folder: Path) -> None:
+    if subset_folder and subset_folder.exists():
+        logger.info(f"Writing subset folder to {subset_folder}.")
+        for file in subset_folder.rglob("*"):
+            zipf.write(file, arcname=file.relative_to(subset_folder.parent))
 
 
 def get_run_bim_file(experiment_folder: Path) -> Path:

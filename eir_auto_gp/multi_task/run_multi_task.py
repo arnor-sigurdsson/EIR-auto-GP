@@ -115,7 +115,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
         default="",
         help="Feature selection method to use for genotype data.\n"
         "Options are:\n"
-        "  - 'random': Randomly choose 10% of each chromosome.\n",
+        "  - 'random': Randomly choose 10%% of each chromosome.\n",
     )
 
     parser.add_argument(
@@ -157,6 +157,51 @@ def get_argument_parser() -> argparse.ArgumentParser:
         type=str,
         default=[],
         help="List of continuous columns to use as output.",
+    )
+
+    parser.add_argument(
+        "--output_groups",
+        type=str,
+        required=False,
+        help="A .yaml file containing the groups for output targets, each group "
+        "will use a shared output branch in the model. The file should be in the "
+        "following format:\n"
+        "group_1:\n"
+        "  - target_1\n"
+        "  - target_2\n"
+        "group_2:\n"
+        "  - target_3\n"
+        "  - target_4\n",
+    )
+
+    parser.add_argument(
+        "--n_random_output_groups",
+        type=int,
+        default=2,
+        help="Number of random groups to create when using 'random' for output_groups.",
+    )
+
+    parser.add_argument(
+        "--model_size",
+        type=str,
+        default="mini",
+        help="Model size to use for training.",
+        choices=[
+            "nano",
+            "mini",
+            "small",
+            "medium",
+            "large",
+            "xlarge",
+        ],
+    )
+
+    parser.add_argument(
+        "--data_format",
+        type=str,
+        default="disk",
+        help="Which format to store the data in during modelling.",
+        choices=["disk", "memory", "auto"],
     )
 
     parser.add_argument(
@@ -380,6 +425,7 @@ def build_data_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "pre_split_folder",
         "freeze_validation_set",
         "genotype_processing_chunk_size",
+        "data_format",
     ]
 
     base = extract_from_namespace(namespace=cl_args, keys=data_keys)
@@ -395,7 +441,10 @@ def build_modelling_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "input_con_columns",
         "output_cat_columns",
         "output_con_columns",
+        "output_groups",
+        "n_random_output_groups",
         "genotype_feature_selection",
+        "model_size",
         "do_test",
     ]
 

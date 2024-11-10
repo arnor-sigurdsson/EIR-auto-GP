@@ -1,4 +1,5 @@
 usage: eirautogp [-h] --genotype_data_path GENOTYPE_DATA_PATH
+                 [--genotype_processing_chunk_size GENOTYPE_PROCESSING_CHUNK_SIZE]
                  --label_file_path LABEL_FILE_PATH [--only_data]
                  [--global_output_folder GLOBAL_OUTPUT_FOLDER]
                  [--data_output_folder DATA_OUTPUT_FOLDER]
@@ -8,7 +9,7 @@ usage: eirautogp [-h] --genotype_data_path GENOTYPE_DATA_PATH
                  [--output_name OUTPUT_NAME]
                  [--pre_split_folder PRE_SPLIT_FOLDER]
                  [--freeze_validation_set] [--no-freeze_validation_set]
-                 [--feature_selection {dl,gwas,gwas->dl,None}]
+                 [--feature_selection {dl,gwas,gwas->dl,dl+gwas,gwas+bo,None,None}]
                  [--n_dl_feature_selection_setup_folds N_DL_FEATURE_SELECTION_SETUP_FOLDS]
                  [--gwas_p_value_threshold GWAS_P_VALUE_THRESHOLD]
                  [--folds FOLDS] [--input_cat_columns [INPUT_CAT_COLUMNS ...]]
@@ -26,6 +27,8 @@ options:
                         Note that the file names are not included in this path,
                         only the root folder. The file names are inferred, and
                         *only one* set of files is expected.
+  --genotype_processing_chunk_size GENOTYPE_PROCESSING_CHUNK_SIZE
+                        Chunk size for processing genotype data. Increasingthis value will increase the memory usage, but willlikely speed up the processing.
   --label_file_path LABEL_FILE_PATH
                         File path to label file with tabular inputs and labels to predict.
   --only_data           If this flag is set, only the data processing step will be run.
@@ -65,7 +68,7 @@ options:
                         particularly if the dataset is small. To turn off this behavior,
                         you can use the --no-freeze_validation_set flag.
   --no-freeze_validation_set
-  --feature_selection {dl,gwas,gwas->dl,None}
+  --feature_selection {dl,gwas,gwas->dl,dl+gwas,gwas+bo,None,None}
                         What kind of feature selection strategy to use for SNP selection:
                           - If None, no feature selection is performed.
                           - If 'dl', feature selection is performed using DL feature importance,
@@ -75,12 +78,16 @@ options:
                           - If 'gwas->dl', feature selection is first performed using GWAS p-values,
                             and then the top SNPs are selected iteratively using the DL importance method,
                             but only on the SNPs under the GWAS threshold.
+                          - If 'gwas+bo', feature selection is performed using a combination of
+                            GWAS p-values and Bayesian optimization. The upper bound of the fraction
+                            of SNPs to include is determined by the fraction corresponding to a
+                            computed one based on the gwas_p_value_threshold.
   --n_dl_feature_selection_setup_folds N_DL_FEATURE_SELECTION_SETUP_FOLDS
                         How many folds to run DL attribution calculation on genotype data
                         before using results from attributions for feature selection.
                         Applicable only if using 'dl' or 'gwas->dl' feature_selection options.
   --gwas_p_value_threshold GWAS_P_VALUE_THRESHOLD
-                        GWAS p-value threshold for filtering if using 'gwas' or 'gwas->dl'
+                        GWAS p-value threshold for filtering if using 'gwas', 'gwas+bo' or 'gwas->dl'
                         feature_selection options.
   --folds FOLDS         Training runs / folds to run, can be a single fold (e.g. 0),
                         a range of folds (e.g. 0-5), or a comma-separated list of 

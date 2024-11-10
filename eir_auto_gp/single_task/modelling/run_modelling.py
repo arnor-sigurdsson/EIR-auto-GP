@@ -14,7 +14,7 @@ import psutil
 import torch
 import yaml
 from aislib.misc_utils import ensure_path_exists
-from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_replace
+from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_inject
 
 from eir_auto_gp.preprocess.converge import (
     ParseDataWrapper,
@@ -465,7 +465,7 @@ def build_configs(
         config_name = config_field.name
         config = getattr(aggregate_config_base, config_name)
         if config_name in injections:
-            config = recursive_dict_replace(
+            config = recursive_dict_inject(
                 dict_=config,
                 dict_to_inject=injections[config_name],
             )
@@ -762,16 +762,16 @@ def _get_all_dynamic_injections(
 ) -> Dict[str, Any]:
     mip = injection_params
 
-    samples_per_epoch = get_samples_per_epoch(model_injection_params=mip)
+    spe = get_samples_per_epoch(model_injection_params=mip)
 
-    batch_size = get_batch_size(samples_per_epoch=samples_per_epoch)
+    batch_size = get_batch_size(samples_per_epoch=spe.samples_per_epoch)
 
     valid_size = get_dynamic_valid_size(
-        num_samples_per_epoch=samples_per_epoch,
+        num_samples_per_epoch=spe.samples_per_epoch,
         minimum=batch_size,
     )
     iter_per_epoch = get_num_iter_per_epoch(
-        num_samples_per_epoch=samples_per_epoch,
+        num_samples_per_epoch=spe.samples_per_epoch,
         batch_size=batch_size,
         valid_size=valid_size,
     )
@@ -833,25 +833,38 @@ def get_bim_path(genotype_data_path: str) -> str:
     return str(path)
 
 
-def get_samples_per_epoch(model_injection_params: ModelInjectionParams) -> int:
+@dataclass()
+class SampleEpochInfo:
+    num_samples_total: int
+    samples_per_epoch: int
+
+
+def get_samples_per_epoch(
+    model_injection_params: ModelInjectionParams,
+) -> SampleEpochInfo:
     mip = model_injection_params
 
+    num_samples = lines_in_file(file_path=mip.label_file_path) - 1
     if not mip.weighted_sampling_columns:
-        num_samples = lines_in_file(file_path=mip.label_file_path) - 1
-        return num_samples
+        return SampleEpochInfo(
+            num_samples_total=num_samples, samples_per_epoch=num_samples
+        )
 
     logger.info(
         "Setting up weighted sampling for categorical output columns: %s.",
         mip.output_cat_columns,
     )
     label_counts = get_column_label_counts(
-        label_file_path=mip.label_file_path, output_cat_columns=mip.output_cat_columns
+        label_file_path=mip.label_file_path,
+        output_cat_columns=mip.output_cat_columns,
     )
 
     mean_per_target = (min(i.values()) for i in label_counts.values())
     mean_all_outputs = int(mean(mean_per_target))
 
-    return mean_all_outputs
+    return SampleEpochInfo(
+        num_samples_total=num_samples, samples_per_epoch=mean_all_outputs
+    )
 
 
 def get_column_label_counts(

@@ -8,7 +8,7 @@ packages = [{include = "eir_auto_gp"}]
 
 [tool.poetry.dependencies]
 python = ">=3.12.0,<3.13"
-eir-dl = "^0.4.0"
+eir-dl = "^0.8.0"
 plink-pipelines = "^0.2.0"
 scikit-optimize = "^0.9.0"
 qmplot = "^0.3.2"
@@ -47,6 +47,8 @@ eirautogp = "eir_auto_gp.single_task.run_single_task:main"
 eirautogpmulti = "eir_auto_gp.multi_task.run_multi_task:main"
 eirautogwas = "eir_auto_gp.preprocess.gwas_pre_selection:main"
 eirautopostanalysis = "eir_auto_gp.post_analysis.run_post_analysis:main"
+eirautogppack = "eir_auto_gp.predict.pack:main"
+eirautogppredict = "eir_auto_gp.predict.run_predict:main"
 
 [tool.isort]
 profile = "black"

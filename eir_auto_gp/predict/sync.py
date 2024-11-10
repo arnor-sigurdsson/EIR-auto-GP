@@ -2,6 +2,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from subprocess import CalledProcessError
+from typing import Optional
 
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists, get_logger
@@ -16,6 +17,7 @@ logger = get_logger(name=__name__)
 def run_sync(
     genotype_data_path: Path,
     experiment_folder: Path,
+    data_output_folder: Path,
     output_folder: Path,
 ) -> str:
     with Progress() as progress:
@@ -24,7 +26,12 @@ def run_sync(
         df_bim_exp = get_experiment_bim_file(experiment_folder=experiment_folder)
         df_bim_prd = get_predict_bim_file(genotype_folder=genotype_data_path)
 
-        log_overlap(df_bim_prd=df_bim_prd, df_bim_exp=df_bim_exp)
+        log_output_path = data_output_folder / "snp_overlap_analysis.txt"
+        log_overlap(
+            df_bim_prd=df_bim_prd,
+            df_bim_exp=df_bim_exp,
+            output_path=log_output_path,
+        )
 
         sync_task = progress.add_task(
             description="[green]Synchronizing genotype data...",
@@ -55,14 +62,14 @@ def run_sync(
             df_add=df_add,
             genotype_data_path=filtered_genotype_data_path,
             genotype_base_name=genotype_base_name,
-            output_folder=output_folder,
+            output_folder=data_output_folder,
         )
         progress.advance(sync_task)
 
         reordered_genotype_data = update_and_reorder(
             genotype_input_folder=added_genotype_data,
             df_exp_bim=df_bim_exp,
-            output_folder=output_folder,
+            output_folder=data_output_folder,
         )
         progress.advance(sync_task)
 
@@ -78,7 +85,11 @@ def run_sync(
     return str(reordered_genotype_data)
 
 
-def log_overlap(df_bim_prd: pd.DataFrame, df_bim_exp: pd.DataFrame) -> None:
+def log_overlap(
+    df_bim_prd: pd.DataFrame,
+    df_bim_exp: pd.DataFrame,
+    output_path: Optional[str | Path] = None,
+) -> None:
     logger.info(
         "Examining SNP overlap between current prediction and previous experiment."
     )
@@ -103,6 +114,15 @@ def log_overlap(df_bim_prd: pd.DataFrame, df_bim_exp: pd.DataFrame) -> None:
     table.add_column("Metric", style="dim", width=40)
     table.add_column("Value", style="bold")
 
+    results = {
+        "overlapping_snps": overlap_count,
+        "overlap_percentage": f"{overlap_percentage:.2f}%",
+        "previous_experiment_snps": exp_count,
+        "current_prediction_snps": prd_count,
+        "snps_to_remove": to_remove_count,
+        "snps_to_add": to_add_count,
+    }
+
     table.add_row("Number of overlapping SNPs", f"[{color}]{overlap_count:,}[/]")
     table.add_row(
         "Percentage of current prediction SNPs overlapping",
@@ -116,6 +136,38 @@ def log_overlap(df_bim_prd: pd.DataFrame, df_bim_exp: pd.DataFrame) -> None:
     console.print("\n")
     console.print(table)
     console.print("\n")
+
+    if output_path:
+        try:
+            overlap_quality = (
+                "High"
+                if overlap_percentage > 75
+                else "Medium" if overlap_percentage > 50 else "Low"
+            )
+            results_formatted = [
+                f"{k.replace('_', ' ').title()}: {v}" for k, v in results.items()
+            ]
+            output_text = [
+                "SNP Overlap Analysis Results",
+                "=========================\n",
+                *results_formatted,
+                "\nDetailed Information:",
+                f"- The overlap between current prediction and previous experiment"
+                f" is {overlap_percentage:.2f}%",
+                f"- {to_remove_count:,} SNPs need to be removed from the current "
+                f"prediction",
+                f"- {to_add_count:,} SNPs need to be added from the previous "
+                f"experiment",
+                "\nQuality Assessment:",
+                f"- Overlap Quality: {overlap_quality}",
+            ]
+
+            with open(output_path, "w") as f:
+                f.write("\n".join(output_text))
+
+            logger.info(f"Results saved to {output_path}")
+        except Exception as e:
+            logger.error(f"Failed to save results to {output_path}: {str(e)}")
 
 
 def check_genotype_folder(genotype_folder: Path) -> str:
@@ -157,6 +209,7 @@ def remove_extra_snps(
         genotype_data_path + "/" + genotype_base_name,
         "--exclude",
         snps_to_remove_filepath,
+        "--keep-allele-order",
         "--make-bed",
         "--out",
         filtered_path / genotype_base_name,
@@ -213,6 +266,7 @@ def add_missing_snps(
         str(Path(genotype_data_path) / genotype_base_name),
         "--bmerge",
         str(dummy_path / "dummy_dataset"),
+        "--keep-allele-order",
         "--make-bed",
         "--out",
         str(output_folder_missing_imputed / (genotype_base_name + "_with_missing")),
@@ -226,7 +280,7 @@ def get_experiment_bim_file(experiment_folder: Path) -> pd.DataFrame:
     bim_file = experiment_folder / "meta" / "snps.bim"
     assert bim_file.exists()
 
-    df_bim_experiment = read_bim(bim_file_path=str(bim_file))
+    df_bim_experiment = read_bim_and_cast_dtypes(bim_file_path=str(bim_file))
 
     return df_bim_experiment
 
@@ -237,7 +291,7 @@ def get_predict_bim_file(genotype_folder: Path) -> pd.DataFrame:
 
     bim_file = bim_files[0]
 
-    df_bim_predict = read_bim(bim_file_path=str(bim_file))
+    df_bim_predict = read_bim_and_cast_dtypes(bim_file_path=str(bim_file))
 
     return df_bim_predict
 
@@ -254,7 +308,7 @@ def update_and_reorder(
     bim_files = [i for i in genotype_input_path.iterdir() if i.suffix == ".bim"]
     assert len(bim_files) == 1, "There should be exactly one .bim file in the folder."
     bim_file = bim_files[0]
-    df_bim_original = read_bim(bim_file_path=str(bim_file))
+    df_bim_original = read_bim_and_cast_dtypes(bim_file_path=str(bim_file))
     df_bim = df_bim_original.copy()
 
     mapping = df_exp_bim.set_index(
@@ -286,7 +340,9 @@ def update_and_reorder(
 
 
 def create_and_merge_dummy_fileset(
-    genotype_input_folder: str, df_exp_bim: pd.DataFrame, output_folder: Path
+    genotype_input_folder: str,
+    df_exp_bim: pd.DataFrame,
+    output_folder: Path,
 ) -> Path:
     genotype_input_path = Path(genotype_input_folder)
     output_folder.mkdir(parents=True, exist_ok=True)
@@ -327,6 +383,7 @@ def create_and_merge_dummy_fileset(
         str(genotype_input_path / base_name),
         "--bmerge",
         str(dummy_path / "dummy_dataset"),
+        "--keep-allele-order",
         "--make-bed",
         "--out",
         str(merged_output_path),
@@ -339,6 +396,7 @@ def create_and_merge_dummy_fileset(
         str(merged_output_path),
         "--remove",
         str(dummy_path / "dummy_dataset.fam"),
+        "--keep-allele-order",
         "--make-bed",
         "--out",
         str(output_folder / f"{base_name}_reordered"),
@@ -365,7 +423,25 @@ def run_subprocess(command: list[str]) -> None:
             text=True,
         )
     except CalledProcessError as e:
-        print(f"Command failed with exit code {e.returncode}")
-        print(f"Output: {e.output}")
-        print(f"Error: {e.stderr}")
+        logger.error(f"Command failed with exit code {e.returncode}")
+        logger.error(f"Output: {e.output}")
+        logger.error(f"Error: {e.stderr}")
         raise
+
+
+def read_bim_and_cast_dtypes(bim_file_path: Path | str) -> pd.DataFrame:
+
+    dtypes = {
+        "CHR_CODE": str,
+        "VAR_ID": str,
+        "POS_CM": float,
+        "BP_COORD": int,
+        "ALT": str,
+        "REF": str,
+    }
+
+    df_bim = read_bim(bim_file_path=str(bim_file_path))
+
+    df_bim = df_bim.astype(dtypes)
+
+    return df_bim

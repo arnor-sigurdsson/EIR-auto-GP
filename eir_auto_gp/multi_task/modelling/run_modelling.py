@@ -9,7 +9,7 @@ import luigi
 import pandas as pd
 import yaml
 from aislib.misc_utils import ensure_path_exists
-from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_replace
+from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_inject
 from eir.setup.input_setup_modules.setup_omics import read_bim
 
 from eir_auto_gp.multi_task.modelling.configs import (
@@ -26,7 +26,6 @@ from eir_auto_gp.single_task.modelling.run_modelling import (
     get_dataloader_workers,
     get_device,
     get_memory_dataset,
-    get_num_iter_per_epoch,
     get_samples_per_epoch,
     lines_in_file,
 )
@@ -97,12 +96,28 @@ class TestSingleRun(luigi.Task):
         output_root = Path(self.output().path).parent
         ensure_path_exists(output_root, is_folder=True)
 
+        all_target_columns = (
+            self.modelling_config["output_cat_columns"]
+            + self.modelling_config["output_con_columns"]
+        )
+
+        base_aggregate_config = get_aggregate_config(
+            output_head="linear",
+            output_groups=self.modelling_config["output_groups"],
+            model_size=self.modelling_config["model_size"],
+            target_columns=all_target_columns,
+            output_cat_columns=self.modelling_config["output_cat_columns"],
+            output_con_columns=self.modelling_config["output_con_columns"],
+            n_random_groups=self.modelling_config["n_random_output_groups"],
+        )
+
         injection_params = build_injection_params(
             fold=int(self.fold),
             data_input_dict=self.input()["data"][0],
             task="test",
             data_config=self.data_config,
             modelling_config=self.modelling_config,
+            output_configs=base_aggregate_config.output_config,
         )
 
         injections = _get_all_dynamic_injections(
@@ -110,7 +125,6 @@ class TestSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"],
         )
 
-        base_aggregate_config = get_aggregate_config(output_head="linear")
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
             build_configs(
@@ -206,12 +220,28 @@ class TrainSingleRun(luigi.Task):
         output_root = Path(self.output().path).parent
         ensure_path_exists(output_root, is_folder=True)
 
+        all_target_columns = (
+            self.modelling_config["output_cat_columns"]
+            + self.modelling_config["output_con_columns"]
+        )
+
+        base_aggregate_config = get_aggregate_config(
+            output_head="linear",
+            output_groups=self.modelling_config["output_groups"],
+            model_size=self.modelling_config["model_size"],
+            target_columns=all_target_columns,
+            output_cat_columns=self.modelling_config["output_cat_columns"],
+            output_con_columns=self.modelling_config["output_con_columns"],
+            n_random_groups=self.modelling_config["n_random_output_groups"],
+        )
+
         injection_params = build_injection_params(
             fold=int(self.fold),
             data_input_dict=self.input()["data"][0],
             task="train",
             data_config=self.data_config,
             modelling_config=self.modelling_config,
+            output_configs=base_aggregate_config.output_config,
         )
 
         injections = _get_all_dynamic_injections(
@@ -219,7 +249,6 @@ class TrainSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"],
         )
 
-        base_aggregate_config = get_aggregate_config(output_head="linear")
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
             build_configs(
@@ -268,6 +297,8 @@ class ModelInjectionParams:
     output_cat_columns: list[str]
     output_con_columns: list[str]
     weighted_sampling_columns: list[str]
+    data_format: str
+    output_configs: list[dict[str, Any]]
 
 
 def build_injection_params(
@@ -276,10 +307,9 @@ def build_injection_params(
     task: Literal["train", "test"],
     data_config: Dict[str, Any],
     modelling_config: Dict[str, Any],
+    output_configs: list[Dict[str, Any]],
 ) -> ModelInjectionParams:
-    weighted_sampling_columns = get_weighted_sampling_columns(
-        modelling_config=modelling_config
-    )
+    weighted_sampling_columns = None
 
     base_output_folder = modelling_config["modelling_output_folder"]
     cur_run_output_folder = f"{base_output_folder}/fold_{fold}"
@@ -306,6 +336,8 @@ def build_injection_params(
         output_cat_columns=modelling_config["output_cat_columns"],
         output_con_columns=modelling_config["output_con_columns"],
         weighted_sampling_columns=weighted_sampling_columns,
+        data_format=data_config["data_format"],
+        output_configs=output_configs,
     )
 
     return params
@@ -383,16 +415,35 @@ def build_configs(
         config_name = config_field.name
         config = getattr(aggregate_config_base, config_name)
         if config_name in injections:
-            config = recursive_dict_replace(
-                dict_=config,
-                dict_to_inject=injections[config_name],
-            )
+
+            if config_name == "output_config":
+                assert isinstance(config, list)
+
+                for output_config in config:
+                    output_config_name = output_config["output_info"]["output_name"]
+                    cur_to_inject = injections[config_name][output_config_name]
+                    output_config = recursive_dict_inject(
+                        dict_=output_config,
+                        dict_to_inject=cur_to_inject,
+                    )
+
+                    validate_complete_config(config_element=output_config)
+
+                    out_path = output_folder / f"output_{output_config_name}.yaml"
+
+                    with open(out_path, "w") as f:
+                        yaml.dump(output_config, f)
+
+            else:
+                config = recursive_dict_inject(
+                    dict_=config,
+                    dict_to_inject=injections[config_name],
+                )
+                validate_complete_config(config_element=config)
+                with open(output_folder / f"{config_name}.yaml", "w") as f:
+                    yaml.dump(config, f)
         else:
             continue
-
-        validate_complete_config(config_element=config)
-        with open(output_folder / f"{config_name}.yaml", "w") as f:
-            yaml.dump(config, f)
 
 
 def validate_complete_config(config_element: dict | list | str) -> None:
@@ -442,16 +493,26 @@ def _get_global_injections(
     n_samples: int,
     iter_per_epoch: int,
     weighted_sampling_columns: list[str],
+    data_format: str,
 ) -> Dict[str, Any]:
     mixing_candidates = [0.0]
     cur_mixing = mixing_candidates[fold % len(mixing_candidates)]
 
     device = get_device()
-    memory_dataset = get_memory_dataset(n_snps=n_snps, n_samples=n_samples)
+
+    if data_format == "auto":
+        memory_dataset = get_memory_dataset(n_snps=n_snps, n_samples=n_samples)
+    elif data_format == "disk":
+        memory_dataset = False
+    elif data_format == "memory":
+        memory_dataset = True
+    else:
+        raise ValueError(f"Unknown data format: '{data_format}'.")
+
     n_workers = get_dataloader_workers(memory_dataset=memory_dataset, device=device)
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
     early_stopping_buffer = max(early_stopping_buffer, 1000)
-    sample_interval = min(2000, iter_per_epoch)
+    sample_interval = min(1000, iter_per_epoch)
     lr = _get_learning_rate(n_snps=n_snps)
 
     injections = {
@@ -502,25 +563,13 @@ def _get_learning_rate(n_snps: int) -> float:
 
 def _get_genotype_injections(
     input_source: str,
-    genotype_feature_selection: str,
-    tmp_folder: Path,
-    fold: int,
+    n_snps: int,
+    subset_snp_path: Optional[Path],
 ) -> Dict[str, Any]:
     base_snp_path = (
         Path(input_source).parent.parent / "processed/parsed_files/data_final.bim"
     )
     assert base_snp_path.exists(), f"SNP file not found at {base_snp_path}"
-
-    subset_snp_path = None
-    if genotype_feature_selection == "random":
-        n_snps, subset_snp_path = build_random_snp_subset_file(
-            original_bim_path=base_snp_path,
-            tmp_folder=tmp_folder,
-            fold=fold,
-        )
-    else:
-        assert not genotype_feature_selection
-        n_snps = lines_in_file(file_path=base_snp_path)
 
     kernel_width, first_kernel_expansion = get_gln_kernel_parameters(n_snps=n_snps)
 
@@ -539,8 +588,7 @@ def _get_genotype_injections(
         },
     }
 
-    if genotype_feature_selection:
-        assert subset_snp_path is not None
+    if subset_snp_path:
         injections["input_type_info"]["subset_snps_file"] = str(subset_snp_path)
 
     return injections
@@ -586,7 +634,9 @@ def _get_tabular_injections(
 
 
 def _get_output_injections(
-    label_file_path: str, output_cat_columns: list[str], output_con_columns: list[str]
+    label_file_path: str,
+    output_cat_columns: list[str],
+    output_con_columns: list[str],
 ) -> Dict[str, Any]:
     injections = {
         "output_info": {
@@ -595,7 +645,7 @@ def _get_output_injections(
         "output_type_info": {
             "target_cat_columns": output_cat_columns,
             "target_con_columns": output_con_columns,
-            "uncertainty_weighted_mt_loss": False,
+            "uncertainty_weighted_mt_loss": True,
         },
     }
 
@@ -608,24 +658,37 @@ def _get_all_dynamic_injections(
 ) -> Dict[str, Any]:
     mip = injection_params
 
-    samples_per_epoch = get_samples_per_epoch(model_injection_params=mip)
+    spe = get_samples_per_epoch(model_injection_params=mip)
 
-    batch_size = get_batch_size(samples_per_epoch=samples_per_epoch)
+    batch_size = get_batch_size(samples_per_epoch=spe.samples_per_epoch)
 
     valid_size = get_dynamic_valid_size(
-        num_samples_per_epoch=samples_per_epoch,
+        num_samples_per_epoch=spe.samples_per_epoch,
         minimum=batch_size,
     )
     iter_per_epoch = get_num_iter_per_epoch(
-        num_samples_per_epoch=samples_per_epoch,
+        num_samples_per_epoch=spe.samples_per_epoch,
+        num_samples_total=spe.num_samples_total,
         batch_size=batch_size,
         valid_size=valid_size,
     )
     bim_path = get_bim_path(genotype_data_path=genotype_data_path)
 
-    n_snps = lines_in_file(file_path=bim_path)
-
     n_samples = lines_in_file(file_path=mip.label_file_path) - 1
+
+    subset_folder = Path(mip.modelling_base_output_folder) / "snp_subset_files"
+
+    subset_snp_path = None
+    if mip.genotype_feature_selection == "random":
+        n_snps, subset_snp_path = build_random_snp_subset_file(
+            original_bim_path=Path(bim_path),
+            output_folder=subset_folder,
+            fold=mip.fold,
+            fraction_per_chr=0.1,
+        )
+    else:
+        assert not mip.genotype_feature_selection
+        n_snps = lines_in_file(file_path=bim_path)
 
     injections = {
         "global_config": _get_global_injections(
@@ -638,20 +701,30 @@ def _get_all_dynamic_injections(
             n_snps=n_snps,
             n_samples=n_samples,
             weighted_sampling_columns=mip.weighted_sampling_columns,
+            data_format=mip.data_format,
         ),
         "input_genotype_config": _get_genotype_injections(
             input_source=mip.genotype_input_source,
-            genotype_feature_selection=mip.genotype_feature_selection,
-            fold=mip.fold,
-            tmp_folder=Path(mip.modelling_base_output_folder) / "tmp",
+            n_snps=n_snps,
+            subset_snp_path=subset_snp_path,
         ),
         "fusion_config": {},
-        "output_config": _get_output_injections(
-            label_file_path=mip.label_file_path,
-            output_cat_columns=list(mip.output_cat_columns),
-            output_con_columns=list(mip.output_con_columns),
-        ),
+        "output_config": {},
     }
+
+    for output_config in mip.output_configs:
+        cat_cols = output_config["output_type_info"]["target_cat_columns"]
+        con_cols = output_config["output_type_info"]["target_con_columns"]
+
+        cur_config_name = output_config["output_info"]["output_name"]
+
+        cur_injections = _get_output_injections(
+            label_file_path=mip.label_file_path,
+            output_cat_columns=cat_cols,
+            output_con_columns=con_cols,
+        )
+
+        injections["output_config"][cur_config_name] = cur_injections
 
     if mip.input_cat_columns or mip.input_con_columns:
         injections["input_tabular_config"] = _get_tabular_injections(
@@ -663,9 +736,25 @@ def _get_all_dynamic_injections(
     return injections
 
 
+def get_num_iter_per_epoch(
+    num_samples_per_epoch: int,
+    num_samples_total: int,
+    batch_size: int,
+    valid_size: int,
+) -> int:
+
+    min_iter_per_epoch = 500
+    if num_samples_total < 10_000:
+        min_iter_per_epoch = 100
+
+    iter_per_epoch = (num_samples_per_epoch - valid_size) // batch_size
+    iter_per_epoch = max(min_iter_per_epoch, iter_per_epoch)
+    return iter_per_epoch
+
+
 def build_random_snp_subset_file(
     original_bim_path: Path,
-    tmp_folder: Path,
+    output_folder: Path,
     fold: int,
     fraction_per_chr: float = 0.1,
 ) -> tuple[int, Path]:
@@ -686,8 +775,16 @@ def build_random_snp_subset_file(
 
     df_sampled = pd.concat(sampled_dfs).sort_values(["CHR_CODE", "BP_COORD"])
 
-    output_file = tmp_folder / f"random_subset_fold={fold}.bim"
+    output_file = output_folder / f"random_subset_fold={fold}.txt"
+
+    if output_file.exists():
+        logger.info("%s already exists, using file.", output_file)
+        n_snps = lines_in_file(file_path=output_file)
+        return n_snps, output_file
+
     ensure_path_exists(path=output_file.parent, is_folder=True)
+
+    df_sampled = df_sampled[["VAR_ID"]]
 
     df_sampled.to_csv(
         output_file,

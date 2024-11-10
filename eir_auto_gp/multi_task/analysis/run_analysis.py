@@ -114,42 +114,67 @@ def gather_test_predictions(
     """
     dfs = {}
     results = {}
+    target_name_to_output_name = {}
 
     metric_funcs = None
     for fold in _iterdir_ignore_hidden(path=folder_with_folds):
-        targets_folder = Path(fold, "test_set_predictions", "eir_auto_gp")
+
+        if not fold.name.startswith("fold_"):
+            continue
 
         if metric_funcs is None:
             logger.debug("Loading metric functions for ensemble from '%s'.", fold)
-            metric_funcs = load_serialized_train_experiment(run_folder=fold).metrics
+            metric_funcs = load_serialized_train_experiment(
+                run_folder=fold,
+                device="cpu",
+            ).metrics
 
-        for target_folder in _iterdir_ignore_hidden(path=targets_folder):
-            target_name = target_folder.name
+        output_folders = Path(fold, "test_set_predictions").iterdir()
 
-            if target_name not in dfs:
-                dfs[target_name] = []
+        for targets_folder in output_folders:
+            if not targets_folder.is_dir() and not targets_folder.name.startswith(
+                "eir_auto_gp"
+            ):
+                continue
 
-            if target_name not in results:
-                results[target_name] = []
+            for target_folder in _iterdir_ignore_hidden(path=targets_folder):
+                target_name = target_folder.name
+                target_name_to_output_name[target_name] = targets_folder.name
 
-            predictions_file = Path(target_folder, "predictions.csv")
-            df = pd.read_csv(filepath_or_buffer=predictions_file)
-            dfs[target_name].append(df)
+                if target_name not in dfs:
+                    dfs[target_name] = []
 
-            cur_metrics = get_single_fold_results(fold=fold, target_name=target_name)
-            results[target_name].append(cur_metrics)
+                if target_name not in results:
+                    results[target_name] = []
+
+                predictions_file = Path(target_folder, "predictions.csv")
+                df = pd.read_csv(filepath_or_buffer=predictions_file)
+                dfs[target_name].append(df)
+
+                cur_metrics = get_single_fold_results(
+                    fold=fold,
+                    output_name=targets_folder.stem,
+                    target_name=target_name,
+                )
+                results[target_name].append(cur_metrics)
 
     for target_name, dfs in dfs.items():
         df_ensemble = get_ensemble_predictions(dfs=dfs)
 
         target_type = get_target_type(
-            target_name=target_name, cat_targets=cat_targets, con_targets=con_targets
+            target_name=target_name,
+            cat_targets=cat_targets,
+            con_targets=con_targets,
         )
+
+        cur_output_name = target_name_to_output_name[target_name]
+
         ensemble_metrics = compute_metrics(
             df=df_ensemble,
             metrics=metric_funcs,
             target_type=target_type,
             target_name=target_name,
+            output_name=cur_output_name,
         )
         results[target_name].append(ensemble_metrics)
 
@@ -171,10 +196,12 @@ def get_ensemble_predictions(dfs: Sequence[pd.DataFrame]) -> pd.DataFrame:
     return df_ensemble
 
 
-def get_single_fold_results(fold: Path, target_name: str) -> Dict[str, float | str]:
+def get_single_fold_results(
+    fold: Path, output_name: str, target_name: str
+) -> Dict[str, float | str]:
     cur_metrics_file = Path(fold, "test_set_predictions", "calculated_metrics.json")
     cur_fold_metrics = json.load(open(cur_metrics_file, "r"))
-    cur_metrics = cur_fold_metrics["eir_auto_gp"][target_name]
+    cur_metrics = cur_fold_metrics[output_name][target_name]
 
     parsed_metrics = {"Fold": fold.name.title().replace("_", " ")}
 
@@ -190,6 +217,7 @@ def compute_metrics(
     metrics: al_metric_record_dict,
     target_type: Literal["con", "cat"],
     target_name: str,
+    output_name: str,
 ) -> Dict[str, float | str]:
     cur_metrics = metrics[target_type]
 
@@ -208,7 +236,7 @@ def compute_metrics(
         cur_metric_value = cur_metric_func(
             labels=cur_labels,
             outputs=cur_outputs,
-            output_name="eir_auto_gp",
+            output_name=output_name,
             column_name=target_name,
         )
 
@@ -276,33 +304,40 @@ def _gather_validation_results(
     folder_with_folds: Path,
 ) -> Iterator[Tuple[str, pd.DataFrame]]:
     results = {}
-    for fold_folder in _iterdir_ignore_hidden(path=folder_with_folds):
-        targets_folder = Path(fold_folder, "results", "eir_auto_gp")
+    for maybe_fold_folder in _iterdir_ignore_hidden(path=folder_with_folds):
 
-        avg_file = Path(fold_folder, "validation_average_history.log")
-        df_average = pd.read_csv(filepath_or_buffer=avg_file)
-        best_iter_idx = df_average["perf-average"].idxmax()
-        best_val_average = df_average.loc[best_iter_idx]["perf-average"].item()
+        if not maybe_fold_folder.name.startswith("fold_"):
+            continue
 
-        for target_folder in _iterdir_ignore_hidden(path=targets_folder):
-            target_name = target_folder.name
+        fold_folder = maybe_fold_folder
 
-            if target_name not in results:
-                results[target_name] = []
+        output_folders = Path(fold_folder, "results").iterdir()
 
-            val_file = Path(target_folder, f"validation_{target_name}_history.log")
-            df_val_metrics = pd.read_csv(filepath_or_buffer=val_file)
-            best_val_metrics = df_val_metrics.loc[best_iter_idx].to_dict()
+        for targets_folder in output_folders:
+            avg_file = Path(fold_folder, "validation_average_history.log")
+            df_average = pd.read_csv(filepath_or_buffer=avg_file)
+            best_iter_idx = df_average["perf-average"].idxmax()
+            best_val_average = df_average.loc[best_iter_idx]["perf-average"].item()
 
-            parsed_metrics = {
-                "Fold": fold_folder.name.title().replace("_", " "),
-                "Best Average Performance": best_val_average,
-            }
-            for metric_name, metric_value in best_val_metrics.items():
-                parsed_metric_name = metric_name.split("_")[-1].upper()
-                parsed_metrics[parsed_metric_name] = metric_value
+            for target_folder in _iterdir_ignore_hidden(path=targets_folder):
+                target_name = target_folder.name
 
-            results[target_name].append(parsed_metrics)
+                if target_name not in results:
+                    results[target_name] = []
+
+                val_file = Path(target_folder, f"validation_{target_name}_history.log")
+                df_val_metrics = pd.read_csv(filepath_or_buffer=val_file)
+                best_val_metrics = df_val_metrics.loc[best_iter_idx].to_dict()
+
+                parsed_metrics = {
+                    "Fold": fold_folder.name.title().replace("_", " "),
+                    "Best Average Performance": best_val_average,
+                }
+                for metric_name, metric_value in best_val_metrics.items():
+                    parsed_metric_name = metric_name.split("_")[-1].upper()
+                    parsed_metrics[parsed_metric_name] = metric_value
+
+                results[target_name].append(parsed_metrics)
 
     for target_name, results_list in results.items():
         df_results = pd.DataFrame(results_list)
