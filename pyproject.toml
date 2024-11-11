@@ -49,6 +49,7 @@ eirautogwas = "eir_auto_gp.preprocess.gwas_pre_selection:main"
 eirautopostanalysis = "eir_auto_gp.post_analysis.run_post_analysis:main"
 eirautogppack = "eir_auto_gp.predict.pack:main"
 eirautogppredict = "eir_auto_gp.predict.run_predict:main"
+eirautogpsync = "eir_auto_gp.predict.sync:main"
 
 [tool.isort]
 profile = "black"
