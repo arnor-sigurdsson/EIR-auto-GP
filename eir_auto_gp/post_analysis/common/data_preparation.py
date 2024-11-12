@@ -279,8 +279,8 @@ def load_deeplake_samples_into_df(
     genotype_arrays = []
 
     for deeplake_sample in deeplake_ds:
-        sample_id = deeplake_sample["ID"].text()
-        sample_genotype = deeplake_sample["genotype"].numpy()
+        sample_id = deeplake_sample["ID"]
+        sample_genotype = deeplake_sample["genotype"]
         sample_genotype_subset = sample_genotype[:, genotype_indices_to_load]
 
         array_maxed = sample_genotype_subset.argmax(0).astype(np.float32)

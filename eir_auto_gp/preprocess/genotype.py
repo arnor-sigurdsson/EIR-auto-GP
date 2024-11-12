@@ -101,6 +101,7 @@ class OneHotAutoSNPs(Config):
             output_folder=output_path,
             output_format=str(self.output_format),
             output_name=str(self.output_name),
+            batch_size=int(self.genotype_processing_chunk_size),
         )
 
     def output_target(self, file_name: str):

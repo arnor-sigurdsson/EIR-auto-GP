@@ -2,7 +2,7 @@ import math
 import warnings
 from pathlib import Path
 from shutil import copyfile
-from typing import Dict, Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 
 warnings.filterwarnings("ignore", message=".*newer version of deeplake.*")
 
@@ -11,7 +11,6 @@ import eir.data_load.label_setup
 import luigi
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists
-from eir.data_load.data_source_modules.deeplake_ops import load_deeplake_dataset
 
 from eir_auto_gp.preprocess.genotype import FinalizeGenotypeParsing
 from eir_auto_gp.preprocess.tabular import ParseLabelFile
@@ -310,7 +309,11 @@ def _split_ids(
 
 
 def _split_deeplake_ds_into_train_and_test(
-    train_ids: Sequence[str], test_ids: Sequence[str], source: Path, destination: Path
+    train_ids: Sequence[str],
+    test_ids: Sequence[str],
+    source: Path,
+    destination: Path,
+    commit_frequency: int = 10000,
 ) -> None:
     train_ids_set = set(train_ids)
     test_ids_set = set(test_ids)
@@ -318,74 +321,89 @@ def _split_deeplake_ds_into_train_and_test(
 
     train_path = destination / "train"
     test_path = destination / "test"
-    if train_path.exists() and test_path.exists():
+
+    if deeplake.exists(str(train_path)) and deeplake.exists(str(test_path)):
         return
 
     ensure_path_exists(path=train_path, is_folder=True)
     ensure_path_exists(path=test_path, is_folder=True)
 
-    full_deeplake_ds = load_deeplake_dataset(data_source=str(source))
+    source_ds = deeplake.open(str(source))
 
-    ds_train = deeplake.empty(path=train_path)
-    ds_test = deeplake.empty(path=test_path)
+    ds_train = deeplake.create(str(train_path))
+    ds_test = deeplake.create(str(test_path))
 
-    for name, tensor in full_deeplake_ds.tensors.items():
-        ds_train.create_tensor(
-            name=name,
-            htype=tensor.htype,
-            dtype=tensor.dtype,
-            sample_compression=tensor.meta.sample_compression,
-        )
-        ds_test.create_tensor(
-            name=name,
-            htype=tensor.htype,
-            dtype=tensor.dtype,
-            sample_compression=tensor.meta.sample_compression,
-        )
+    for col in source_ds.schema.columns:
+        ds_train.add_column(col.name, col.dtype)
+        ds_test.add_column(col.name, col.dtype)
+
+    ds_train.commit("Created schema")
+    ds_test.commit("Created schema")
+
+    batch_size = 1000
+    train_batch = {col.name: [] for col in source_ds.schema.columns}
+    test_batch = {col.name: [] for col in source_ds.schema.columns}
 
     skipped_samples = 0
-    with full_deeplake_ds, ds_train, ds_test:
-        for idx, sample in enumerate(full_deeplake_ds):
-            cur_id = sample["ID"].numpy().item()
+    total_processed = 0
+
+    try:
+        for sample in source_ds:
+            cur_id = sample["ID"]
+
             if cur_id in train_ids_set:
-                parsed_sample = _deeplake_sample_to_dict(sample=sample)
-                ds_train.append(parsed_sample)
+                for col in source_ds.schema.columns:
+                    col_name = col.name
+                    train_batch[str(col_name)].append(sample[str(col_name)])
+
+                if len(train_batch["ID"]) >= batch_size:
+                    ds_train.append(train_batch)
+                    train_batch = {col.name: [] for col in source_ds.schema.columns}
+
             elif cur_id in test_ids_set:
-                parsed_sample = _deeplake_sample_to_dict(sample=sample)
-                ds_test.append(parsed_sample)
+                for col in source_ds.schema.columns:
+                    col_name = col.name
+                    test_batch[str(col_name)].append(sample[str(col_name)])
+
+                if len(test_batch["ID"]) >= batch_size:
+                    ds_test.append(test_batch)
+                    test_batch = {col.name: [] for col in source_ds.schema.columns}
             else:
                 skipped_samples += 1
 
-            if idx % 10000 == 0:
+            total_processed += 1
+
+            if total_processed % commit_frequency == 0:
+                if train_batch["ID"]:
+                    ds_train.append(train_batch)
+                    train_batch = {col.name: [] for col in source_ds.schema.columns}
+                if test_batch["ID"]:
+                    ds_test.append(test_batch)
+                    test_batch = {col.name: [] for col in source_ds.schema.columns}
+
+                ds_train.commit(f"Processed {total_processed} samples")
+                ds_test.commit(f"Processed {total_processed} samples")
+
+            if total_processed % 10000 == 0:
                 logger.info(
                     "Iterated over %d samples while splitting deeplake dataset into "
                     "train and test. Skipped %d samples.",
-                    idx,
+                    total_processed,
                     skipped_samples,
                 )
 
+        if train_batch["ID"]:
+            ds_train.append(train_batch)
+        if test_batch["ID"]:
+            ds_test.append(test_batch)
 
-def _deeplake_sample_to_dict(sample: deeplake.Dataset) -> Dict:
-    """
-    This is a workaround for the fact that deeplake does creates empty samples for
-    *some* dtypes when we try to add them directly when iterating over samples.
-    For example, numpy arrays are converted correctly, but strings result in empty
-    for some reason (possibly a bug in deeplake).
+        ds_train.commit(f"Completed processing {total_processed} samples")
+        ds_test.commit(f"Completed processing {total_processed} samples")
 
-    Note that this is possibly because deeplake .append is type to
-    support Dict[str, Any], so maybe it is not a bug, but it just partially works
-    when we feed it a sample.
-    """
-
-    parsed = {}
-
-    for name, tensor in sample.tensors.items():
-        if tensor.htype == "text":
-            parsed[name] = tensor.numpy().item()
-        else:
-            parsed[name] = tensor.numpy()
-
-    return parsed
+    except Exception as e:
+        ds_train.rollback()
+        ds_test.rollback()
+        raise RuntimeError(f"Error splitting dataset: {str(e)}") from e
 
 
 def _split_arrays_into_train_and_test(

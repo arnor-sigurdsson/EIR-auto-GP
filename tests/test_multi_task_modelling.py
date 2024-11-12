@@ -21,6 +21,7 @@ def _get_test_cl_commands() -> list[str]:
         "--input_con_columns age "
         "--input_cat_columns sex "
         "--folds 0-2 "
+        "--data_format auto "
         "--do_test"
     )
 
