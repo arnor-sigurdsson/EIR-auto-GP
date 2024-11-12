@@ -28,9 +28,9 @@ jobs:
       - name: Download and extract plink2
         run: |
           if [[ "${{ matrix.os }}" == "ubuntu-20.04" ]]; then
-            curl -LJO https://s3.amazonaws.com/plink2-assets/plink2_linux_avx2_20241020.zip
+            curl -LJO https://s3.amazonaws.com/plink2-assets/alpha6/plink2_linux_avx2_20241111.zip
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            curl -LJO https://s3.amazonaws.com/plink2-assets/plink2_mac_arm64_20241020.zip
+            curl -LJO https://s3.amazonaws.com/plink2-assets/alpha6/plink2_mac_arm64_20241111.zip
           fi
           unzip -o plink2_*.zip
           rm plink2_*.zip

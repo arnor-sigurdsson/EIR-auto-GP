@@ -1,3 +1,4 @@
+import argparse
 import shutil
 import subprocess
 from pathlib import Path
@@ -14,16 +15,74 @@ from rich.table import Table
 logger = get_logger(name=__name__)
 
 
+def run_sync_wrapper(cl_args: argparse.Namespace) -> None:
+    genotype_data_path = Path(cl_args.genotype_data_path)
+    reference_bim_path = Path(cl_args.reference_bim_path)
+    data_output_folder = Path(cl_args.output_folder)
+
+    run_sync(
+        genotype_data_path=genotype_data_path,
+        reference_bim_path=reference_bim_path,
+        data_output_folder=data_output_folder,
+    )
+
+    shutil.rmtree(data_output_folder / "filtered_genotype_data")
+    shutil.rmtree(data_output_folder / "dummy_genotype_data")
+    shutil.rmtree(data_output_folder / "with_missing")
+
+    final_data = Path(data_output_folder / "reordered_genotype_data")
+
+    final_data_renamed = final_data.parent / "synced_data"
+    final_data.rename(final_data_renamed)
+
+    for f in final_data_renamed.iterdir():
+        if f.suffix in (".bed", ".bim", ".fam", ".log"):
+            new_name = f.name.replace("_with_missing_reordered", "")
+            f.rename(f.parent / new_name)
+
+
+def get_cl_args() -> argparse.Namespace:
+    parser = get_parser()
+    args = parser.parse_args()
+    return args
+
+
+def get_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--genotype_data_path",
+        type=str,
+        help="The path to the genotype data to sync, this ultimately will get"
+        "projected / mapped into the reference_bim_path.",
+    )
+
+    parser.add_argument(
+        "--reference_bim_path",
+        type=str,
+        help="Path to reference bim fild to sync genotype_data_path to.",
+    )
+
+    parser.add_argument(
+        "--output_folder",
+        type=str,
+        help="The folder to output the results.",
+    )
+
+    return parser
+
+
 def run_sync(
     genotype_data_path: Path,
-    experiment_folder: Path,
+    reference_bim_path: Path,
     data_output_folder: Path,
-    output_folder: Path,
 ) -> str:
     with Progress() as progress:
         genotype_base_name = check_genotype_folder(genotype_folder=genotype_data_path)
 
-        df_bim_exp = get_experiment_bim_file(experiment_folder=experiment_folder)
+        # this is the reference / target bim file, which we project one below into
+        df_bim_exp = read_bim_and_cast_dtypes(bim_file_path=reference_bim_path)
+        # this is the one we are predicting on generally
         df_bim_prd = get_predict_bim_file(genotype_folder=genotype_data_path)
 
         log_output_path = data_output_folder / "snp_overlap_analysis.txt"
@@ -51,7 +110,7 @@ def run_sync(
             df_remove=df_remove,
             genotype_data_path=str(genotype_data_path),
             genotype_base_name=genotype_base_name,
-            output_folder=output_folder,
+            output_folder=data_output_folder,
         )
         progress.advance(sync_task)
 
@@ -163,7 +222,7 @@ def log_overlap(
             ]
 
             with open(output_path, "w") as f:
-                f.write("\n".join(output_text))
+                f.write("\n".join(output_text).replace("Snps", "SNPs"))
 
             logger.info(f"Results saved to {output_path}")
         except Exception as e:
@@ -276,13 +335,11 @@ def add_missing_snps(
     return str(output_folder_missing_imputed)
 
 
-def get_experiment_bim_file(experiment_folder: Path) -> pd.DataFrame:
+def get_experiment_bim_file(experiment_folder: Path) -> Path:
     bim_file = experiment_folder / "meta" / "snps.bim"
     assert bim_file.exists()
 
-    df_bim_experiment = read_bim_and_cast_dtypes(bim_file_path=str(bim_file))
-
-    return df_bim_experiment
+    return bim_file
 
 
 def get_predict_bim_file(genotype_folder: Path) -> pd.DataFrame:
@@ -445,3 +502,13 @@ def read_bim_and_cast_dtypes(bim_file_path: Path | str) -> pd.DataFrame:
     df_bim = df_bim.astype(dtypes)
 
     return df_bim
+
+
+def main() -> None:
+    parser = get_parser()
+    cl_args = parser.parse_args()
+    run_sync_wrapper(cl_args=cl_args)
+
+
+if __name__ == "__main__":
+    main()

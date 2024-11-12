@@ -21,7 +21,7 @@ from eir_auto_gp.multi_task.modelling.run_modelling import (
 )
 from eir_auto_gp.predict.pack import unpack_experiment
 from eir_auto_gp.predict.prepare_data import run_prepare_data
-from eir_auto_gp.predict.sync import run_sync
+from eir_auto_gp.predict.sync import get_experiment_bim_file, run_sync
 
 logger = get_logger(name=__name__)
 
@@ -67,11 +67,12 @@ def run_sync_and_predict_wrapper(
     )
 
     data_output_folder = Path(cl_args.output_folder, "data")
+    experiment_folder = Path(cl_args.output_folder + "/unpacked_experiment")
+    experiment_bim = get_experiment_bim_file(experiment_folder=experiment_folder)
     final_genotype_path = run_sync(
         genotype_data_path=Path(cl_args.genotype_data_path),
-        experiment_folder=Path(cl_args.output_folder + "/unpacked_experiment"),
+        reference_bim_path=experiment_bim,
         data_output_folder=data_output_folder,
-        output_folder=Path(cl_args.output_folder),
     )
 
     prepared_folder = run_prepare_data(

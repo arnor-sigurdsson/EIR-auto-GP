@@ -9,7 +9,6 @@ warnings.filterwarnings("ignore", message=".*newer version of deeplake.*")
 import deeplake
 import eir.data_load.label_setup
 import luigi
-import numpy as np
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists
 from eir.data_load.data_source_modules.deeplake_ops import load_deeplake_dataset
@@ -19,60 +18,6 @@ from eir_auto_gp.preprocess.tabular import ParseLabelFile
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
-
-
-@deeplake.compute
-def _populate_deeplake_ds(
-    id_array_tuple: Tuple[str, np.ndarray],
-    deeplake_ds: deeplake.Dataset,
-    output_name: str,
-) -> None:
-    """
-    This would have been nice to have work with e.g. something like:
-
-    with ds:
-        parallel_function = _populate_deeplake_ds(
-            output_name=output_name,
-            argmax_replace_map=argmax_replace_map,
-        )
-        parallel_function.eval(data_in=id_array_generator, data_out=ds, num_workers=10)
-
-    However, deeplake doesn't support having generators for eval yet.
-
-    We could maybe do something like this for now, but needs to be tested:
-
-    cur_chunk = []
-    for index, (ids, arrays) in enumerate(id_array_generator):
-        cur_chunk.append((ids, arrays))
-        if len(cur_chunk) == parallel_chunk_size:
-            with ds:
-                parallel_function = _populate_deeplake_ds(
-                    output_name=output_name,
-                    argmax_replace_map=argmax_replace_map,
-                )
-                parallel_function.eval(
-                    data_in=cur_chunk, data_out=ds, num_workers=10
-                )
-
-            cur_chunk = []
-
-    if cur_chunk:
-        with ds:
-            parallel_function = _populate_deeplake_ds(
-                output_name=output_name,
-                argmax_replace_map=argmax_replace_map,
-            )
-            parallel_function.eval(data_in=cur_chunk, data_out=ds, num_workers=10)
-    """
-
-    id_, array = id_array_tuple
-
-    sample = {
-        "ID": id_,
-        output_name: array,
-    }
-
-    deeplake_ds.append(sample)
 
 
 class CommonSplitIntoTestSet(luigi.Task):
