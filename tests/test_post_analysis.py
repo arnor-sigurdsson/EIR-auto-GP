@@ -11,6 +11,7 @@ from eir_auto_gp.single_task.run_single_task import (
     run,
     store_experiment_config,
 )
+from tests.conftest import should_skip_in_gha_macos
 
 
 def _get_test_modelling_cl_command(
@@ -33,6 +34,7 @@ def _get_test_modelling_cl_command(
     return base
 
 
+@pytest.mark.skipif(condition=should_skip_in_gha_macos(), reason="In GHA macOS.")
 @pytest.mark.parametrize(
     "feature_selection",
     [
@@ -47,6 +49,12 @@ def test_post_analysis_classification(
     simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
     tmp_path: Path,
 ) -> None:
+    """
+    TODO:
+        Seems that we run into trashing / freezing issues on macOS GHA runners here
+        after bumping Deep Lake to V4.
+    """
+
     simulated_path = simulate_genetic_data_to_bed(10000, 12, "binary")
 
     command = _get_test_modelling_cl_command(
@@ -89,6 +97,7 @@ def test_post_analysis_classification(
     )
 
 
+@pytest.mark.skipif(condition=should_skip_in_gha_macos(), reason="In GHA macOS.")
 @pytest.mark.parametrize(
     "feature_selection",
     [
@@ -103,6 +112,12 @@ def test_post_analysis_regression(
     simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
     tmp_path: Path,
 ) -> None:
+    """
+    TODO:
+        Seems that we run into trashing / freezing issues on macOS GHA runners here
+        after bumping Deep Lake to V4.
+    """
+
     simulated_path = simulate_genetic_data_to_bed(10000, 12, "continuous")
 
     command = _get_test_modelling_cl_command(

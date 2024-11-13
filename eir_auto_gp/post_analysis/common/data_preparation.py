@@ -6,7 +6,10 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 from aislib.misc_utils import get_logger
-from eir.data_load.data_source_modules.deeplake_ops import load_deeplake_dataset
+from eir.data_load.data_source_modules.deeplake_ops import (
+    is_deeplake_dataset,
+    load_deeplake_dataset,
+)
 from eir.setup.input_setup_modules import setup_omics as eir_setup_omics
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
@@ -223,6 +226,17 @@ def set_up_model_data(
     top_snps_list: list[str],
     data_name: str,
 ) -> ModelData:
+    """
+    TODO:
+        Seems that we run into trashing / freezing issues on macOS GHA runners here
+        after bumping Deep Lake to V4.
+    """
+
+    if not is_deeplake_dataset(data_source=str(genotype_input_path)):
+        raise NotImplementedError(
+            "Currently only Deeplake datasets are supported for genotype input."
+        )
+
     df_genotype_input = load_deeplake_samples_into_df(
         genotype_input_path=genotype_input_path,
         genotype_indices_to_load=genotype_indices_to_load,

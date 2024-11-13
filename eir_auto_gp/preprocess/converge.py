@@ -62,6 +62,12 @@ class CommonSplitIntoTestSet(luigi.Task):
     def run(self):
         inputs = self.input()
 
+        # TODO: Implement support for disk format
+        if self.output_format != "deeplake":
+            raise ValueError(
+                "Currently only deeplake output format is supported for genotype data."
+            )
+
         genotype_path = Path(str(inputs["genotype"][1].path)) / "genotype"
         assert genotype_path.exists()
         label_file_path = Path(str(inputs["label_file"].path))
