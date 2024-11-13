@@ -429,7 +429,7 @@ def build_data_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
     ]
 
     base = extract_from_namespace(namespace=cl_args, keys=data_keys)
-    base["output_format"] = "deeplake"
+    base["output_format"] = "disk"
 
     return base
 

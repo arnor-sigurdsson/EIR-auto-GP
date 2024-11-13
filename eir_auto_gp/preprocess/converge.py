@@ -87,14 +87,24 @@ class CommonSplitIntoTestSet(luigi.Task):
             destination=output_root / "tabular" / "final",
         )
 
-        _split_deeplake_ds_into_train_and_test(
-            train_ids=train_and_valid_ids,
-            test_ids=test_ids,
-            source=genotype_path,
-            destination=output_root / "genotype" / "final",
-            commit_frequency=int(self.genotype_processing_chunk_size),
-            chunk_size=int(self.genotype_processing_chunk_size),
-        )
+        if self.output_format == "deeplake":
+            _split_deeplake_ds_into_train_and_test(
+                train_ids=train_and_valid_ids,
+                test_ids=test_ids,
+                source=genotype_path,
+                destination=output_root / "genotype" / "final",
+                commit_frequency=int(self.genotype_processing_chunk_size),
+                chunk_size=int(self.genotype_processing_chunk_size),
+            )
+        elif self.output_format == "disk":
+            _split_arrays_into_train_and_test(
+                train_ids=train_and_valid_ids,
+                test_ids=test_ids,
+                source=genotype_path,
+                destination=output_root / "genotype" / "final",
+            )
+        else:
+            raise ValueError(f"Unknown output format: {self.output_format}")
 
     def output(self):
         output_root = Path(str(self.data_output_folder))
@@ -410,7 +420,10 @@ def _split_deeplake_ds_into_train_and_test(
 
 
 def _split_arrays_into_train_and_test(
-    train_ids: Sequence[str], test_ids: Sequence[str], source: Path, destination: Path
+    train_ids: Sequence[str],
+    test_ids: Sequence[str],
+    source: Path,
+    destination: Path,
 ) -> None:
     train_ids_set = set(train_ids)
     test_ids_set = set(test_ids)
