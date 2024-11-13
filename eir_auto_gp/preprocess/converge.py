@@ -92,6 +92,8 @@ class CommonSplitIntoTestSet(luigi.Task):
             test_ids=test_ids,
             source=genotype_path,
             destination=output_root / "genotype" / "final",
+            commit_frequency=int(self.genotype_processing_chunk_size),
+            chunk_size=int(self.genotype_processing_chunk_size),
         )
 
     def output(self):
@@ -313,7 +315,8 @@ def _split_deeplake_ds_into_train_and_test(
     test_ids: Sequence[str],
     source: Path,
     destination: Path,
-    commit_frequency: int = 10000,
+    chunk_size: int,
+    commit_frequency: int,
 ) -> None:
     train_ids_set = set(train_ids)
     test_ids_set = set(test_ids)
@@ -340,7 +343,7 @@ def _split_deeplake_ds_into_train_and_test(
     ds_train.commit("Created schema")
     ds_test.commit("Created schema")
 
-    batch_size = 1000
+    batch_size = chunk_size // 2
     train_batch = {col.name: [] for col in source_ds.schema.columns}
     test_batch = {col.name: [] for col in source_ds.schema.columns}
 
@@ -384,7 +387,7 @@ def _split_deeplake_ds_into_train_and_test(
                 ds_train.commit(f"Processed {total_processed} samples")
                 ds_test.commit(f"Processed {total_processed} samples")
 
-            if total_processed % 10000 == 0:
+            if total_processed % commit_frequency == 0:
                 logger.info(
                     "Iterated over %d samples while splitting deeplake dataset into "
                     "train and test. Skipped %d samples.",

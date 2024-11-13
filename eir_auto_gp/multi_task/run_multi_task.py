@@ -41,7 +41,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--genotype_processing_chunk_size",
         type=int,
-        default=1000,
+        default=1024,
         help="Chunk size for processing genotype data. Increasing"
         "this value will increase the memory usage, but will"
         "likely speed up the processing.",
