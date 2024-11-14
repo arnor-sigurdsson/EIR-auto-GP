@@ -1,15 +1,13 @@
 from pathlib import Path
 from shutil import copyfile
-from typing import List
+from typing import Generator, List, Optional
 
 import luigi
-from aislib.misc_utils import ensure_path_exists
-from luigi.util import requires
+import numpy as np
 from plink_pipelines.make_dataset import (
     RenameOnFailureMixin,
     _get_one_hot_encoded_generator,
     get_sample_generator_from_bed,
-    write_one_hot_outputs,
 )
 
 from eir_auto_gp.utils.utils import get_logger
@@ -70,71 +68,33 @@ class ExternalRawData(luigi.ExternalTask):
         return luigi.LocalTarget(str(self.input_name))
 
 
-@requires(ExternalRawData)
-class OneHotAutoSNPs(Config):
-    """
-    Generates one hot encodings from a individuals x SNPs file.
-    """
+def get_encoded_snp_stream(
+    bed_path: Path,
+    chunk_size: int,
+) -> Generator[tuple[str, np.ndarray], None, None]:
+    chunk_generator = get_sample_generator_from_bed(
+        bed_path=bed_path,
+        chunk_size=chunk_size,
+    )
 
-    include_text = luigi.BoolParameter()
-    output_folder = luigi.Parameter()
-    data_storage_format = luigi.Parameter()
-    output_name = luigi.Parameter()
-    file_name = str(output_name)
-    genotype_processing_chunk_size = luigi.IntParameter()
-
-    def run(self):
-        input_path = Path(self.input().path)
-        assert input_path.suffix == ".bed"
-
-        output_path = Path(self.output().path)
-        ensure_path_exists(output_path, is_folder=True)
-
-        chunk_generator = get_sample_generator_from_bed(
-            bed_path=input_path, chunk_size=int(self.genotype_processing_chunk_size)
-        )
-        sample_id_one_hot_array_generator = _get_one_hot_encoded_generator(
-            chunked_sample_generator=chunk_generator
-        )
-        write_one_hot_outputs(
-            id_array_generator=sample_id_one_hot_array_generator,
-            output_folder=output_path,
-            output_format=str(self.data_storage_format),
-            output_name=str(self.output_name),
-            batch_size=int(self.genotype_processing_chunk_size),
-        )
-
-    def output_target(self, file_name: str):
-        return f"{self.output_folder}/processed/encoded_outputs/{self.output_name}"
-
-    def output(self):
-        target = self.output_target(self.file_name)
-        return luigi.LocalTarget(path=target)
+    yield from _get_one_hot_encoded_generator(chunked_sample_generator=chunk_generator)
 
 
-@requires(OneHotAutoSNPs)
-class FinalizeGenotypeParsing(luigi.Task):
-    raw_data_path = luigi.Parameter()
-    output_folder = luigi.Parameter()
-    data_storage_format = luigi.Parameter()
-    output_name = luigi.Parameter()
-    genotype_processing_chunk_size = luigi.IntParameter()
+def copy_bim_file(
+    source_folder: Path,
+    output_folder: Path,
+    ensure_folder_exists: bool = True,
+) -> Optional[Path]:
+    bim_files = list(source_folder.glob("*.bim"))
 
-    def run(self):
-        raw_path = Path(str(self.raw_data_path))
-        bim_files = [i for i in raw_path.iterdir() if i.suffix == ".bim"]
-        assert len(bim_files) == 1
-        bim_path = bim_files[0]
+    assert_msg = f"Expected one .bim file in {source_folder}, found {len(bim_files)}"
+    assert len(bim_files) == 1, assert_msg
 
-        output_path = Path(self.output()[0].path)
-        ensure_path_exists(output_path, is_folder=False)
+    bim_path = bim_files[0]
+    output_path = output_folder / "data_final.bim"
 
-        copyfile(bim_path, output_path)
+    if ensure_folder_exists:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def output(self):
-        output_path = Path(
-            str(self.output_folder), "processed/parsed_files/data_final.bim"
-        )
-
-        one_hot_outputs = self.input()
-        return [luigi.LocalTarget(str(output_path)), one_hot_outputs]
+    copyfile(src=bim_path, dst=output_path)
+    return output_path

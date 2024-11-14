@@ -1,8 +1,9 @@
 import math
 import warnings
 from pathlib import Path
-from shutil import copyfile
-from typing import Optional, Sequence, Tuple
+from typing import Generator, Optional, Sequence, Tuple
+
+import numpy as np
 
 warnings.filterwarnings("ignore", message=".*newer version of deeplake.*")
 
@@ -11,9 +12,12 @@ import eir.data_load.label_setup
 import luigi
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists
-from eir.data_load.label_setup import gather_ids_from_data_source
 
-from eir_auto_gp.preprocess.genotype import FinalizeGenotypeParsing
+from eir_auto_gp.preprocess.genotype import (
+    ExternalRawData,
+    copy_bim_file,
+    get_encoded_snp_stream,
+)
 from eir_auto_gp.preprocess.tabular import ParseLabelFile
 from eir_auto_gp.utils.utils import get_logger
 
@@ -34,8 +38,8 @@ class CommonSplitIntoTestSet(luigi.Task):
 
     def requires(self):
         """
-        Will require 3 tasks:
-            - genotype processing,
+        Will require 2 tasks:
+            - raw PLINK1 genotype data,
             - label file processing.
 
         Will gather IDs from all of these, then generate a split from that.
@@ -43,13 +47,7 @@ class CommonSplitIntoTestSet(luigi.Task):
         One option for configuration is to allow custom overwriting of QC command.
         """
 
-        geno_task = FinalizeGenotypeParsing(
-            raw_data_path=self.genotype_data_path,
-            output_folder=str(self.data_output_folder) + "/genotype",
-            output_name=self.output_name,
-            data_storage_format=self.data_storage_format,
-            genotype_processing_chunk_size=self.genotype_processing_chunk_size,
-        )
+        geno_task = ExternalRawData(raw_data_path=self.genotype_data_path)
 
         label_file_task = ParseLabelFile(
             output_folder=self.data_output_folder,
@@ -63,17 +61,24 @@ class CommonSplitIntoTestSet(luigi.Task):
     def run(self):
         inputs = self.input()
 
-        genotype_path = get_genotype_path(
-            task_input_path=str(inputs["genotype"][1].path),
-            data_storage_format=self.data_storage_format,
-        )
-        assert genotype_path.exists()
+        genotype_path = self.genotype_data_path
+        bed_path = next(Path(str(genotype_path)).rglob("*.bed"), None)
+        assert bed_path.exists()
         label_file_path = Path(str(inputs["label_file"].path))
 
+        fam_path = next(Path(str(genotype_path)).rglob("*.fam"), None)
+        assert fam_path.exists()
+
         output_root = Path(str(self.data_output_folder))
+        genotype_output_folder = output_root / "genotype"
+        bim_target_folder = genotype_output_folder / "processed/parsed_files/"
+        copy_bim_file(
+            source_folder=Path(str(genotype_path)),
+            output_folder=bim_target_folder,
+        )
 
         common_ids_to_keep = _gather_all_ids(
-            genotype_path=genotype_path,
+            fam_path=fam_path,
             label_file=label_file_path,
         )
 
@@ -92,20 +97,25 @@ class CommonSplitIntoTestSet(luigi.Task):
             destination=output_root / "tabular" / "final",
         )
 
+        one_hot_stream = get_encoded_snp_stream(
+            bed_path=bed_path,
+            chunk_size=int(self.genotype_processing_chunk_size),
+        )
+
         if self.data_storage_format == "deeplake":
-            _split_deeplake_ds_into_train_and_test(
+            build_deeplake_train_and_test_ds_from_stream(
                 train_ids=train_and_valid_ids,
                 test_ids=test_ids,
-                source=genotype_path,
                 destination=output_root / "genotype" / "final",
+                source_stream=one_hot_stream,
                 commit_frequency=int(self.genotype_processing_chunk_size),
                 chunk_size=int(self.genotype_processing_chunk_size),
             )
         elif self.data_storage_format == "disk":
-            _split_arrays_into_train_and_test(
+            _build_disk_array_folders_from_stream(
                 train_ids=train_and_valid_ids,
                 test_ids=test_ids,
-                source=genotype_path,
+                source_stream=one_hot_stream,
                 destination=output_root / "genotype" / "final",
             )
         else:
@@ -280,16 +290,15 @@ def _save_ids_to_text_file(ids: Sequence[str], path: Path) -> None:
 
 
 def _gather_all_ids(
-    genotype_path: Path,
+    fam_path: Path,
     label_file: Path,
     filter_common: bool = True,
 ) -> Sequence[str]:
-
-    genotype_ids = set(gather_ids_from_data_source(data_source=genotype_path))
+    fam_ids = gather_ids_from_fam(fam_path=fam_path)
     logger.info(
-        "Gathered %d IDs from genotype data: %s",
-        len(genotype_ids),
-        genotype_path,
+        "Gathered %d IDs from .fam file: %s",
+        len(fam_ids),
+        fam_path,
     )
 
     label_file_ids = set(gather_ids_from_csv_file(file_path=label_file))
@@ -299,9 +308,9 @@ def _gather_all_ids(
         label_file,
     )
 
-    all_ids = set().union(genotype_ids, label_file_ids)
+    all_ids = set().union(fam_ids, label_file_ids)
     if filter_common:
-        common_ids = label_file_ids.intersection(genotype_ids)
+        common_ids = label_file_ids.intersection(fam_ids)
         logger.info(
             "Keeping %d common IDs among %d total (difference: %d).",
             len(common_ids),
@@ -311,6 +320,17 @@ def _gather_all_ids(
         return list(common_ids)
 
     return list(all_ids)
+
+
+def gather_ids_from_fam(fam_path: Path) -> set[str]:
+
+    fam_df = pd.read_csv(
+        fam_path,
+        sep=r"\s+",
+        header=None,
+        usecols=[1],
+    )
+    return set(fam_df[1].astype(str))
 
 
 def gather_ids_from_csv_file(file_path: Path, drop_nas: bool = False):
@@ -326,7 +346,8 @@ def gather_ids_from_csv_file(file_path: Path, drop_nas: bool = False):
 
 
 def _split_ids(
-    all_ids: Sequence[str], valid_or_test_size: float | int = 0.1
+    all_ids: Sequence[str],
+    valid_or_test_size: float | int = 0.1,
 ) -> Tuple[Sequence[str], Sequence[str]]:
     assert len(all_ids) > 0
     train_ids, test_or_valid_ids = eir.data_load.label_setup.split_ids(
@@ -340,10 +361,10 @@ def _split_ids(
     return train_ids, test_or_valid_ids
 
 
-def _split_deeplake_ds_into_train_and_test(
+def build_deeplake_train_and_test_ds_from_stream(
     train_ids: Sequence[str],
     test_ids: Sequence[str],
-    source: Path,
+    source_stream: Generator[tuple[str, np.ndarray], None, None],
     destination: Path,
     chunk_size: int,
     commit_frequency: int,
@@ -361,46 +382,52 @@ def _split_deeplake_ds_into_train_and_test(
     ensure_path_exists(path=train_path, is_folder=True)
     ensure_path_exists(path=test_path, is_folder=True)
 
-    source_ds = deeplake.open(str(source))
-
     ds_train = deeplake.create(str(train_path))
     ds_test = deeplake.create(str(test_path))
 
-    for col in source_ds.schema.columns:
-        ds_train.add_column(col.name, col.dtype)
-        ds_test.add_column(col.name, col.dtype)
+    try:
+        first_id, first_array = next(source_stream)
+        array_shape = list(first_array.shape)
+    except StopIteration:
+        raise ValueError("Source stream is empty")
 
-    ds_train.commit("Created schema")
-    ds_test.commit("Created schema")
+    for ds in (ds_train, ds_test):
+        ds.add_column("ID", dtype=deeplake.types.Text())
+        array_schema = deeplake.types.Array(dtype="bool", shape=array_shape)
+        ds.add_column("genotype", dtype=array_schema)
+        ds.commit("Created schema")
 
     batch_size = chunk_size // 2
-    train_batch = {col.name: [] for col in source_ds.schema.columns}
-    test_batch = {col.name: [] for col in source_ds.schema.columns}
+    train_batch = {"ID": [], "genotype": []}
+    test_batch = {"ID": [], "genotype": []}
 
+    if first_id in train_ids_set:
+        train_batch["ID"].append(first_id)
+        train_batch["genotype"].append(first_array)
+    elif first_id in test_ids_set:
+        test_batch["ID"].append(first_id)
+        test_batch["genotype"].append(first_array)
+
+    total_processed = 1
     skipped_samples = 0
-    total_processed = 0
 
     try:
-        for sample in source_ds:
-            cur_id = sample["ID"]
-
-            if cur_id in train_ids_set:
-                for col in source_ds.schema.columns:
-                    col_name = col.name
-                    train_batch[str(col_name)].append(sample[str(col_name)])
+        for id_, array in source_stream:
+            if id_ in train_ids_set:
+                train_batch["ID"].append(id_)
+                train_batch["genotype"].append(array)
 
                 if len(train_batch["ID"]) >= batch_size:
                     ds_train.append(train_batch)
-                    train_batch = {col.name: [] for col in source_ds.schema.columns}
+                    train_batch = {"ID": [], "genotype": []}
 
-            elif cur_id in test_ids_set:
-                for col in source_ds.schema.columns:
-                    col_name = col.name
-                    test_batch[str(col_name)].append(sample[str(col_name)])
+            elif id_ in test_ids_set:
+                test_batch["ID"].append(id_)
+                test_batch["genotype"].append(array)
 
                 if len(test_batch["ID"]) >= batch_size:
                     ds_test.append(test_batch)
-                    test_batch = {col.name: [] for col in source_ds.schema.columns}
+                    test_batch = {"ID": [], "genotype": []}
             else:
                 skipped_samples += 1
 
@@ -409,18 +436,17 @@ def _split_deeplake_ds_into_train_and_test(
             if total_processed % commit_frequency == 0:
                 if train_batch["ID"]:
                     ds_train.append(train_batch)
-                    train_batch = {col.name: [] for col in source_ds.schema.columns}
+                    train_batch = {"ID": [], "genotype": []}
                 if test_batch["ID"]:
                     ds_test.append(test_batch)
-                    test_batch = {col.name: [] for col in source_ds.schema.columns}
+                    test_batch = {"ID": [], "genotype": []}
 
                 ds_train.commit(f"Processed {total_processed} samples")
                 ds_test.commit(f"Processed {total_processed} samples")
 
-            if total_processed % commit_frequency == 0:
                 logger.info(
-                    "Iterated over %d samples while splitting deeplake dataset into "
-                    "train and test. Skipped %d samples.",
+                    "Iterated over %d samples while splitting into train and test. "
+                    "Skipped %d samples.",
                     total_processed,
                     skipped_samples,
                 )
@@ -439,10 +465,10 @@ def _split_deeplake_ds_into_train_and_test(
         raise RuntimeError(f"Error splitting dataset: {str(e)}") from e
 
 
-def _split_arrays_into_train_and_test(
+def _build_disk_array_folders_from_stream(
     train_ids: Sequence[str],
     test_ids: Sequence[str],
-    source: Path,
+    source_stream: Generator[tuple[str, np.ndarray], None, None],
     destination: Path,
 ) -> None:
     train_ids_set = set(train_ids)
@@ -457,15 +483,18 @@ def _split_arrays_into_train_and_test(
     ensure_path_exists(path=train_path, is_folder=True)
     ensure_path_exists(path=test_path, is_folder=True)
 
-    for array_file in source.iterdir():
-        if array_file.stem in train_ids_set:
-            copyfile(src=array_file, dst=train_path / array_file.name)
-        elif array_file.stem in test_ids_set:
-            copyfile(src=array_file, dst=test_path / array_file.name)
+    for id_, array in source_stream:
+        if id_ in train_ids_set:
+            np.save(file=train_path / f"{id_}.npy", arr=array)
+        elif id_ in test_ids_set:
+            np.save(file=test_path / f"{id_}.npy", arr=array)
 
 
 def _split_csv_into_train_and_test(
-    train_ids: Sequence[str], test_ids: Sequence[str], source: Path, destination: Path
+    train_ids: Sequence[str],
+    test_ids: Sequence[str],
+    source: Path,
+    destination: Path,
 ) -> None:
     ensure_path_exists(path=destination, is_folder=True)
     df_labels = pd.read_csv(filepath_or_buffer=source)
