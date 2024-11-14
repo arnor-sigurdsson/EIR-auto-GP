@@ -232,11 +232,6 @@ def set_up_model_data(
         after bumping Deep Lake to V4.
     """
 
-    if not is_deeplake_dataset(data_source=str(genotype_input_path)):
-        raise NotImplementedError(
-            "Currently only Deeplake datasets are supported for genotype input."
-        )
-
     df_genotype_input = load_genotype_samples_into_df(
         genotype_input_path=genotype_input_path,
         genotype_indices_to_load=genotype_indices_to_load,
