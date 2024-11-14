@@ -21,11 +21,16 @@ def _get_test_cl_commands() -> list[str]:
         "--input_con_columns age "
         "--input_cat_columns sex "
         "--folds 0-2 "
-        "--data_format auto "
-        "--do_test"
+        "--modelling_data_format auto "
+        "--do_test "
     )
 
-    commands = [base]
+    commands = []
+
+    for data_storage_format in ("disk", "deeplake"):
+        data_fmt_str = f"--data_storage_format {data_storage_format} "
+        cur_command = base + data_fmt_str
+        commands.append(cur_command)
 
     return commands
 

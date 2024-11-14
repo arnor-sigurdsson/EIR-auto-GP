@@ -78,7 +78,7 @@ class OneHotAutoSNPs(Config):
 
     include_text = luigi.BoolParameter()
     output_folder = luigi.Parameter()
-    output_format = luigi.Parameter()
+    data_storage_format = luigi.Parameter()
     output_name = luigi.Parameter()
     file_name = str(output_name)
     genotype_processing_chunk_size = luigi.IntParameter()
@@ -99,7 +99,7 @@ class OneHotAutoSNPs(Config):
         write_one_hot_outputs(
             id_array_generator=sample_id_one_hot_array_generator,
             output_folder=output_path,
-            output_format=str(self.output_format),
+            output_format=str(self.data_storage_format),
             output_name=str(self.output_name),
             batch_size=int(self.genotype_processing_chunk_size),
         )
@@ -116,7 +116,7 @@ class OneHotAutoSNPs(Config):
 class FinalizeGenotypeParsing(luigi.Task):
     raw_data_path = luigi.Parameter()
     output_folder = luigi.Parameter()
-    output_format = luigi.Parameter()
+    data_storage_format = luigi.Parameter()
     output_name = luigi.Parameter()
     genotype_processing_chunk_size = luigi.IntParameter()
 

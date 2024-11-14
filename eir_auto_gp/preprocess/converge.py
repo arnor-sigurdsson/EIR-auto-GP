@@ -11,6 +11,7 @@ import eir.data_load.label_setup
 import luigi
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists
+from eir.data_load.label_setup import gather_ids_from_data_source
 
 from eir_auto_gp.preprocess.genotype import FinalizeGenotypeParsing
 from eir_auto_gp.preprocess.tabular import ParseLabelFile
@@ -23,13 +24,13 @@ class CommonSplitIntoTestSet(luigi.Task):
     genotype_data_path = luigi.Parameter()
     label_file_path = luigi.Parameter()
     data_output_folder = luigi.Parameter()
-    output_format = luigi.Parameter()
+    data_storage_format = luigi.Parameter()
     output_name = luigi.Parameter()
     pre_split_folder = luigi.Parameter()
     freeze_validation_set = luigi.BoolParameter()
     only_data = luigi.BoolParameter()
     genotype_processing_chunk_size = luigi.IntParameter()
-    data_format = luigi.Parameter(default="disk")
+    modelling_data_format = luigi.Parameter(default="disk")
 
     def requires(self):
         """
@@ -46,7 +47,7 @@ class CommonSplitIntoTestSet(luigi.Task):
             raw_data_path=self.genotype_data_path,
             output_folder=str(self.data_output_folder) + "/genotype",
             output_name=self.output_name,
-            output_format=self.output_format,
+            data_storage_format=self.data_storage_format,
             genotype_processing_chunk_size=self.genotype_processing_chunk_size,
         )
 
@@ -62,20 +63,18 @@ class CommonSplitIntoTestSet(luigi.Task):
     def run(self):
         inputs = self.input()
 
-        # TODO: Implement support for disk format
-        if self.output_format != "deeplake":
-            raise ValueError(
-                "Currently only deeplake output format is supported for genotype data."
-            )
-
-        genotype_path = Path(str(inputs["genotype"][1].path)) / "genotype"
+        genotype_path = get_genotype_path(
+            task_input_path=str(inputs["genotype"][1].path),
+            data_storage_format=self.data_storage_format,
+        )
         assert genotype_path.exists()
         label_file_path = Path(str(inputs["label_file"].path))
 
         output_root = Path(str(self.data_output_folder))
 
         common_ids_to_keep = _gather_all_ids(
-            genotype_path=genotype_path, label_file=label_file_path
+            genotype_path=genotype_path,
+            label_file=label_file_path,
         )
 
         train_ids, valid_ids, test_ids = _id_setup_wrapper(
@@ -93,7 +92,7 @@ class CommonSplitIntoTestSet(luigi.Task):
             destination=output_root / "tabular" / "final",
         )
 
-        if self.output_format == "deeplake":
+        if self.data_storage_format == "deeplake":
             _split_deeplake_ds_into_train_and_test(
                 train_ids=train_and_valid_ids,
                 test_ids=test_ids,
@@ -102,7 +101,7 @@ class CommonSplitIntoTestSet(luigi.Task):
                 commit_frequency=int(self.genotype_processing_chunk_size),
                 chunk_size=int(self.genotype_processing_chunk_size),
             )
-        elif self.output_format == "disk":
+        elif self.data_storage_format == "disk":
             _split_arrays_into_train_and_test(
                 train_ids=train_and_valid_ids,
                 test_ids=test_ids,
@@ -110,7 +109,7 @@ class CommonSplitIntoTestSet(luigi.Task):
                 destination=output_root / "genotype" / "final",
             )
         else:
-            raise ValueError(f"Unknown output format: {self.output_format}")
+            raise ValueError(f"Unknown output format: {self.data_storage_format}")
 
     def output(self):
         output_root = Path(str(self.data_output_folder))
@@ -126,6 +125,15 @@ class CommonSplitIntoTestSet(luigi.Task):
             outputs[f"{split}_tabular"] = cur_tabular_target
 
         return outputs
+
+
+def get_genotype_path(task_input_path: str, data_storage_format: str) -> Path:
+    if data_storage_format == "disk":
+        return Path(task_input_path)
+    elif data_storage_format == "deeplake":
+        return Path(task_input_path) / "genotype"
+    else:
+        raise ValueError(f"Unknown output format: {data_storage_format}")
 
 
 def _id_setup_wrapper(
@@ -272,17 +280,24 @@ def _save_ids_to_text_file(ids: Sequence[str], path: Path) -> None:
 
 
 def _gather_all_ids(
-    genotype_path: Path, label_file: Path, filter_common: bool = True
+    genotype_path: Path,
+    label_file: Path,
+    filter_common: bool = True,
 ) -> Sequence[str]:
-    genotype_ids = set(
-        eir.data_load.label_setup.gather_ids_from_data_source(data_source=genotype_path)
-    )
+
+    genotype_ids = set(gather_ids_from_data_source(data_source=genotype_path))
     logger.info(
-        "Gathered %d IDs from genotype data: %s", len(genotype_ids), genotype_path
+        "Gathered %d IDs from genotype data: %s",
+        len(genotype_ids),
+        genotype_path,
     )
 
     label_file_ids = set(gather_ids_from_csv_file(file_path=label_file))
-    logger.info("Gathered %d IDs from label file: %s", len(label_file_ids), label_file)
+    logger.info(
+        "Gathered %d IDs from label file: %s",
+        len(label_file_ids),
+        label_file,
+    )
 
     all_ids = set().union(genotype_ids, label_file_ids)
     if filter_common:

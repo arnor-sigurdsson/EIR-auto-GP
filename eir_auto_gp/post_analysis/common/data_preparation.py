@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Generator, Optional
 
 import numpy as np
 import pandas as pd
@@ -237,7 +237,7 @@ def set_up_model_data(
             "Currently only Deeplake datasets are supported for genotype input."
         )
 
-    df_genotype_input = load_deeplake_samples_into_df(
+    df_genotype_input = load_genotype_samples_into_df(
         genotype_input_path=genotype_input_path,
         genotype_indices_to_load=genotype_indices_to_load,
         top_snps_list=top_snps_list,
@@ -283,18 +283,17 @@ def set_up_model_data(
     return model_data
 
 
-def load_deeplake_samples_into_df(
+def load_genotype_samples_into_df(
     genotype_input_path: Path,
     genotype_indices_to_load: np.ndarray,
     top_snps_list: list[str],
 ) -> pd.DataFrame:
-    deeplake_ds = load_deeplake_dataset(data_source=str(genotype_input_path))
     ids = []
     genotype_arrays = []
 
-    for deeplake_sample in deeplake_ds:
-        sample_id = deeplake_sample["ID"]
-        sample_genotype = deeplake_sample["genotype"]
+    sample_id_iter = _get_genotype_id_iterator(genotype_input_path=genotype_input_path)
+
+    for sample_id, sample_genotype in sample_id_iter:
         sample_genotype_subset = sample_genotype[:, genotype_indices_to_load]
 
         array_maxed = sample_genotype_subset.argmax(0).astype(np.float32)
@@ -309,6 +308,21 @@ def load_deeplake_samples_into_df(
     df_genotype.index = df_genotype.index.astype(str)
 
     return df_genotype
+
+
+def _get_genotype_id_iterator(genotype_input_path: Path) -> Generator:
+    if is_deeplake_dataset(data_source=str(genotype_input_path)):
+        deeplake_ds = load_deeplake_dataset(data_source=str(genotype_input_path))
+        for deeplake_sample in deeplake_ds:
+            sample_id = deeplake_sample["ID"]
+            sample_genotype = deeplake_sample["genotype"]
+            yield sample_id, sample_genotype
+    else:
+        for f in genotype_input_path.iterdir():
+            sample_id = f.stem
+            sample_genotype = np.load(f)
+
+            yield sample_id, sample_genotype
 
 
 def load_tabular_data_into_df(
