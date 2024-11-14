@@ -19,7 +19,7 @@ def run_prepare_data(
         final_genotype_data_path,
         "--output_folder",
         output_folder,
-        "--data_storage_format",
+        "--output_format",
         "disk",
         "--array_chunk_size",
         str(array_chunk_size),
