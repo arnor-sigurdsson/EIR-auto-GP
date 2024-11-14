@@ -120,9 +120,8 @@ class CommonSplitIntoTestSet(luigi.Task):
             cur_target = luigi.LocalTarget(str(output_root / "genotype/final" / split))
             outputs[f"{split}_genotype"] = cur_target
 
-            cur_tabular_path = (
-                output_root / "tabular/final" / f"labels_{split}"
-            ).with_suffix(".csv")
+            cur_tabular_path = output_root / "tabular/final" / f"labels_{split}"
+            cur_tabular_path = cur_tabular_path.with_suffix(".csv")
             cur_tabular_target = luigi.LocalTarget(str(cur_tabular_path))
             outputs[f"{split}_tabular"] = cur_tabular_target
 

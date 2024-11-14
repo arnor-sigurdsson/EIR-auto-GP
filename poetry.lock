@@ -3662,22 +3662,22 @@ type = ["mypy (>=1.11.2)"]
 
 [[package]]
 name = "plink-pipelines"
-version = "0.4.1"
+version = "0.5.0"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.10"
 files = [
-    {file = "plink_pipelines-0.4.1-py3-none-any.whl", hash = "sha256:c67e814056630a68145e6592a295c282ef7ae1fa7b7390f782b00b048504bd0e"},
-    {file = "plink_pipelines-0.4.1.tar.gz", hash = "sha256:26ddc5f195dc077daf7858cd0d0811cedd6aabc41fb51cd5277181b73a431dbb"},
+    {file = "plink_pipelines-0.5.0-py3-none-any.whl", hash = "sha256:f188f88db7d6885de8d941a9bab18ab125047fb1f0859cadaab0175867923226"},
+    {file = "plink_pipelines-0.5.0.tar.gz", hash = "sha256:3280dcfaa73c5d0f7a4c0f40aad24170469585b89b3027c3678473e1fc4da555"},
 ]
 
 [package.dependencies]
 aislib = ">=0.2.0,<0.3.0"
-bed-reader = ">=1.0.2,<2.0.0"
+bed-reader = ">=1.0.6,<2.0.0"
 deeplake = ">=4.0.2,<5.0.0"
-luigi = ">=3.5.0,<4.0.0"
+luigi = ">=3.5.2,<4.0.0"
 numpy = ">=2.1.3,<3.0.0"
-pandas = ">=2.2.1,<3.0.0"
+pandas = ">=2.2.3,<3.0.0"
 py = ">=1.11.0,<2.0.0"
 
 [[package]]
@@ -6473,4 +6473,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.12.0,<3.13"
-content-hash = "a709a681f157a554daa95a82c30d4b5ce0e7baab9a0df0a368b07e9f44c22615"
+content-hash = "c1ce59325f61785a4ae5f07e93dce2072bc8bb3f353d589e3bcfb28a658f985d"

@@ -252,7 +252,7 @@ def generate_tb_base_config(
                 {
                     "name": f"final_layer_{group_name}",
                     "layer_path": f"output_modules.eir_auto_gp_{group_name}"
-                    f".shared_branch",
+                    f".shared_branch.1",
                     "use_from_cache": ["first_layer_tensor"],
                     "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
