@@ -1,5 +1,9 @@
 import math
+import os
 import warnings
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Generator, Optional, Sequence, Tuple
 
@@ -333,12 +337,17 @@ def gather_ids_from_fam(fam_path: Path) -> set[str]:
     return set(fam_df[1].astype(str))
 
 
-def gather_ids_from_csv_file(file_path: Path, drop_nas: bool = False):
+def gather_ids_from_csv_file(
+    file_path: Path,
+    drop_nas: bool = False,
+) -> tuple[str]:
     logger.debug("Gathering IDs from %s.", file_path)
-    df = pd.read_csv(filepath_or_buffer=file_path)
 
     if drop_nas:
+        df = pd.read_csv(filepath_or_buffer=file_path)
         df = df.dropna(how="any", axis=0)
+    else:
+        df = pd.read_csv(filepath_or_buffer=file_path, usecols=["ID"])
 
     all_ids = tuple(df["ID"].astype(str))
 
@@ -465,11 +474,26 @@ def build_deeplake_train_and_test_ds_from_stream(
         raise RuntimeError(f"Error splitting dataset: {str(e)}") from e
 
 
+@dataclass
+class SaveArrayConfig:
+    id_: str
+    array: np.ndarray
+    base_path: Path
+    is_train: bool
+
+
+def _save_single_array(config: SaveArrayConfig) -> None:
+    save_path = config.base_path / ("train" if config.is_train else "test")
+    np.save(file=save_path / f"{config.id_}.npy", arr=config.array)
+
+
 def _build_disk_array_folders_from_stream(
     train_ids: Sequence[str],
     test_ids: Sequence[str],
     source_stream: Generator[tuple[str, np.ndarray], None, None],
     destination: Path,
+    batch_size: int = 1000,
+    max_workers: int = 16,
 ) -> None:
     train_ids_set = set(train_ids)
     test_ids_set = set(test_ids)
@@ -480,14 +504,35 @@ def _build_disk_array_folders_from_stream(
     if train_path.exists() and test_path.exists():
         return
 
-    ensure_path_exists(path=train_path, is_folder=True)
-    ensure_path_exists(path=test_path, is_folder=True)
+    train_path.mkdir(parents=True, exist_ok=True)
+    test_path.mkdir(parents=True, exist_ok=True)
 
-    for id_, array in source_stream:
-        if id_ in train_ids_set:
-            np.save(file=train_path / f"{id_}.npy", arr=array)
-        elif id_ in test_ids_set:
-            np.save(file=test_path / f"{id_}.npy", arr=array)
+    cpu_count = os.cpu_count() or 1
+    max_workers = min(cpu_count * 2, max_workers)
+
+    save_fn = partial(_save_single_array)
+
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        batch = []
+
+        for id_, array in source_stream:
+            config = SaveArrayConfig(
+                id_=id_,
+                array=array,
+                base_path=destination,
+                is_train=id_ in train_ids_set,
+            )
+
+            batch.append(config)
+
+            if len(batch) >= batch_size:
+                futures = list(executor.map(save_fn, batch))
+                _ = [f for f in futures]
+                batch = []
+
+        if batch:
+            futures = list(executor.map(save_fn, batch))
+            _ = [f for f in futures]
 
 
 def _split_csv_into_train_and_test(
@@ -496,6 +541,9 @@ def _split_csv_into_train_and_test(
     source: Path,
     destination: Path,
 ) -> None:
+
+    logger.info("Splitting label %s file into train and test sets.", source)
+
     ensure_path_exists(path=destination, is_folder=True)
     df_labels = pd.read_csv(filepath_or_buffer=source)
     df_labels["ID"] = df_labels["ID"].astype(str)
