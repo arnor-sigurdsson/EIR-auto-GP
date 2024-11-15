@@ -7,6 +7,31 @@ import pandas as pd
 import pytest
 
 
+def get_system_info() -> tuple[bool, str]:
+    import os
+    import platform
+
+    in_gh_actions = os.environ.get("GITHUB_ACTIONS", False)
+    if in_gh_actions:
+        in_gh_actions = True
+
+    system = platform.system()
+
+    return in_gh_actions, system
+
+
+def should_skip_in_gha_macos():
+    """
+    We use this to skip some modelling tests as the GHA macOS runner can be limited
+    e.g. w.r.t RAM.
+    """
+    in_gha, platform = get_system_info()
+    if in_gha and platform == "Darwin":
+        return True
+
+    return False
+
+
 @pytest.fixture
 def simulate_genetic_data_to_bed(tmp_path: Path) -> Callable[[int, int, str], Path]:
     def _wrapper(n_individuals: int, n_snps: int, phenotype: str) -> Path:

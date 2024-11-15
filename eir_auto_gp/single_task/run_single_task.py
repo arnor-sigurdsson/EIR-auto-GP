@@ -58,6 +58,13 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--data_storage_format",
+        type=str,
+        choices=["disk", "deeplake"],
+        default="disk",
+    )
+
+    parser.add_argument(
         "--global_output_folder",
         type=str,
         required=False,
@@ -503,10 +510,10 @@ def build_data_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "pre_split_folder",
         "freeze_validation_set",
         "genotype_processing_chunk_size",
+        "data_storage_format",
     ]
 
     base = extract_from_namespace(namespace=cl_args, keys=data_keys)
-    base["output_format"] = "deeplake"
 
     return base
 

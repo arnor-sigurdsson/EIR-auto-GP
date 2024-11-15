@@ -11,10 +11,14 @@ from eir_auto_gp.single_task.run_single_task import (
     run,
     store_experiment_config,
 )
+from tests.conftest import should_skip_in_gha_macos
 
 
 def _get_test_modelling_cl_command(
-    folder_path: Path, target_type: str, feature_selection: str
+    folder_path: Path,
+    target_type: str,
+    feature_selection: str,
+    data_storage_format: str,
 ) -> str:
     base = (
         f"--genotype_data_path {folder_path}/ "
@@ -28,11 +32,13 @@ def _get_test_modelling_cl_command(
         "--n_dl_feature_selection_setup_folds 1 "
         "--do_test "
         "--gwas_p_value_threshold 1e-01 "
+        f"--data_storage_format {data_storage_format} "
     )
 
     return base
 
 
+@pytest.mark.skipif(condition=should_skip_in_gha_macos(), reason="In GHA macOS.")
 @pytest.mark.parametrize(
     "feature_selection",
     [
@@ -47,12 +53,23 @@ def test_post_analysis_classification(
     simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
     tmp_path: Path,
 ) -> None:
+    """
+    TODO:
+        Seems that we run into trashing / freezing issues on macOS GHA runners here
+        after bumping Deep Lake to V4.
+    """
+
     simulated_path = simulate_genetic_data_to_bed(10000, 12, "binary")
+
+    data_storage_format = "deeplake"
+    if feature_selection in ("gwas->dl", "gwas+bo"):
+        data_storage_format = "disk"
 
     command = _get_test_modelling_cl_command(
         folder_path=simulated_path,
         target_type="cat",
         feature_selection=feature_selection,
+        data_storage_format=data_storage_format,
     )
 
     parser = get_argument_parser()
@@ -89,6 +106,7 @@ def test_post_analysis_classification(
     )
 
 
+@pytest.mark.skipif(condition=should_skip_in_gha_macos(), reason="In GHA macOS.")
 @pytest.mark.parametrize(
     "feature_selection",
     [
@@ -103,12 +121,23 @@ def test_post_analysis_regression(
     simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
     tmp_path: Path,
 ) -> None:
+    """
+    TODO:
+        Seems that we run into trashing / freezing issues on macOS GHA runners here
+        after bumping Deep Lake to V4.
+    """
+
     simulated_path = simulate_genetic_data_to_bed(10000, 12, "continuous")
+
+    data_storage_format = "deeplake"
+    if feature_selection in ("gwas->dl", "gwas+bo"):
+        data_storage_format = "disk"
 
     command = _get_test_modelling_cl_command(
         folder_path=simulated_path,
         target_type="con",
         feature_selection=feature_selection,
+        data_storage_format=data_storage_format,
     )
 
     parser = get_argument_parser()

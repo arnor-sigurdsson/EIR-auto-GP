@@ -41,7 +41,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--genotype_processing_chunk_size",
         type=int,
-        default=1000,
+        default=1024,
         help="Chunk size for processing genotype data. Increasing"
         "this value will increase the memory usage, but will"
         "likely speed up the processing.",
@@ -59,6 +59,13 @@ def get_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         required=False,
         help="If this flag is set, only the data processing step will be run.",
+    )
+
+    parser.add_argument(
+        "--data_storage_format",
+        type=str,
+        choices=["disk", "deeplake"],
+        default="disk",
     )
 
     parser.add_argument(
@@ -197,7 +204,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--data_format",
+        "--modelling_data_format",
         type=str,
         default="disk",
         help="Which format to store the data in during modelling.",
@@ -425,11 +432,11 @@ def build_data_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "pre_split_folder",
         "freeze_validation_set",
         "genotype_processing_chunk_size",
-        "data_format",
+        "modelling_data_format",
+        "data_storage_format",
     ]
 
     base = extract_from_namespace(namespace=cl_args, keys=data_keys)
-    base["output_format"] = "deeplake"
 
     return base
 
