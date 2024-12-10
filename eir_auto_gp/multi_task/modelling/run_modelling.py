@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, Literal, Optional
 
 import luigi
 import pandas as pd
+import polars as pl
 import yaml
 from aislib.misc_utils import ensure_path_exists
 from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_inject
@@ -637,7 +638,19 @@ def _get_output_injections(
     label_file_path: str,
     output_cat_columns: list[str],
     output_con_columns: list[str],
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
+
+    if output_cat_columns:
+        df = pl.scan_csv(source=label_file_path).select(output_cat_columns).collect()
+
+        all_binary = all(is_binary_column(df=df, col=col) for col in output_cat_columns)
+
+        cat_loss = "BCEWithLogitsLoss" if all_binary else "CrossEntropyLoss"
+        if all_binary:
+            logger.info("Setting categorical loss to BCEWithLogitsLoss.")
+    else:
+        cat_loss = "CrossEntropyLoss"
+
     injections = {
         "output_info": {
             "output_source": label_file_path,
@@ -645,11 +658,17 @@ def _get_output_injections(
         "output_type_info": {
             "target_cat_columns": output_cat_columns,
             "target_con_columns": output_con_columns,
+            "cat_loss_name": cat_loss,
             "uncertainty_weighted_mt_loss": True,
         },
     }
 
     return injections
+
+
+def is_binary_column(df: pl.DataFrame, col: str) -> bool:
+    n_unique = df.select(pl.col(col)).filter(pl.col(col).is_not_null()).unique().height
+    return n_unique <= 2
 
 
 def _get_all_dynamic_injections(
@@ -674,8 +693,6 @@ def _get_all_dynamic_injections(
     )
     bim_path = get_bim_path(genotype_data_path=genotype_data_path)
 
-    n_samples = lines_in_file(file_path=mip.label_file_path) - 1
-
     subset_folder = Path(mip.modelling_base_output_folder) / "snp_subset_files"
 
     subset_snp_path = None
@@ -699,7 +716,7 @@ def _get_all_dynamic_injections(
             valid_size=valid_size,
             iter_per_epoch=iter_per_epoch,
             n_snps=n_snps,
-            n_samples=n_samples,
+            n_samples=spe.num_samples_total,
             weighted_sampling_columns=mip.weighted_sampling_columns,
             modelling_data_format=mip.modelling_data_format,
         ),
@@ -749,6 +766,14 @@ def get_num_iter_per_epoch(
 
     iter_per_epoch = (num_samples_per_epoch - valid_size) // batch_size
     iter_per_epoch = max(min_iter_per_epoch, iter_per_epoch)
+
+    logger.info(
+        "Setting iter_per_epoch to %d with %d samples and %d valid samples.",
+        iter_per_epoch,
+        num_samples_per_epoch,
+        valid_size,
+    )
+
     return iter_per_epoch
 
 

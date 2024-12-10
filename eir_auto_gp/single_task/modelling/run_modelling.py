@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, Literal, Optional, Sequence
 
 import luigi
 import pandas as pd
+import polars as pl
 import psutil
 import torch
 import yaml
@@ -691,7 +692,7 @@ def get_dataloader_workers(memory_dataset: bool, device: str) -> int:
         )
         n_workers = 0
     else:
-        n_workers = min(16, n_workers)
+        n_workers = min(12, n_workers)
 
     logger.info(
         "Using %d workers for data loading based on %d available cores.",
@@ -781,8 +782,6 @@ def _get_all_dynamic_injections(
     if mip.genotype_subset_snps_file is not None:
         n_snps = lines_in_file(file_path=mip.genotype_subset_snps_file)
 
-    n_samples = lines_in_file(file_path=mip.label_file_path) - 1
-
     injections = {
         "global_config": _get_global_injections(
             fold=mip.fold,
@@ -792,7 +791,7 @@ def _get_all_dynamic_injections(
             valid_size=valid_size,
             iter_per_epoch=iter_per_epoch,
             n_snps=n_snps,
-            n_samples=n_samples,
+            n_samples=spe.num_samples_total,
             compute_attributions=mip.compute_attributions,
             weighted_sampling_columns=mip.weighted_sampling_columns,
         ),
@@ -839,15 +838,62 @@ class SampleEpochInfo:
     samples_per_epoch: int
 
 
+def format_column_list(columns: Sequence[str], max_show: int = 10) -> str:
+    if len(columns) <= max_show:
+        return str(list(columns))
+
+    return f"[{', '.join(repr(col) for col in columns[:max_show])}, ...]"
+
+
+def get_valid_sample_count(
+    label_file_path: str | Path,
+    output_cat_columns: Sequence[str],
+    output_con_columns: Sequence[str],
+    *,
+    id_column: str = "ID",
+) -> int:
+    output_columns = list(output_cat_columns) + list(output_con_columns)
+    columns_to_read = [id_column] + output_columns
+
+    formatted_columns = format_column_list(columns=columns_to_read)
+    logger.info(
+        "Reading %s with columns: %s",
+        Path(label_file_path).name,
+        formatted_columns,
+    )
+
+    df = pl.scan_csv(source=label_file_path).select(columns_to_read)
+    is_nan_exprs = [pl.col(col).is_null() for col in output_columns]
+
+    valid_samples = (
+        df.filter(~pl.fold(True, lambda acc, x: acc & x, is_nan_exprs)).collect().height
+    )
+
+    logger.info(
+        "Found %d valid samples in %s with output columns: %s",
+        valid_samples,
+        Path(label_file_path).name,
+        format_column_list(columns=output_columns),
+    )
+
+    return valid_samples
+
+
 def get_samples_per_epoch(
     model_injection_params: ModelInjectionParams,
 ) -> SampleEpochInfo:
     mip = model_injection_params
 
-    num_samples = lines_in_file(file_path=mip.label_file_path) - 1
+    num_samples = get_valid_sample_count(
+        label_file_path=mip.label_file_path,
+        output_cat_columns=mip.output_cat_columns,
+        output_con_columns=mip.output_con_columns,
+    )
+
     if not mip.weighted_sampling_columns:
         return SampleEpochInfo(
-            num_samples_total=num_samples, samples_per_epoch=num_samples
+            num_samples_total=num_samples,
+            samples_per_epoch=num_samples,
         )
 
     logger.info(
@@ -863,7 +909,8 @@ def get_samples_per_epoch(
     mean_all_outputs = int(mean(mean_per_target))
 
     return SampleEpochInfo(
-        num_samples_total=num_samples, samples_per_epoch=mean_all_outputs
+        num_samples_total=num_samples,
+        samples_per_epoch=mean_all_outputs,
     )
 
 

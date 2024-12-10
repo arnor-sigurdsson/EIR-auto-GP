@@ -207,13 +207,13 @@ frozenlist = ">=1.1.0"
 
 [[package]]
 name = "aislib"
-version = "0.2.0"
+version = "0.3.0"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.10"
 files = [
-    {file = "aislib-0.2.0-py3-none-any.whl", hash = "sha256:e06fd89dc02e80fb0b03a821de19e2767aa30023f5d0cd83d5c83703c1592c79"},
-    {file = "aislib-0.2.0.tar.gz", hash = "sha256:f71946b8e9297de29af35dc8fb09ae58cf5ccfe1e4c008dd60e6005be39b4c84"},
+    {file = "aislib-0.3.0-py3-none-any.whl", hash = "sha256:56e9e5b08478a999f5da5393f988f9de3ff175f1f336788afc5c990b2be330fb"},
+    {file = "aislib-0.3.0.tar.gz", hash = "sha256:30b2c43da475bdda57ff63ec540df195e1bd154fab4f60c96ba91ab92690fce3"},
 ]
 
 [package.dependencies]
@@ -224,6 +224,7 @@ py = ">=1.11.0,<2.0.0"
 scikit-learn = ">=1.5.1,<2.0.0"
 seaborn = ">=0,<1"
 sympy = ">=1.13.1,<2.0.0"
+termcolor = ">=2.5.0,<3.0.0"
 torch = ">=2.4.0,<3.0.0"
 torchvision = ">=0,<1"
 tqdm = ">=4.66.4,<5.0.0"
@@ -1219,19 +1220,19 @@ files = [
 
 [[package]]
 name = "eir-dl"
-version = "0.12.0"
+version = "0.13.1"
 description = "Deep learning framework for genomics and multi-modal data"
 optional = false
 python-versions = "<3.13,>=3.12.0"
 files = [
-    {file = "eir_dl-0.12.0-py3-none-any.whl", hash = "sha256:94ddedbda40484b0f62e1fcba26c9a4c2f05f922de4c41fdab62f8f948133169"},
-    {file = "eir_dl-0.12.0.tar.gz", hash = "sha256:34746f5702c63c493ee41e4a7d278001967312b1f0e80b0e5e403bebcdeb7aa2"},
+    {file = "eir_dl-0.13.1-py3-none-any.whl", hash = "sha256:ba8d4edaf9441b919b56098de892a6d3b2c8145b12f26a4a559fafa5e56d92fe"},
+    {file = "eir_dl-0.13.1.tar.gz", hash = "sha256:9e96d5bfa3e32bddd048d713d22349ff2eb0dc60b16bf0cd5d512525b190095b"},
 ]
 
 [package.dependencies]
 adabelief-pytorch = ">=0.2.0,<0.3.0"
 aioboto3 = ">=13.1.0,<14.0.0"
-aislib = ">=0.2.0,<0.3.0"
+aislib = ">=0.3.0,<0.4.0"
 captum = ">=0.7.0,<0.8.0"
 colorama = ">=0.4.4,<0.5.0"
 ConfigArgParse = ">=1.7,<2.0"
@@ -1241,9 +1242,10 @@ fastapi = ">=0.115.4,<0.116.0"
 ipython = ">=8.29.0,<9.0.0"
 lifelines = ">=0.30.0,<0.31.0"
 matplotlib = ">=3.9.0,<4.0.0"
-numpy = ">=2.1.3,<3.0.0"
+numpy = ">=2.1.0,<2.2.0"
 pandas = ">=2.2.2,<3.0.0"
 pillow = ">=11.0.0,<12.0.0"
+polars = ">=1.16.0,<1.17.0"
 pyarrow = ">=18.0.0,<19.0.0"
 pydantic = ">=2.9.2,<3.0.0"
 pytorch-ignite = ">=0.5.0.post2,<0.6.0"
@@ -3646,21 +3648,21 @@ type = ["mypy (>=1.11.2)"]
 
 [[package]]
 name = "plink-pipelines"
-version = "0.5.0"
+version = "0.5.1"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.10"
 files = [
-    {file = "plink_pipelines-0.5.0-py3-none-any.whl", hash = "sha256:f188f88db7d6885de8d941a9bab18ab125047fb1f0859cadaab0175867923226"},
-    {file = "plink_pipelines-0.5.0.tar.gz", hash = "sha256:3280dcfaa73c5d0f7a4c0f40aad24170469585b89b3027c3678473e1fc4da555"},
+    {file = "plink_pipelines-0.5.1-py3-none-any.whl", hash = "sha256:a3dfcf4ff370278995d8e1fbc3b5221e70ebb092df3c01eee0c84b16b19f7cad"},
+    {file = "plink_pipelines-0.5.1.tar.gz", hash = "sha256:3f529dd8874ae2427af84471340c9db0766caf06c907151e4b6f5cd829aea7b4"},
 ]
 
 [package.dependencies]
-aislib = ">=0.2.0,<0.3.0"
+aislib = ">=0.3.0,<0.4.0"
 bed-reader = ">=1.0.6,<2.0.0"
 deeplake = ">=4.0.2,<5.0.0"
 luigi = ">=3.5.2,<4.0.0"
-numpy = ">=2.1.3,<3.0.0"
+numpy = ">=2.1.0,<2.2.0"
 pandas = ">=2.2.3,<3.0.0"
 py = ">=1.11.0,<2.0.0"
 
@@ -3678,6 +3680,47 @@ files = [
 [package.extras]
 dev = ["pre-commit", "tox"]
 testing = ["pytest", "pytest-benchmark"]
+
+[[package]]
+name = "polars"
+version = "1.16.0"
+description = "Blazingly fast DataFrame library"
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "polars-1.16.0-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:072f5ff3b5fe05797c59890de0e464b34ede75a9735e7d7221622fa3a0616d8e"},
+    {file = "polars-1.16.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:ebaf7a1ea114b042fa9f1cd17d49436279eb30545dd74361a2f5e3febeb867cd"},
+    {file = "polars-1.16.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e626d21dcd2566e1442dac414fe177bc70ebfc2f16620d59d778b1b774361018"},
+    {file = "polars-1.16.0-cp39-abi3-manylinux_2_24_aarch64.whl", hash = "sha256:53debcce55f68731ee2c7d6c787afdee26860ed6576f1ffa0cb9111b57f82857"},
+    {file = "polars-1.16.0-cp39-abi3-win_amd64.whl", hash = "sha256:17efcb550c42d51034ff79702612b9184d8eac0d500de1dd7fb98490459276d3"},
+    {file = "polars-1.16.0.tar.gz", hash = "sha256:dd99808b833872babe02434a809fd45c1cffe66a3d57123cdc5e447c7753d328"},
+]
+
+[package.extras]
+adbc = ["adbc-driver-manager[dbapi]", "adbc-driver-sqlite[dbapi]"]
+all = ["polars[async,cloudpickle,database,deltalake,excel,fsspec,graph,iceberg,numpy,pandas,plot,pyarrow,pydantic,style,timezone]"]
+async = ["gevent"]
+calamine = ["fastexcel (>=0.9)"]
+cloudpickle = ["cloudpickle"]
+connectorx = ["connectorx (>=0.3.2)"]
+database = ["nest-asyncio", "polars[adbc,connectorx,sqlalchemy]"]
+deltalake = ["deltalake (>=0.15.0)"]
+excel = ["polars[calamine,openpyxl,xlsx2csv,xlsxwriter]"]
+fsspec = ["fsspec"]
+gpu = ["cudf-polars-cu12"]
+graph = ["matplotlib"]
+iceberg = ["pyiceberg (>=0.5.0)"]
+numpy = ["numpy (>=1.16.0)"]
+openpyxl = ["openpyxl (>=3.0.0)"]
+pandas = ["pandas", "polars[pyarrow]"]
+plot = ["altair (>=5.4.0)"]
+pyarrow = ["pyarrow (>=7.0.0)"]
+pydantic = ["pydantic"]
+sqlalchemy = ["polars[pandas]", "sqlalchemy"]
+style = ["great-tables (>=0.8.0)"]
+timezone = ["backports-zoneinfo", "tzdata"]
+xlsx2csv = ["xlsx2csv (>=0.8.0)"]
+xlsxwriter = ["xlsxwriter"]
 
 [[package]]
 name = "pre-commit"
@@ -6457,4 +6500,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.12.0,<3.13"
-content-hash = "d5826494e02396eea42b7ae4ef69557e8ae1a410cc3fb6723a36c68ad3f26c90"
+content-hash = "166fc340b6ca725b90a3df4f1c59a61b098370320cc62522a40533840c9d76cb"

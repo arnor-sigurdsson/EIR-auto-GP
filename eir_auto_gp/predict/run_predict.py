@@ -8,20 +8,18 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 import torch
 import yaml
 from aislib.misc_utils import get_logger
 from eir.train_utils.train_handlers import _iterdir_ignore_hidden
-from scipy.special import softmax
 
 from eir_auto_gp.multi_task.modelling.run_modelling import (
     get_testing_string_from_config_folder,
 )
+from eir_auto_gp.predict.data_preparation_utils import get_experiment_bim_file
 from eir_auto_gp.predict.pack import unpack_experiment
 from eir_auto_gp.predict.prepare_data import run_prepare_data
-from eir_auto_gp.predict.sync import get_experiment_bim_file, run_sync
 
 logger = get_logger(name=__name__)
 
@@ -52,7 +50,7 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--genotype_processing_chunk_size",
         type=int,
-        default=32,
+        default=256,
     )
     return parser
 
@@ -69,20 +67,16 @@ def run_sync_and_predict_wrapper(
     data_output_folder = Path(cl_args.output_folder, "data")
     experiment_folder = Path(cl_args.output_folder + "/unpacked_experiment")
     experiment_bim = get_experiment_bim_file(experiment_folder=experiment_folder)
-    final_genotype_path = run_sync(
-        genotype_data_path=Path(cl_args.genotype_data_path),
-        reference_bim_path=experiment_bim,
-        data_output_folder=data_output_folder,
-    )
 
     prepared_folder = run_prepare_data(
-        final_genotype_data_path=final_genotype_path,
-        output_folder=str(data_output_folder),
+        genotype_data_path=Path(cl_args.genotype_data_path),
+        output_folder=data_output_folder,
+        reference_bim_to_project_to=experiment_bim,
         array_chunk_size=cl_args.genotype_processing_chunk_size,
     )
 
     run_predict(
-        prepared_input_data_folder=prepared_folder,
+        prepared_input_data_folder=prepared_folder.array_folder,
         unpacked_experiment_path=Path(unpacked_experiment_path),
         output_folder=Path(cl_args.output_folder),
     )
@@ -204,9 +198,15 @@ def compute_continuous_ensemble(
     return results
 
 
+import numpy as np
+import pandas as pd
+from scipy.special import softmax
+
+
 def compute_categorical_ensemble(
+    *,
     df: pd.DataFrame,
-    target_columns: list,
+    target_columns: list[str],
     target: str,
 ) -> pd.DataFrame:
     results = pd.DataFrame()
@@ -223,7 +223,13 @@ def compute_categorical_ensemble(
         results[f"{target} Ensemble Raw {class_name}"] = df[class_columns].mean(axis=1)
 
     raw_outputs = results[[f"{target} Ensemble Raw {c}" for c in classes]].values
-    softmax_probs = softmax(x=raw_outputs, axis=1)
+
+    if len(classes) == 1:
+        class1_probs = 1 / (1 + np.exp(-raw_outputs))
+        softmax_probs = np.hstack([1 - class1_probs, class1_probs])
+        classes = ["0"] + classes
+    else:
+        softmax_probs = softmax(x=raw_outputs, axis=1)
 
     for i, class_name in enumerate(classes):
         results[f"{target} Ensemble Prob {class_name}"] = softmax_probs[:, i]
@@ -236,6 +242,7 @@ def compute_categorical_ensemble(
     results[f"{target} Predicted Class"] = [
         classes[i] for i in np.argmax(a=softmax_probs, axis=1)
     ]
+
     return results
 
 

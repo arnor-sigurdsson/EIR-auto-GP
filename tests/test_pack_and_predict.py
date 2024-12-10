@@ -194,6 +194,7 @@ def check_predict_results(
         predict_output_folder=predict_output_folder,
         actual_data_path=actual_data_path,
     )
+    assert gathered_results, "No results gathered"
 
     for target, metrics in gathered_results.items():
         if target in ["phenotype"]:
