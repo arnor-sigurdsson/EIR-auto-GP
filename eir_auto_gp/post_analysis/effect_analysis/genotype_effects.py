@@ -56,9 +56,20 @@ def get_all_linear_results(
     allele_maps: dict[str, dict[str, str]],
     target_type: str,
 ) -> pd.DataFrame:
-    logger.info("Gathering all linear allele effect results for '%s'.", target_name)
 
     covar_columns = [i for i in df.columns if i.startswith("COVAR_")]
+    to_check_columns = [
+        i for i in df.columns if i != target_name and not i.startswith("COVAR_")
+    ]
+
+    logger.info(
+        "Gathering all linear allele effect results for '%s'. Checking %d SNPs.",
+        target_name,
+        len(to_check_columns),
+    )
+
+    if len(to_check_columns) == 0:
+        return pd.DataFrame()
 
     parallel_worker = Parallel(n_jobs=-1)
     all_results = parallel_worker(
@@ -71,9 +82,9 @@ def get_all_linear_results(
             model=target_type,
             covar_columns=covar_columns,
         )
-        for col in df.columns
-        if col != target_name and not col.startswith("COVAR_")
+        for col in to_check_columns
     )
+
     all_results = [i for i in all_results if i is not None]
 
     if len(all_results) == 0:

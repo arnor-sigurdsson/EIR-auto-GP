@@ -130,7 +130,7 @@ def add_covars_to_phenotype_df(df_pheno: pd.Series) -> pd.DataFrame:
     cov_cat_computed = quantiles.astype(str)
     cov_cat_computed[np.random.rand(n) < 0.1] = np.nan
 
-    cov_con_computed = df_pheno * 0.1 + np.random.normal(loc=0, scale=0.5, size=n)
+    cov_con_computed = df_pheno * 0.1 + np.random.normal(loc=0, scale=0.01, size=n)
     cov_con_computed[np.random.rand(n) < 0.1] = np.nan
 
     cov_cat_constant = ["Constant"] * n

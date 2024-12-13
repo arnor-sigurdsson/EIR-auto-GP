@@ -436,8 +436,8 @@ def _extract_linear_feature_importance(
     Adapted from https://stackoverflow.com/questions/27928275
     """
     if target_type == "classification":
-        coef = model.coef_[0]
-        feature_importance = abs(model.coef_[0])
+        coef = model.coef_
+        feature_importance = abs(model.coef_)
         model_predictions = model_predictions[:, 1]
     elif target_type == "regression":
         coef = model.coef_

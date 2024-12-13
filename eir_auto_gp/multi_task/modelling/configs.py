@@ -477,6 +477,8 @@ def get_aggregate_config(
             output_groups=output_groups,
             target_columns=target_columns,
             n_random_groups=n_random_groups,
+            cat_columns=output_cat_columns,
+            con_columns=output_con_columns,
         )
     else:
         output_groups = None
@@ -509,11 +511,19 @@ def _build_output_groups(
     output_groups: str | int,
     target_columns: list[str],
     n_random_groups: int,
+    cat_columns: Optional[list[str]],
+    con_columns: Optional[list[str]],
 ) -> dict[str, list[str]]:
     if isinstance(output_groups, str):
         if output_groups.lower() == "random":
             return _create_random_groups(
                 target_columns=target_columns,
+                num_groups=n_random_groups,
+            )
+        elif output_groups.lower() == "semirandom":
+            return _create_semirandom_groups(
+                cat_columns=cat_columns or [],
+                con_columns=con_columns or [],
                 num_groups=n_random_groups,
             )
         else:
@@ -527,7 +537,7 @@ def _build_output_groups(
     else:
         raise ValueError(
             "output_groups must be either a string "
-            "(file path or 'random') or an integer"
+            "(file path, 'random', or 'semirandom') or an integer"
         )
 
 
@@ -551,6 +561,57 @@ def _create_random_groups(
     for i, target in enumerate(target_columns):
         group_key = f"group_{(i % num_groups) + 1}"
         groups[group_key].append(target)
+
+    random.seed()
+
+    return groups
+
+
+def _create_semirandom_groups(
+    cat_columns: list[str],
+    con_columns: list[str],
+    num_groups: int,
+    seed: int = 42,
+) -> dict[str, list[str]]:
+    if not cat_columns and not con_columns:
+        raise ValueError("At least one of cat_columns or con_columns must be provided")
+
+    random.seed(seed)
+
+    total_cols = len(cat_columns) + len(con_columns)
+    if total_cols < num_groups:
+        raise ValueError(
+            "Number of groups must be less than or equal to the "
+            "total number of target columns."
+        )
+
+    if cat_columns and con_columns:
+        cat_groups = max(1, round(num_groups * len(cat_columns) / total_cols))
+        con_groups = max(1, num_groups - cat_groups)
+    else:
+        cat_groups = num_groups if cat_columns else 0
+        con_groups = num_groups if con_columns else 0
+
+    groups = {}
+    group_counter = 1
+
+    if cat_columns:
+        cat_cols = list(cat_columns)
+        random.shuffle(cat_cols)
+        for i in range(cat_groups):
+            start_idx = i * len(cat_cols) // cat_groups
+            end_idx = (i + 1) * len(cat_cols) // cat_groups
+            groups[f"group_{group_counter}"] = cat_cols[start_idx:end_idx]
+            group_counter += 1
+
+    if con_columns:
+        con_cols = list(con_columns)
+        random.shuffle(con_cols)
+        for i in range(con_groups):
+            start_idx = i * len(con_cols) // con_groups
+            end_idx = (i + 1) * len(con_cols) // con_groups
+            groups[f"group_{group_counter}"] = con_cols[start_idx:end_idx]
+            group_counter += 1
 
     random.seed()
 

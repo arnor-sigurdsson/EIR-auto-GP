@@ -234,7 +234,9 @@ class TestResults:
 
 
 def gather_test_predictions(
-    folder_with_folds: Path, cat_targets: Sequence[str], con_targets: Sequence[str]
+    folder_with_folds: Path,
+    cat_targets: Sequence[str],
+    con_targets: Sequence[str],
 ) -> Iterator[TestResults]:
     """
     TODO: Add mapping of numerical labels to original strings.
@@ -248,7 +250,11 @@ def gather_test_predictions(
 
         if metric_funcs is None:
             logger.debug("Loading metric functions for ensemble from '%s'.", fold)
-            metric_funcs = load_serialized_train_experiment(run_folder=fold).metrics
+            loaded_experiment = load_serialized_train_experiment(
+                run_folder=fold,
+                device="cpu",
+            )
+            metric_funcs = loaded_experiment.metrics
 
         for target_folder in _iterdir_ignore_hidden(path=targets_folder):
             target_name = target_folder.name
