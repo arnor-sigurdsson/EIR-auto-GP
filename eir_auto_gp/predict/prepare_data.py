@@ -11,7 +11,6 @@ from aislib.misc_utils import ensure_path_exists, get_logger
 from eir_auto_gp.predict.data_preparation_utils import (
     log_overlap,
     read_bim_and_cast_dtypes,
-    validate_executable_exists_in_path,
 )
 from eir_auto_gp.preprocess.genotype import get_encoded_snp_stream
 
@@ -260,7 +259,7 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--array_chunk_size",
         type=int,
-        default=1000,
+        default=256,
         help="Number of SNPs to process in each chunk (default: 1000).",
     )
 
@@ -268,8 +267,6 @@ def get_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    validate_executable_exists_in_path("plink2")
-    validate_executable_exists_in_path("plink")
     args = get_cl_args()
     run_prepare_wrapper(cl_args=args)
 
