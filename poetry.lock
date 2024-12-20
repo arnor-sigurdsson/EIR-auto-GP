@@ -1218,13 +1218,13 @@ files = [
 
 [[package]]
 name = "eir-dl"
-version = "0.13.4"
+version = "0.13.5"
 description = "Deep learning framework for genomics and multi-modal data"
 optional = false
 python-versions = "<3.13,>=3.12.0"
 files = [
-    {file = "eir_dl-0.13.4-py3-none-any.whl", hash = "sha256:979a815fa8e4806f3478462b4331f89431f1b69a2c104e21da9c6a732cd7f448"},
-    {file = "eir_dl-0.13.4.tar.gz", hash = "sha256:bb0aecfa6b78ba6352980197ab33fd73a95542defa390e6553c6f7599719eb61"},
+    {file = "eir_dl-0.13.5-py3-none-any.whl", hash = "sha256:a4eac8bc9b7922198dafe695d4832e6d800637b3332f13b0fa556636f308b9ad"},
+    {file = "eir_dl-0.13.5.tar.gz", hash = "sha256:f21889de8b0cd14b2b2e9d3a46a0d9e3e451fce3289713f356929543cc195d11"},
 ]
 
 [package.dependencies]
@@ -6505,4 +6505,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.12.0,<3.13"
-content-hash = "467460584f3ba009657d977b41e0852de04079a247949278e74a26bdd7a3d482"
+content-hash = "3e99eb0d2ebcaa8aed17540d7d951d97e4c40341b310b16c5182ab06c184d7bd"
