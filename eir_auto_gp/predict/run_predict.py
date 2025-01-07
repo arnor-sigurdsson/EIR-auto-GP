@@ -86,6 +86,11 @@ def run_sync_and_predict_wrapper(
         output_folder=Path(cl_args.output_folder, "results"),
     )
 
+    shutil.copy(
+        data_output_folder / "snp_overlap_analysis.txt",
+        Path(cl_args.output_folder, "snp_overlap_analysis.txt"),
+    )
+
     shutil.rmtree(path=data_output_folder)
     shutil.rmtree(path=unpacked_experiment_path)
 
