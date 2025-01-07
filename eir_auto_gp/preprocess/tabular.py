@@ -20,7 +20,8 @@ class ParseLabelFile(luigi.Task):
         df_parsed = _parse_label_df(df=df)
 
         df_parsed.to_csv(
-            path_or_buf=self.output_path().with_suffix(".csv"), index=False
+            path_or_buf=self.output_path().with_suffix(".csv"),
+            index=False,
         )
 
     def output_path(self) -> Path:
@@ -30,7 +31,10 @@ class ParseLabelFile(luigi.Task):
         return luigi.LocalTarget(self.output_path())
 
 
-def _parse_label_df(df: pd.DataFrame, remove_na: bool = False) -> pd.DataFrame:
+def _parse_label_df(
+    df: pd.DataFrame,
+    remove_na: bool = False,
+) -> pd.DataFrame:
     if remove_na:
         df = _remove_any_na_from_label_df(df=df)
 
