@@ -82,6 +82,7 @@ def run_prepare_data(
     from_stream = get_encoded_snp_stream(
         bed_path=plink_fileset.bed,
         chunk_size=array_chunk_size,
+        output_format="disk",
     )
 
     projected_stream = get_projected_snp_stream(

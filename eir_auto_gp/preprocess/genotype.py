@@ -1,6 +1,6 @@
 from pathlib import Path
 from shutil import copyfile
-from typing import Generator, List, Optional
+from typing import Generator, List, Literal, Optional
 
 import luigi
 import numpy as np
@@ -71,13 +71,17 @@ class ExternalRawData(luigi.ExternalTask):
 def get_encoded_snp_stream(
     bed_path: Path,
     chunk_size: int,
+    output_format: Literal["disk", "deeplake"],
 ) -> Generator[tuple[str, np.ndarray], None, None]:
     chunk_generator = get_sample_generator_from_bed(
         bed_path=bed_path,
         chunk_size=chunk_size,
     )
 
-    yield from _get_one_hot_encoded_generator(chunked_sample_generator=chunk_generator)
+    yield from _get_one_hot_encoded_generator(
+        chunked_sample_generator=chunk_generator,
+        output_format=output_format,
+    )
 
 
 def copy_bim_file(

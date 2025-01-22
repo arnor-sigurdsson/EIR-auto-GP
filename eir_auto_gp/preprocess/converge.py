@@ -104,6 +104,7 @@ class CommonSplitIntoTestSet(luigi.Task):
         one_hot_stream = get_encoded_snp_stream(
             bed_path=bed_path,
             chunk_size=int(self.genotype_processing_chunk_size),
+            output_format=self.data_storage_format,
         )
 
         if self.data_storage_format == "deeplake":
