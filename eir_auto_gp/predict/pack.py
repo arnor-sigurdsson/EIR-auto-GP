@@ -15,7 +15,7 @@ def pack_experiment(experiment_folder: Path, output_path: Path) -> None:
         add_modelling_folders_to_zip(
             zipf=zipf,
             root_dir=experiment_folder / "modelling",
-            target_dirs=["serializations", "saved_models", "configs"],
+            target_dirs=["serializations", "saved_models"],
         )
         modify_and_add_config_to_zip(
             zipf=zipf, config_path=experiment_folder / "config.json"

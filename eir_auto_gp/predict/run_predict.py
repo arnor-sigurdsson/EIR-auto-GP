@@ -326,7 +326,7 @@ def build_predict_configs(
     prepared_input_data_folder: Path,
     output_folder: Path,
 ) -> dict[str, Path]:
-    configs_folder = modelling_folder / "configs"
+    configs_folder = modelling_folder / "serializations/configs_stripped"
 
     subset_folder = modelling_folder / "snp_subset_files"
 
