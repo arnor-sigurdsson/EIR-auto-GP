@@ -316,7 +316,7 @@ def _initialize_linear_model(
     model_type: str,
 ) -> Any:
 
-    alphas = [0.001, 0.01, 0.1, 1.0, 2.0, 5.0, 10.0]
+    alphas = np.logspace(-4, 1, 50)
 
     if target_type == "classification":
         if model_type == "linear_model":

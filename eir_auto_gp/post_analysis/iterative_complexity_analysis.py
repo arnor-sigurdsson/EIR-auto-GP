@@ -114,7 +114,7 @@ def run_iterative_complexity_analysis(
             modelling_data=mro,
             target_type=ei.target_type,
             eval_set=eval_set,
-            model_type="elasticnet",
+            model_type="linear_model",
             cv_use_val_split=True,
             with_fallback=True,
         )
@@ -765,13 +765,35 @@ def get_t_term_iterator(
                 col_name = f"{col}"
                 term = f"1/{col}"
 
-                if (inputs[col_name] == 0).any():
-                    raise ValueError(
-                        f"Column {col_name} contains zero values, "
-                        f"cannot take the inverse of this column"
+                if scaler is not None:
+                    col_data = inverse_scale_column(
+                        scaler=scaler,
+                        inputs=inputs,
+                        col_name=col_name,
+                        numerical_columns=numerical_columns,
+                    )
+
+                    if np.any(col_data == 0):
+                        raise ValueError(
+                            f"Column {col_name} contains zero values, "
+                            f"cannot take the inverse of this column"
+                        )
+                    else:
+                        inputs[term] = 1 / col_data
+
+                    inputs = fit_transform_on_train_only(
+                        inputs=inputs,
+                        train_ids=train_ids,
+                        column=term,
                     )
                 else:
-                    inputs[term] = 1 / inputs[col_name]
+                    if (inputs[col_name] == 0).any():
+                        raise ValueError(
+                            f"Column {col_name} contains zero values, "
+                            f"cannot take the inverse of this column"
+                        )
+                    else:
+                        inputs[term] = 1 / inputs[col_name]
 
                 return inputs, targets
 
