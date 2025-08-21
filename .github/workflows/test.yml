@@ -52,7 +52,7 @@ jobs:
           PYTEST_GROUP: ${{ matrix.group }}
         run: |
           pip install tox==4.17.1
-          pip install poetry==1.8.3
+          pip install poetry==2.1.4
           tox -e py_partial
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-24.04'
