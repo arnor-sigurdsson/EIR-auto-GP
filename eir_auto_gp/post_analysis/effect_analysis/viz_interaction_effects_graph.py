@@ -166,7 +166,7 @@ def _get_snp_interactions_from_coefficients(
 
 
 def build_graph_from_summed_interactions(
-    summed_interactions: dict[str, float]
+    summed_interactions: dict[str, float],
 ) -> nx.Graph:
     graph = nx.Graph(name="Interaction Effects")
 
