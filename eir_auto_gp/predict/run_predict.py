@@ -50,7 +50,7 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--genotype_processing_chunk_size",
         type=int,
-        default=256,
+        default=1024,
     )
     return parser
 
@@ -345,7 +345,7 @@ def build_predict_configs(
                     configs_as_dict["basic_experiment"]["device"] = "cpu"
 
                 logger.info("Setting dataloader workers to 0 for prediction.")
-                configs_as_dict["dataloader_workers"] = 0
+                configs_as_dict["basic_experiment"]["dataloader_workers"] = 0
 
                 cur_config = configs_as_dict
                 new_path = output_folder / f.name
