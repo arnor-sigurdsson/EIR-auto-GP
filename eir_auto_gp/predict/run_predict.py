@@ -50,7 +50,7 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--genotype_processing_chunk_size",
         type=int,
-        default=256,
+        default=1024,
     )
     return parser
 
