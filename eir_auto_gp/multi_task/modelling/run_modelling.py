@@ -83,7 +83,10 @@ class TestSingleRun(luigi.Task):
 
     def requires(self):
         base = {
-            "data": ParseDataWrapper(data_config=self.data_config),
+            "data": ParseDataWrapper(
+                data_config=self.data_config,
+                modelling_config=self.modelling_config,
+            ),
             "train_run": TrainSingleRun(
                 fold=self.fold,
                 data_config=self.data_config,
@@ -208,7 +211,12 @@ class TrainSingleRun(luigi.Task):
     modelling_config = luigi.DictParameter()
 
     def requires(self):
-        base = {"data": ParseDataWrapper(data_config=self.data_config)}
+        base = {
+            "data": ParseDataWrapper(
+                data_config=self.data_config,
+                modelling_config=self.modelling_config,
+            )
+        }
         for i in range(self.fold):
             base[f"train_{i}"] = TrainSingleRun(
                 fold=i,

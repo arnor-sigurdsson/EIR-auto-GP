@@ -93,7 +93,8 @@ def get_argument_parser() -> argparse.ArgumentParser:
         "The folder should contain the following files:\n"
         "  - train_ids.txt: List of sample IDs to use for training.\n"
         "  - test_ids.txt: List of sample IDs to use for testing.\n"
-        "  - (Optional): valid_ids.txt: List of sample IDs to use for validation.\n"
+        "  - (Optional): valid_ids.txt: List of sample IDs to use for "
+        "validation.\n"
         "If this option is not specified, the data will be split randomly\n"
         "into 90/10 (train+val)/test sets.",
     )
@@ -346,7 +347,9 @@ def get_root_task(
     analysis_config: Dict,
 ) -> RunAnalysisWrapper | ParseDataWrapper:
     if data_config.get("only_data"):
-        return ParseDataWrapper(data_config=data_config)
+        return ParseDataWrapper(
+            data_config=data_config, modelling_config=modelling_config
+        )
 
     return RunAnalysisWrapper(
         folds=folds,
