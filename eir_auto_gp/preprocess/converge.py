@@ -15,6 +15,7 @@ import deeplake
 import eir.data_load.label_setup
 import luigi
 import pandas as pd
+import polars as pl
 from aislib.misc_utils import ensure_path_exists
 
 from eir_auto_gp.preprocess.genotype import (
@@ -356,12 +357,20 @@ def gather_ids_from_csv_file(
     logger.debug("Gathering IDs from %s.", file_path)
 
     if drop_nas:
-        df = pd.read_csv(filepath_or_buffer=file_path)
-        df = df.dropna(how="any", axis=0)
+        all_ids = tuple(
+            pl.read_csv(file_path)
+            .drop_nulls()
+            .select(pl.col("ID").cast(pl.Utf8))
+            .to_series()
+            .to_list()
+        )
     else:
-        df = pd.read_csv(filepath_or_buffer=file_path, usecols=["ID"])
-
-    all_ids = tuple(df["ID"].astype(str))
+        all_ids = tuple(
+            pl.read_csv(file_path)
+            .select(pl.col("ID").cast(pl.Utf8))
+            .to_series()
+            .to_list()
+        )
 
     return all_ids
 
@@ -564,7 +573,7 @@ def _split_csv_into_train_and_test(
     ensure_path_exists(path=destination, is_folder=True)
 
     if only_data:
-        df_labels = pd.read_csv(filepath_or_buffer=source)
+        df_labels = pl.read_csv(source)
     else:
         required_columns = {"ID"}
         if input_cat_columns:
@@ -580,20 +589,19 @@ def _split_csv_into_train_and_test(
             "Direct modelling mode: loading only required columns: %s",
             sorted(required_columns),
         )
-        df_labels = pd.read_csv(
-            filepath_or_buffer=source, usecols=list(required_columns)
-        )
 
-    df_labels["ID"] = df_labels["ID"].astype(str)
+        df_labels = pl.read_csv(source, columns=list(required_columns))
+
+    df_labels = df_labels.with_columns(pl.col("ID").cast(pl.Utf8))
 
     train_ids_set = set(train_ids)
     test_ids_set = set(test_ids)
 
-    df_train = df_labels[df_labels["ID"].isin(train_ids_set)].copy()
-    df_test = df_labels[df_labels["ID"].isin(test_ids_set)].copy()
+    df_train = df_labels.filter(pl.col("ID").is_in(list(train_ids_set)))
+    df_test = df_labels.filter(pl.col("ID").is_in(list(test_ids_set)))
 
-    df_train.to_csv(destination / "labels_train.csv", index=False)
-    df_test.to_csv(destination / "labels_test.csv", index=False)
+    df_train.write_csv(destination / "labels_train.csv")
+    df_test.write_csv(destination / "labels_test.csv")
 
 
 class ParseDataWrapper(luigi.Task):

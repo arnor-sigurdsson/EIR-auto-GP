@@ -2,7 +2,7 @@ from pathlib import Path
 from shutil import copyfile
 
 import luigi
-import pandas as pd
+import polars as pl
 from aislib.misc_utils import ensure_path_exists
 
 from eir_auto_gp.utils.utils import get_logger
@@ -47,8 +47,8 @@ class ParseLabelFile(luigi.Task):
                 sorted(required_columns),
             )
 
-            df = pd.read_csv(self.label_file_path, usecols=list(required_columns))
-            df.to_csv(self.output_path(), index=False)
+            df = pl.read_csv(self.label_file_path, columns=list(required_columns))
+            df.write_csv(self.output_path())
 
     def output_path(self) -> Path:
         return Path(str(self.output_folder), "tabular/labels.csv")
