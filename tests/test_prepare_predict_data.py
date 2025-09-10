@@ -197,6 +197,120 @@ def test_prepare_flipped_data() -> None:
         ), "Flipped allele encoding mismatch"
 
 
+def test_plink_prefilter_optimization() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        reference_dir = tmpdir / "reference_data"
+        reference_dir.mkdir()
+        reference_path = reference_dir / "reference"
+        create_test_genotype_data(reference_path, n_samples=100, n_snps=1000)
+
+        target_dir = tmpdir / "target_data"
+        target_dir.mkdir()
+        target_path = target_dir / "target"
+        create_test_genotype_data(target_path, n_samples=100, n_snps=2000)
+
+        output_dir = tmpdir / "prepare_output"
+        output_dir.mkdir()
+
+        # This should trigger PLINK pre-filtering
+        prepared_data = run_prepare_data(
+            genotype_data_path=target_dir,
+            array_chunk_size=100,
+            reference_bim_to_project_to=reference_path.with_suffix(".bim"),
+            output_folder=output_dir,
+            enable_plink_prefilter=True,
+        )
+
+        arrays, _ = read_encoded_arrays(prepared_data.array_folder)
+        n_samples, n_encodings, n_snps = arrays.shape
+
+        assert n_samples == 100
+        assert n_encodings == 4
+        assert n_snps == 1000
+        assert np.allclose(arrays.sum(axis=1), 1.0)
+
+        plink_filtered_dirs = list(output_dir.glob("plink_filtered_*"))
+        assert len(plink_filtered_dirs) >= 1, "PLINK filtered directory should exist"
+
+
+def test_plink_prefilter_disabled() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        reference_dir = tmpdir / "reference_data"
+        target_dir = tmpdir / "target_data"
+        reference_dir.mkdir()
+        target_dir.mkdir()
+
+        reference_path = reference_dir / "reference"
+        target_path = target_dir / "target"
+
+        create_test_genotype_data(reference_path, n_samples=100, n_snps=1000)
+        create_test_genotype_data(target_path, n_samples=100, n_snps=2000)
+
+        output_dir = tmpdir / "prepare_output"
+        output_dir.mkdir()
+
+        prepared_data = run_prepare_data(
+            genotype_data_path=target_dir,
+            array_chunk_size=100,
+            reference_bim_to_project_to=reference_path.with_suffix(".bim"),
+            output_folder=output_dir,
+            enable_plink_prefilter=False,
+        )
+
+        arrays, _ = read_encoded_arrays(prepared_data.array_folder)
+
+        assert arrays.shape == (100, 4, 1000)
+        assert np.allclose(arrays.sum(axis=1), 1.0)
+
+        plink_filtered_dirs = list(output_dir.glob("plink_filtered_*"))
+        assert (
+            len(plink_filtered_dirs) == 0
+        ), "No PLINK filtered directories should exist when disabled"
+
+
+def test_high_overlap_skips_prefilter() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        reference_dir = tmpdir / "reference_data"
+        target_dir = tmpdir / "target_data"
+        reference_dir.mkdir()
+        target_dir.mkdir()
+
+        reference_path = reference_dir / "reference"
+        target_path = target_dir / "target"
+
+        create_test_genotype_data(reference_path, n_samples=100, n_snps=1000)
+        create_test_genotype_data(target_path, n_samples=100, n_snps=1000)
+
+        output_dir = tmpdir / "prepare_output"
+        output_dir.mkdir()
+
+        prepared_data = run_prepare_data(
+            genotype_data_path=target_dir,
+            array_chunk_size=100,
+            reference_bim_to_project_to=reference_path.with_suffix(".bim"),
+            output_folder=output_dir,
+            enable_plink_prefilter=True,
+        )
+
+        arrays, _ = read_encoded_arrays(prepared_data.array_folder)
+        assert arrays.shape == (100, 4, 1000)
+        assert np.allclose(arrays.sum(axis=1), 1.0)
+
+        plink_filtered_dirs = list(output_dir.glob("plink_filtered_*"))
+        assert (
+            len(plink_filtered_dirs) == 0
+        ), "High overlap should skip PLINK pre-filtering"
+
+
 if __name__ == "__main__":
     test_prepare_module()
     test_prepare_flipped_data()
+    test_plink_prefilter_optimization()
+    test_plink_prefilter_disabled()
+    test_high_overlap_skips_prefilter()

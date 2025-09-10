@@ -360,7 +360,7 @@ def should_compute_attributions(
 
 
 def get_weighted_sampling_columns(
-    modelling_config: Dict[str, Any]
+    modelling_config: Dict[str, Any],
 ) -> Optional[list[str]]:
     return ["all"] if modelling_config["output_cat_columns"] else None
 

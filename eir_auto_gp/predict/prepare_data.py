@@ -1,8 +1,11 @@
 import argparse
+import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import copyfile
-from typing import Generator
+from typing import Generator, Optional
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -15,6 +18,179 @@ from eir_auto_gp.predict.data_preparation_utils import (
 from eir_auto_gp.preprocess.genotype import get_encoded_snp_stream
 
 logger = get_logger(name=__name__)
+
+
+def check_plink_availability() -> Optional[str]:
+    for plink_cmd in ["plink2", "plink"]:
+        if shutil.which(plink_cmd) is not None:
+            return plink_cmd
+    return None
+
+
+def should_apply_plink_prefilter(
+    n_matched_snps: int, n_total_snps: int, threshold: float = 0.8
+) -> bool:
+    if n_total_snps == 0:
+        return False
+    match_ratio = n_matched_snps / n_total_snps
+    return match_ratio < threshold
+
+
+def create_var_id_extract_list(
+    df_bim: pd.DataFrame,
+    direct_indices: np.ndarray,
+    flip_indices: np.ndarray,
+) -> pd.Series:
+    combined_indices = np.concatenate([direct_indices, flip_indices])
+    var_ids = (
+        df_bim.iloc[combined_indices]["VAR_ID"].dropna().astype(str).drop_duplicates()
+    )
+
+    logger.info(
+        f"Created extract list with {len(var_ids)} unique VAR_IDs from "
+        f"{len(combined_indices)} matched SNPs"
+    )
+
+    if len(var_ids) != len(combined_indices):
+        n_dropped = len(combined_indices) - len(var_ids)
+        logger.warning(f"Dropped {n_dropped} SNPs due to missing or duplicate VAR_IDs")
+
+    return var_ids
+
+
+def run_plink_prefilter(
+    original_fileset: "PlinkFileSet",
+    df_bim: pd.DataFrame,
+    df_bim_reference: pd.DataFrame,
+    work_dir: Path,
+    enable_prefilter: bool = True,
+) -> Optional["PlinkFileSet"]:
+    if not enable_prefilter:
+        logger.info("PLINK pre-filtering disabled")
+        return None
+
+    plink_cmd = check_plink_availability()
+    if plink_cmd is None:
+        logger.warning("PLINK2/PLINK not available, skipping pre-filtering")
+        return None
+
+    snp_mapping = create_snp_mapping(from_bim=df_bim, to_reference_bim=df_bim_reference)
+
+    n_matched_snps = len(snp_mapping.direct_match_source_indices) + len(
+        snp_mapping.flip_match_source_indices
+    )
+    n_total_snps = len(df_bim)
+
+    threshold = 0.8
+    if not should_apply_plink_prefilter(n_matched_snps, n_total_snps, threshold):
+        match_ratio = n_matched_snps / n_total_snps if n_total_snps > 0 else 0
+        logger.info(
+            f"Skipping PLINK pre-filtering "
+            f"(match ratio: {match_ratio:.2f} >= {threshold:.2f})"
+        )
+        return None
+
+    logger.info(
+        f"Applying PLINK pre-filtering ({n_matched_snps}/{n_total_snps} SNPs matched)"
+    )
+
+    var_ids = create_var_id_extract_list(
+        df_bim=df_bim,
+        direct_indices=snp_mapping.direct_match_source_indices,
+        flip_indices=snp_mapping.flip_match_source_indices,
+    )
+
+    if len(var_ids) == 0:
+        logger.warning("No valid VAR_IDs to extract, skipping pre-filtering")
+        return None
+
+    run_tag = uuid4().hex[:8]
+    temp_dir = work_dir / f"plink_temp_{run_tag}"
+    ensure_path_exists(temp_dir, is_folder=True)
+
+    extract_file = temp_dir / "extract_list.txt"
+    output_prefix = temp_dir / "filtered"
+
+    try:
+        var_ids.to_csv(extract_file, index=False, header=False)
+
+        input_prefix = original_fileset.bed.stem
+        input_dir = original_fileset.bed.parent
+
+        cmd = [
+            plink_cmd,
+            "--bfile",
+            str(input_dir / input_prefix),
+            "--extract",
+            str(extract_file),
+            "--make-bed",
+            "--keep-allele-order",
+            "--out",
+            str(output_prefix),
+        ]
+
+        logger.info(f"Running: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+        logger.info("PLINK filtering completed successfully")
+        if result.stdout.strip():
+            logger.info(f"PLINK stdout: {result.stdout.strip()}")
+        if result.stderr and result.stderr.strip():
+            logger.info(f"PLINK stderr: {result.stderr.strip()}")
+
+        bed_file = output_prefix.with_suffix(".bed")
+        bim_file = output_prefix.with_suffix(".bim")
+        fam_file = output_prefix.with_suffix(".fam")
+
+        for file_path, name in [
+            (bed_file, "BED"),
+            (bim_file, "BIM"),
+            (fam_file, "FAM"),
+        ]:
+            if not file_path.exists() or file_path.stat().st_size == 0:
+                logger.error(
+                    f"PLINK output {name} file is missing or empty: {file_path}"
+                )
+                return None
+
+        filtered_fileset = PlinkFileSet(bed=bed_file, bim=bim_file, fam=fam_file)
+
+        persistent_dir = work_dir / f"plink_filtered_{run_tag}"
+        ensure_path_exists(persistent_dir, is_folder=True)
+
+        persistent_fileset = PlinkFileSet(
+            bed=persistent_dir / "filtered.bed",
+            bim=persistent_dir / "filtered.bim",
+            fam=persistent_dir / "filtered.fam",
+        )
+
+        copyfile(filtered_fileset.bed, persistent_fileset.bed)
+        copyfile(filtered_fileset.bim, persistent_fileset.bim)
+        copyfile(filtered_fileset.fam, persistent_fileset.fam)
+
+        plink_log = output_prefix.with_suffix(".log")
+        if plink_log.exists():
+            persistent_log = persistent_dir / "filtered.log"
+            copyfile(plink_log, persistent_log)
+            logger.info(f"PLINK log saved to: {persistent_log}")
+
+        logger.info(f"Filtered files saved to: {persistent_dir}")
+        return persistent_fileset
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"PLINK command failed: {e}")
+        logger.error(f"STDERR: {e.stderr}")
+        return None
+    finally:
+        try:
+            if extract_file.exists():
+                extract_file.unlink()
+            for suffix in [".bed", ".bim", ".fam"]:
+                temp_file = output_prefix.with_suffix(suffix)
+                if temp_file.exists():
+                    temp_file.unlink()
+        except Exception as e:
+            logger.warning(f"Failed to clean up temporary files: {e}")
 
 
 @dataclass
@@ -61,6 +237,7 @@ def run_prepare_data(
     array_chunk_size: int,
     reference_bim_to_project_to: Path,
     output_folder: Path,
+    enable_plink_prefilter: bool = True,
 ) -> PreparedData:
 
     plink_fileset = get_plink_fileset_from_folder(folder_path=genotype_data_path)
@@ -69,6 +246,19 @@ def run_prepare_data(
     df_bim_reference = read_bim_and_cast_dtypes(bim_file_path=ref_bim)
 
     df_bim = read_bim_and_cast_dtypes(bim_file_path=plink_fileset.bim)
+
+    filtered_fileset = run_plink_prefilter(
+        original_fileset=plink_fileset,
+        df_bim=df_bim,
+        df_bim_reference=df_bim_reference,
+        work_dir=output_folder,
+        enable_prefilter=enable_plink_prefilter,
+    )
+
+    if filtered_fileset is not None:
+        plink_fileset = filtered_fileset
+        df_bim = read_bim_and_cast_dtypes(bim_file_path=plink_fileset.bim)
+        logger.info("Using PLINK pre-filtered dataset for processing")
 
     log_output_path = output_folder / "snp_overlap_analysis.txt"
     log_overlap(
@@ -125,21 +315,15 @@ def create_snp_mapping(
     to_reference_bim: DataFrame with SNPs in the reference space we want to
     project into
     """
-    from_bim["pos_key"] = from_bim["CHR_CODE"] + ":" + from_bim["BP_COORD"].astype(str)
-    to_reference_bim["pos_key"] = (
-        to_reference_bim["CHR_CODE"] + ":" + to_reference_bim["BP_COORD"].astype(str)
-    )
+    from_df = from_bim.reset_index().rename(columns={"index": "source_idx"})
+    to_df = to_reference_bim.reset_index().rename(columns={"index": "target_idx"})
 
-    from_bim["allele_key"] = from_bim.apply(
-        lambda x: tuple(sorted([x["REF"], x["ALT"]])), axis=1
-    )
-    to_reference_bim["allele_key"] = to_reference_bim.apply(
-        lambda x: tuple(sorted([x["REF"], x["ALT"]])), axis=1
-    )
+    from_pos_key = from_df["CHR_CODE"] + ":" + from_df["BP_COORD"].astype(str)
+    to_pos_key = to_df["CHR_CODE"] + ":" + to_df["BP_COORD"].astype(str)
 
     matches = pd.merge(
-        from_bim.reset_index().rename(columns={"index": "source_idx"}),
-        to_reference_bim.reset_index().rename(columns={"index": "target_idx"}),
+        from_df.assign(pos_key=from_pos_key),
+        to_df.assign(pos_key=to_pos_key),
         on="pos_key",
         suffixes=("_source", "_target"),
     )
@@ -207,11 +391,16 @@ def run_prepare_wrapper(cl_args: argparse.Namespace) -> None:
     output_folder = Path(cl_args.output_folder)
     array_chunk_size = cl_args.array_chunk_size
 
+    enable_plink_prefilter = True
+    if hasattr(cl_args, "disable_plink_prefilter") and cl_args.disable_plink_prefilter:
+        enable_plink_prefilter = False
+
     prepared_data = run_prepare_data(
         genotype_data_path=genotype_data_path,
         array_chunk_size=array_chunk_size,
         reference_bim_to_project_to=reference_bim_path,
         output_folder=output_folder,
+        enable_plink_prefilter=enable_plink_prefilter,
     )
 
     logger.info(
@@ -260,8 +449,14 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--array_chunk_size",
         type=int,
-        default=256,
-        help="Number of SNPs to process in each chunk (default: 1000).",
+        default=1024,
+        help="Number of SNPs to process in each chunk (default: 1024).",
+    )
+
+    parser.add_argument(
+        "--disable_plink_prefilter",
+        action="store_true",
+        help="Disable PLINK pre-filtering optimization (default: enabled).",
     )
 
     return parser
