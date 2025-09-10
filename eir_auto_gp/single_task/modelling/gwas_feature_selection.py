@@ -18,9 +18,16 @@ def get_gwas_feature_selection_filter_config(
     target_names = (
         modelling_config["output_con_columns"] + modelling_config["output_cat_columns"]
     )
-    covariate_names = (
-        modelling_config["input_con_columns"] + modelling_config["input_cat_columns"]
-    )
+
+    if feature_selection_config.get("covariates_only_for_gwas", False):
+        covariate_names = feature_selection_config.get(
+            "gwas_input_con_columns", []
+        ) + feature_selection_config.get("gwas_input_cat_columns", [])
+    else:
+        covariate_names = (
+            modelling_config["input_con_columns"]
+            + modelling_config["input_cat_columns"]
+        )
 
     fam_file_path = next(Path(genotype_data_path).glob("*.fam"))
     id_split_folder = _get_id_split_folder(
