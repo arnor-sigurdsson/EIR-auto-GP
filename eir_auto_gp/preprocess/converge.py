@@ -15,6 +15,7 @@ import deeplake
 import eir.data_load.label_setup
 import luigi
 import pandas as pd
+import polars as pl
 from aislib.misc_utils import ensure_path_exists
 
 from eir_auto_gp.preprocess.genotype import (
@@ -39,6 +40,7 @@ class CommonSplitIntoTestSet(luigi.Task):
     only_data = luigi.BoolParameter()
     genotype_processing_chunk_size = luigi.IntParameter()
     modelling_data_format = luigi.Parameter(default="disk")
+    modelling_config = luigi.DictParameter(default={})
 
     def requires(self):
         """
@@ -56,6 +58,11 @@ class CommonSplitIntoTestSet(luigi.Task):
         label_file_task = ParseLabelFile(
             output_folder=self.data_output_folder,
             label_file_path=self.label_file_path,
+            only_data=self.only_data,
+            input_cat_columns=self.modelling_config.get("input_cat_columns", []),
+            input_con_columns=self.modelling_config.get("input_con_columns", []),
+            output_cat_columns=self.modelling_config.get("output_cat_columns", []),
+            output_con_columns=self.modelling_config.get("output_con_columns", []),
         )
         return {
             "genotype": geno_task,
@@ -99,6 +106,11 @@ class CommonSplitIntoTestSet(luigi.Task):
             test_ids=test_ids,
             source=label_file_path,
             destination=output_root / "tabular" / "final",
+            only_data=self.only_data,
+            input_cat_columns=self.modelling_config.get("input_cat_columns"),
+            input_con_columns=self.modelling_config.get("input_con_columns"),
+            output_cat_columns=self.modelling_config.get("output_cat_columns"),
+            output_con_columns=self.modelling_config.get("output_con_columns"),
         )
 
         one_hot_stream = get_encoded_snp_stream(
@@ -345,12 +357,20 @@ def gather_ids_from_csv_file(
     logger.debug("Gathering IDs from %s.", file_path)
 
     if drop_nas:
-        df = pd.read_csv(filepath_or_buffer=file_path)
-        df = df.dropna(how="any", axis=0)
+        all_ids = tuple(
+            pl.read_csv(file_path)
+            .drop_nulls()
+            .select(pl.col("ID").cast(pl.Utf8))
+            .to_series()
+            .to_list()
+        )
     else:
-        df = pd.read_csv(filepath_or_buffer=file_path, usecols=["ID"])
-
-    all_ids = tuple(df["ID"].astype(str))
+        all_ids = tuple(
+            pl.read_csv(file_path)
+            .select(pl.col("ID").cast(pl.Utf8))
+            .to_series()
+            .to_list()
+        )
 
     return all_ids
 
@@ -541,29 +561,57 @@ def _split_csv_into_train_and_test(
     test_ids: Sequence[str],
     source: Path,
     destination: Path,
+    only_data: bool = True,
+    input_cat_columns: Optional[Sequence[str]] = None,
+    input_con_columns: Optional[Sequence[str]] = None,
+    output_cat_columns: Optional[Sequence[str]] = None,
+    output_con_columns: Optional[Sequence[str]] = None,
 ) -> None:
 
     logger.info("Splitting label %s file into train and test sets.", source)
 
     ensure_path_exists(path=destination, is_folder=True)
-    df_labels = pd.read_csv(filepath_or_buffer=source)
-    df_labels["ID"] = df_labels["ID"].astype(str)
+
+    if only_data:
+        df_labels = pl.read_csv(source)
+    else:
+        required_columns = {"ID"}
+        if input_cat_columns:
+            required_columns.update(input_cat_columns)
+        if input_con_columns:
+            required_columns.update(input_con_columns)
+        if output_cat_columns:
+            required_columns.update(output_cat_columns)
+        if output_con_columns:
+            required_columns.update(output_con_columns)
+
+        logger.info(
+            "Direct modelling mode: loading only required columns: %s",
+            sorted(required_columns),
+        )
+
+        df_labels = pl.read_csv(source, columns=list(required_columns))
+
+    df_labels = df_labels.with_columns(pl.col("ID").cast(pl.Utf8))
 
     train_ids_set = set(train_ids)
     test_ids_set = set(test_ids)
 
-    df_train = df_labels[df_labels["ID"].isin(train_ids_set)].copy()
-    df_test = df_labels[df_labels["ID"].isin(test_ids_set)].copy()
+    df_train = df_labels.filter(pl.col("ID").is_in(list(train_ids_set)))
+    df_test = df_labels.filter(pl.col("ID").is_in(list(test_ids_set)))
 
-    df_train.to_csv(destination / "labels_train.csv", index=False)
-    df_test.to_csv(destination / "labels_test.csv", index=False)
+    df_train.write_csv(destination / "labels_train.csv")
+    df_test.write_csv(destination / "labels_test.csv")
 
 
 class ParseDataWrapper(luigi.Task):
     data_config = luigi.DictParameter()
+    modelling_config = luigi.DictParameter(default={})
 
     def requires(self):
-        yield CommonSplitIntoTestSet(**self.data_config)
+        yield CommonSplitIntoTestSet(
+            **self.data_config, modelling_config=self.modelling_config
+        )
 
     def output(self):
         return self.input()

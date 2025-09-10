@@ -230,6 +230,14 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--covariates_only_for_gwas",
+        action="store_true",
+        help="If set, input columns (input_cat_columns and input_con_columns)\\n"
+        "will only be used as covariates for GWAS adjustment, but not as\\n"
+        "inputs in the actual modeling (genotype-only models).",
+    )
+
+    parser.add_argument(
         "--do_test",
         action="store_true",
         help="Whether to run test set prediction.",
@@ -399,7 +407,9 @@ def get_root_task(
     analysis_config: Dict,
 ) -> RunAnalysisWrapper | ParseDataWrapper:
     if data_config.get("only_data"):
-        return ParseDataWrapper(data_config=data_config)
+        return ParseDataWrapper(
+            data_config=data_config, modelling_config=modelling_config
+        )
 
     return RunAnalysisWrapper(
         folds=folds,
@@ -524,11 +534,16 @@ def build_feature_selection_config(cl_args: argparse.Namespace) -> Dict[str, Any
         "feature_selection",
         "n_dl_feature_selection_setup_folds",
         "gwas_p_value_threshold",
+        "covariates_only_for_gwas",
     ]
 
     fs_config = extract_from_namespace(namespace=cl_args, keys=feature_selection_keys)
     if fs_config["feature_selection"] in [None, "None"]:
         fs_config["feature_selection"] = None
+
+    if cl_args.covariates_only_for_gwas:
+        fs_config["gwas_input_con_columns"] = cl_args.input_con_columns
+        fs_config["gwas_input_cat_columns"] = cl_args.input_cat_columns
 
     return fs_config
 
@@ -543,7 +558,13 @@ def build_modelling_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "do_test",
     ]
 
-    return extract_from_namespace(namespace=cl_args, keys=modelling_keys)
+    config = extract_from_namespace(namespace=cl_args, keys=modelling_keys)
+
+    if cl_args.covariates_only_for_gwas:
+        config["input_cat_columns"] = []
+        config["input_con_columns"] = []
+
+    return config
 
 
 def build_analysis_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
