@@ -127,7 +127,8 @@ def get_gwas_bo_auto_top_n(
 
 
 def _compute_max_fraction(
-    df_gwas: pd.DataFrame, gwas_p_value_threshold: Optional[float]
+    df_gwas: pd.DataFrame,
+    gwas_p_value_threshold: Optional[float],
 ) -> float:
     if gwas_p_value_threshold is None:
         return 1.0

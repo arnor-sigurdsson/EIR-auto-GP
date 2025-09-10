@@ -343,6 +343,12 @@ def build_predict_configs(
                         "available on current system. Changing device to CPU."
                     )
                     configs_as_dict["basic_experiment"]["device"] = "cpu"
+                elif "cpu" in config_device and torch.cuda.is_available():
+                    logger.info(
+                        "CPU was used for original experiments but CUDA is "
+                        "available on current system. Changing device to cuda:0."
+                    )
+                    configs_as_dict["basic_experiment"]["device"] = "cuda:0"
 
                 logger.info("Setting dataloader workers to 0 for prediction.")
                 configs_as_dict["basic_experiment"]["dataloader_workers"] = 0
