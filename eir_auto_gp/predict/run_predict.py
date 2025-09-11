@@ -8,11 +8,13 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import torch
 import yaml
 from aislib.misc_utils import get_logger
 from eir.train_utils.train_handlers import _iterdir_ignore_hidden
+from scipy.special import softmax
 
 from eir_auto_gp.multi_task.modelling.run_modelling import (
     get_testing_string_from_config_folder,
@@ -180,6 +182,21 @@ def extract_categorical_class_name(column_name: str) -> str:
     return re.sub(r"\s+Fold\s+\d+$", "", class_name)
 
 
+def sample_bootstrap_ci(
+    data: np.ndarray,
+    n_bootstraps=1000,
+    ci=(2.5, 97.5),
+):
+    bootstrap_samples = np.random.choice(
+        data,
+        size=(n_bootstraps, data.shape[0]),
+        replace=True,
+    )
+    bootstrap_means = np.mean(bootstrap_samples, axis=1)
+    lower_ci, upper_ci = np.percentile(bootstrap_means, ci)
+    return lower_ci, upper_ci
+
+
 def compute_continuous_ensemble(
     df: pd.DataFrame,
     target_columns: list,
@@ -201,11 +218,6 @@ def compute_continuous_ensemble(
     results[f"{target} 2.5% CI"] = bootstrap_lower_ci
     results[f"{target} 97.5% CI"] = bootstrap_upper_ci
     return results
-
-
-import numpy as np
-import pandas as pd
-from scipy.special import softmax
 
 
 def compute_categorical_ensemble(
@@ -256,7 +268,6 @@ def compute_ensemble_and_uncertainty(
     target: str,
     data_type: str,
 ) -> pd.DataFrame:
-
     results = pd.DataFrame({"ID": df["ID"]})
     target_columns = [col for col in df.columns if col.startswith(target)]
     results = pd.concat([results, df[target_columns]], axis=1)
@@ -278,17 +289,6 @@ def compute_ensemble_and_uncertainty(
 
     results = pd.concat([results, ensemble_results], axis=1)
     return results
-
-
-def sample_bootstrap_ci(data, n_bootstraps=1000, ci=(2.5, 97.5)):
-    bootstrap_samples = np.random.choice(
-        data,
-        size=(n_bootstraps, data.shape[0]),
-        replace=True,
-    )
-    bootstrap_means = np.mean(bootstrap_samples, axis=1)
-    lower_ci, upper_ci = np.percentile(bootstrap_means, ci)
-    return lower_ci, upper_ci
 
 
 def run_predict(
