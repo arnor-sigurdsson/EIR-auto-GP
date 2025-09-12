@@ -182,39 +182,6 @@ def extract_categorical_class_name(column_name: str) -> str:
     return re.sub(r"\s+Fold\s+\d+$", "", class_name)
 
 
-def bootsrap_ci(
-    data_matrix: np.ndarray,
-    n_bootstraps: int = 1000,
-    ci: tuple[float, float] = (2.5, 97.5),
-) -> tuple[np.ndarray, np.ndarray]:
-    n_samples, n_folds = data_matrix.shape
-
-    bootstrap_indices = np.random.choice(
-        n_folds,
-        size=(n_samples, n_bootstraps, n_folds),
-        replace=True,
-    )
-
-    bootstrap_samples = np.take_along_axis(
-        data_matrix[:, np.newaxis, :],
-        bootstrap_indices,
-        axis=2,
-    )
-
-    bootstrap_means = np.mean(
-        bootstrap_samples,
-        axis=2,
-    )
-
-    percentiles = np.percentile(
-        bootstrap_means,
-        ci,
-        axis=1,
-    )
-
-    return percentiles[0], percentiles[1]
-
-
 def compute_continuous_ensemble(
     df: pd.DataFrame,
     target_columns: list,
@@ -222,16 +189,6 @@ def compute_continuous_ensemble(
 ) -> pd.DataFrame:
     results = pd.DataFrame()
     results[f"{target} Ensemble"] = df[target_columns].mean(axis=1)
-
-    input_data = df[target_columns].to_numpy()
-    lower_ci, upper_ci = bootsrap_ci(
-        data_matrix=input_data,
-        n_bootstraps=1000,
-        ci=(2.5, 97.5),
-    )
-
-    results[f"{target} 2.5% CI"] = lower_ci
-    results[f"{target} 97.5% CI"] = upper_ci
     return results
 
 
@@ -265,11 +222,6 @@ def compute_categorical_ensemble(
 
     for i, class_name in enumerate(classes):
         results[f"{target} Ensemble Prob {class_name}"] = softmax_probs[:, i]
-
-    epsilon = 1e-10
-    entropies = -np.sum(softmax_probs * np.log(softmax_probs + epsilon), axis=1)
-    max_entropy = np.log(len(classes))
-    results[f"{target} Uncertainty"] = entropies / max_entropy
 
     results[f"{target} Predicted Class"] = [
         classes[i] for i in np.argmax(a=softmax_probs, axis=1)
