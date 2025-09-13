@@ -62,7 +62,7 @@ def get_base_global_config() -> Dict[str, Any]:
             "optimizer": "adabelief",
         },
         "lr_schedule": {
-            "lr_plateau_patience": 4,
+            "lr_plateau_patience": 6,
         },
         "training_control": {
             "early_stopping_buffer": "FILL",
@@ -95,8 +95,8 @@ def get_base_input_genotype_config() -> Dict[str, Any]:
         },
         "input_type_info": {
             "mixing_subtype": "cutmix-block",
-            "na_augment_alpha": 1.0,
-            "na_augment_beta": 9.0,
+            "na_augment_alpha": 0.6,
+            "na_augment_beta": 2.0,
             "shuffle_augment_alpha": 1.0,
             "shuffle_augment_beta": 49.0,
             "snp_file": "FILL",
@@ -151,7 +151,7 @@ def get_base_fusion_config(model_size: str = "medium") -> Dict[str, Any]:
             "rb_do": 0.1,
             "stochastic_depth_p": 0.1,
         },
-        "model_type": "default",
+        "model_type": "mlp-residual",
     }
     return base
 

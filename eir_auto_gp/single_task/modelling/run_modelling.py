@@ -164,6 +164,7 @@ def get_testing_string_from_config_folder(
     base_string = "eirpredict"
     globals_string = " --global_configs "
     inputs_string = " --input_configs "
+    fusion_string = " --fusion_configs "
     output_string = " --output_configs "
 
     for file in config_folder.iterdir():
@@ -172,10 +173,14 @@ def get_testing_string_from_config_folder(
                 globals_string += " " + f"{str(file)}" + " "
             elif "input" in file.stem:
                 inputs_string += " " + f"{str(file)}" + " "
+            elif "fusion" in file.stem:
+                fusion_string += " " + f"{str(file)}" + " "
             elif "output" in file.stem:
                 output_string += " " + f"{str(file)}" + " "
 
-    final_string = base_string + globals_string + inputs_string + output_string
+    final_string = (
+        base_string + globals_string + inputs_string + fusion_string + output_string
+    )
 
     saved_models = list((train_run_folder / "saved_models").iterdir())
     assert len(saved_models) == 1, "Expected only one saved model."
@@ -482,8 +487,6 @@ def build_configs(
                 dict_=config,
                 dict_to_inject=injections[config_name],
             )
-        else:
-            continue
 
         validate_complete_config(config_element=config)
         with open(output_folder / f"{config_name}.yaml", "w") as f:
@@ -506,6 +509,7 @@ def get_training_string_from_config_folder(config_folder: Path) -> str:
     base_string = "eirtrain"
     globals_string = " --global_configs "
     inputs_string = " --input_configs "
+    fusion_string = " --fusion_configs "
     output_string = " --output_configs "
 
     for file in config_folder.iterdir():
@@ -514,10 +518,14 @@ def get_training_string_from_config_folder(config_folder: Path) -> str:
                 globals_string += " " + f"{str(file)}" + " "
             elif "input" in file.stem:
                 inputs_string += " " + f"{str(file)}" + " "
+            elif "fusion" in file.stem:
+                fusion_string += " " + f"{str(file)}" + " "
             elif "output" in file.stem:
                 output_string += " " + f"{str(file)}" + " "
 
-    final_string = base_string + globals_string + inputs_string + output_string
+    final_string = (
+        base_string + globals_string + inputs_string + fusion_string + output_string
+    )
 
     return final_string
 
