@@ -487,22 +487,24 @@ def build_configs(
                 dict_=config,
                 dict_to_inject=injections[config_name],
             )
+        else:
+            continue
 
-        validate_complete_config(config_element=config)
+        validate_complete_config(config_element=config, path=config_name)
         with open(output_folder / f"{config_name}.yaml", "w") as f:
             yaml.dump(config, f)
 
 
-def validate_complete_config(config_element: dict | list | str) -> None:
+def validate_complete_config(config_element: dict | list | str, path: str = "") -> None:
     match config_element:
         case dict(config_element):
             for key, value in config_element.items():
-                validate_complete_config(config_element=value)
+                validate_complete_config(config_element=value, path=f"{path}.{key}")
         case list(config_element):
-            for value in config_element:
-                validate_complete_config(config_element=value)
+            for i, value in enumerate(config_element):
+                validate_complete_config(config_element=value, path=f"{path}[{i}]")
         case str(config_element):
-            assert config_element != "FILL"
+            assert config_element != "FILL", f"Found 'FILL' at {path}"
 
 
 def get_training_string_from_config_folder(config_folder: Path) -> str:
@@ -850,6 +852,7 @@ def _get_all_dynamic_injections(
             genotype_use_snps_file=mip.genotype_subset_snps_file,
             n_snps=n_snps,
         ),
+        "fusion_config": {},
         "output_config": _get_output_injections(
             label_file_path=mip.label_file_path,
             output_cat_columns=list(mip.output_cat_columns),
