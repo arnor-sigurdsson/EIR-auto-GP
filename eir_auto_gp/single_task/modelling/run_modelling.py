@@ -123,7 +123,11 @@ class TestSingleRun(luigi.Task):
         )
 
         base_aggregate_config = get_aggregate_config(
-            model_size=self.modelling_config["model_size"]
+            model_size=self.modelling_config["model_size"],
+            target_columns=(
+                list(self.modelling_config["output_cat_columns"])
+                + list(self.modelling_config["output_con_columns"])
+            ),
         )
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
@@ -238,7 +242,11 @@ class TrainSingleRun(luigi.Task):
         )
 
         base_aggregate_config = get_aggregate_config(
-            model_size=self.modelling_config["model_size"]
+            model_size=self.modelling_config["model_size"],
+            target_columns=(
+                list(self.modelling_config["output_cat_columns"])
+                + list(self.modelling_config["output_con_columns"])
+            ),
         )
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
