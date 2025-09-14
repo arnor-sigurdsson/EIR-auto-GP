@@ -574,7 +574,7 @@ def test_gwas_parser_ld_clump_arguments():
     )
 
     assert args_default.ld_clump is False
-    assert args_default.ld_clump_r2 == 0.1
+    assert args_default.ld_clump_r2 == 0.5
     assert args_default.ld_clump_kb == 250
 
 
