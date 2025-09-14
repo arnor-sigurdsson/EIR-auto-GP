@@ -8,12 +8,14 @@ from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 
 from eir_auto_gp.preprocess.gwas_pre_selection import (
     _get_plink_filter_snps_command,
+    gather_all_snps_to_keep,
     get_covariate_names,
     get_gwas_parser,
     get_gwas_pre_filter_config,
     get_pheno_names,
     get_plink_gwas_command,
     run_gwas_pre_filter_wrapper,
+    run_ld_clumping,
 )
 from eir_auto_gp.single_task.modelling.run_modelling import lines_in_file
 
@@ -29,8 +31,22 @@ def _get_test_cl_commands() -> list[str]:
         "--do_plot"
     )
 
+    base_with_ld_clumping = (
+        "--genotype_data_path tests/test_data/ "
+        "--label_file_path tests/test_data/penncath.csv  "
+        "--output_path runs/penncath_gwas_ld "
+        "--covariate_names age sex ldl hdl tg "
+        "--gwas_p_value_threshold 1e-04 "
+        "--target_names CAD "
+        "--do_plot "
+        "--ld_clump "
+        "--ld_clump_r2 0.2 "
+        "--ld_clump_kb 500"
+    )
+
     commands = [
         base,
+        base_with_ld_clumping,
     ]
 
     return commands
@@ -48,15 +64,24 @@ def test_run_gwas_pre_selection(command: str, tmp_path: Path) -> None:
 
     output_folder = tmp_path
 
-    for expected_file in [
+    expected_files = [
         "gwas_output",
         "ids",
         "penncath.bed",
         "penncath.bim",
         "penncath.fam",
         "penncath.log",
-    ]:
+    ]
+
+    for expected_file in expected_files:
         assert (output_folder / expected_file).exists()
+
+    if "--ld_clump" in command:
+        gwas_output_folder = output_folder / "gwas_output"
+        snps_to_keep_file = gwas_output_folder / "snps_to_keep.txt"
+        assert (
+            snps_to_keep_file.exists()
+        ), "SNPs to keep file should exist when LD clumping is enabled"
 
     orig_snps_file = Path("tests/test_data/penncath.bim")
     n_orig_snps = lines_in_file(file_path=orig_snps_file)
@@ -80,8 +105,27 @@ def test_run_gwas_pre_selection(command: str, tmp_path: Path) -> None:
             assert df_gwas[col].dtype in [float, int]
 
     gwas_files = list(_iterdir_ignore_hidden(path=output_folder / "gwas_output"))
-    assert len(gwas_files) == 4
+
     assert "gwas.CAD.glm.logistic.hybrid" in (i.name for i in gwas_files)
+
+    if "--ld_clump" in command:
+        expected_min_files = 6  # Original 4 + clumping files
+        assert len(gwas_files) >= expected_min_files, (
+            f"Expected at least {expected_min_files} files with LD clumping, "
+            f"got {len(gwas_files)}"
+        )
+
+        file_names = [f.name for f in gwas_files]
+        assert (
+            "snps_to_keep.txt" in file_names
+        ), "snps_to_keep.txt should be created with LD clumping"
+        assert (
+            "clumped_snps.txt" in file_names
+        ), "clumped_snps.txt should be created with LD clumping"
+    else:
+        assert (
+            len(gwas_files) == 4
+        ), f"Expected 4 files without LD clumping, got {len(gwas_files)}"
 
 
 def mocked_read_csv(*args, **kwargs):
@@ -311,3 +355,251 @@ def test_get_covariate_names_no_inputs(mock_csv, mock_one_hot_mappings):
         one_hot_mappings_file=mock_one_hot_mappings,
     )
     assert result == []
+
+
+@pytest.fixture
+def mock_gwas_output_folder(tmp_path):
+    gwas_folder = tmp_path / "gwas_output"
+    gwas_folder.mkdir()
+
+    gwas_file = gwas_folder / "gwas.CAD.glm.logistic"
+    gwas_content = (
+        "ID\tP\tCHR\tPOS\n"
+        "rs1\t0.001\t1\t1000\n"
+        "rs2\t0.5\t1\t2000\n"
+        "rs3\t0.0001\t2\t3000\n"
+    )
+    gwas_file.write_text(gwas_content)
+
+    return gwas_folder
+
+
+@pytest.fixture
+def mock_clumps_file(tmp_path):
+    clumps_file = tmp_path / "clumped_snps.clumps"
+    clumps_content = (
+        "#CHROM POS ID P TOTAL NONSIG S0.05 S0.01 S0.001 S0.0001 SP2\n"
+        "1 1000 rs1 0.001 5 2 2 1 1 0 rs4,rs5\n"
+        "2 3000 rs3 0.0001 3 1 1 1 1 1 rs6\n"
+    )
+    clumps_file.write_text(clumps_content)
+    return clumps_file
+
+
+def test_run_ld_clumping_cache_existing(mock_gwas_output_folder, tmp_path):
+    base_path = tmp_path / "genotype_data"
+
+    existing_clumped_file = mock_gwas_output_folder / "clumped_snps.txt"
+    existing_clumped_file.write_text("rs1\nrs2\nrs3\n")
+
+    result = run_ld_clumping(
+        gwas_output_folder=mock_gwas_output_folder,
+        base_path=base_path,
+        r2_threshold=0.1,
+        kb_window=250,
+    )
+
+    assert result == existing_clumped_file
+    assert result.exists()
+
+
+def test_run_ld_clumping_no_gwas_files(tmp_path):
+    gwas_folder = tmp_path / "gwas_output"
+    gwas_folder.mkdir()
+    base_path = tmp_path / "genotype_data"
+
+    with pytest.raises(ValueError, match="No GWAS result files found"):
+        run_ld_clumping(
+            gwas_output_folder=gwas_folder,
+            base_path=base_path,
+        )
+
+
+@patch("subprocess.run")
+def test_run_ld_clumping_command_construction(
+    mock_subprocess, mock_gwas_output_folder, mock_clumps_file, tmp_path
+):
+    base_path = tmp_path / "genotype_data"
+
+    mock_subprocess.return_value = None
+
+    expected_clumps_file = mock_gwas_output_folder / "clumped_snps.clumps"
+    mock_clumps_file.rename(expected_clumps_file)
+
+    run_ld_clumping(
+        gwas_output_folder=mock_gwas_output_folder,
+        base_path=base_path,
+        r2_threshold=0.2,
+        kb_window=500,
+    )
+
+    mock_subprocess.assert_called_once()
+    call_args = mock_subprocess.call_args[0][0]
+
+    expected_command = [
+        "plink2",
+        "--bfile",
+        str(base_path),
+        "--clump",
+        str(mock_gwas_output_folder / "gwas.CAD.glm.logistic"),
+        "--clump-p1",
+        "1",
+        "--clump-r2",
+        "0.2",
+        "--clump-kb",
+        "500",
+        "--out",
+        str(mock_gwas_output_folder / "clumped_snps"),
+    ]
+
+    assert call_args == expected_command
+
+
+def test_run_ld_clumping_parsing_clumps_file(
+    mock_gwas_output_folder, mock_clumps_file, tmp_path
+):
+    base_path = tmp_path / "genotype_data"
+
+    expected_clumps_file = mock_gwas_output_folder / "clumped_snps.clumps"
+    mock_clumps_file.rename(expected_clumps_file)
+
+    with patch("subprocess.run") as mock_subprocess:
+        mock_subprocess.return_value = None
+
+        result = run_ld_clumping(
+            gwas_output_folder=mock_gwas_output_folder,
+            base_path=base_path,
+        )
+
+    assert result.exists()
+    with open(result, "r") as f:
+        snps = f.read().strip().split("\n")
+
+    assert set(snps) == {"rs1", "rs3"}
+
+
+def test_run_ld_clumping_missing_snp_column(mock_gwas_output_folder, tmp_path):
+    base_path = tmp_path / "genotype_data"
+
+    clumps_file = mock_gwas_output_folder / "clumped_snps.clumps"
+    clumps_content = "CHR F VARIANT BP P\n1 1 rs1 1000 0.001\n"
+    clumps_file.write_text(clumps_content)
+
+    with patch("subprocess.run") as mock_subprocess:
+        mock_subprocess.return_value = None
+
+        with pytest.raises(KeyError, match="Required column 'SNP' or 'ID' not found"):
+            run_ld_clumping(
+                gwas_output_folder=mock_gwas_output_folder,
+                base_path=base_path,
+            )
+
+
+def test_gather_all_snps_to_keep_with_ld_clumping(mock_gwas_output_folder, tmp_path):
+    base_path = tmp_path / "genotype_data"
+
+    clumped_snps_file = mock_gwas_output_folder / "clumped_snps.txt"
+    clumped_snps_file.write_text("rs1\nrs2\nrs3\n")
+
+    with patch(
+        "eir_auto_gp.preprocess.gwas_pre_selection.run_ld_clumping"
+    ) as mock_clump:
+        mock_clump.return_value = clumped_snps_file
+
+        result_path = gather_all_snps_to_keep(
+            gwas_output_folder=mock_gwas_output_folder,
+            p_value_threshold=0.01,
+            ld_clump=True,
+            ld_clump_r2=0.1,
+            ld_clump_kb=250,
+            base_path=base_path,
+        )
+
+    assert result_path.exists()
+
+    mock_clump.assert_called_once_with(
+        gwas_output_folder=mock_gwas_output_folder,
+        base_path=base_path,
+        r2_threshold=0.1,
+        kb_window=250,
+    )
+
+
+def test_gather_all_snps_to_keep_ld_clump_no_base_path():
+    with pytest.raises(ValueError, match="base_path is required when ld_clump=True"):
+        gather_all_snps_to_keep(
+            gwas_output_folder=Path("dummy"),
+            p_value_threshold=0.01,
+            ld_clump=True,
+            base_path=None,
+        )
+
+
+def test_gwas_parser_ld_clump_arguments():
+    parser = get_gwas_parser()
+
+    args = parser.parse_args(
+        [
+            "--genotype_data_path",
+            "test_path",
+            "--label_file_path",
+            "test_labels.csv",
+            "--output_path",
+            "test_output",
+            "--target_names",
+            "CAD",
+            "--ld_clump",
+            "--ld_clump_r2",
+            "0.2",
+            "--ld_clump_kb",
+            "500",
+        ]
+    )
+
+    assert args.ld_clump is True
+    assert args.ld_clump_r2 == 0.2
+    assert args.ld_clump_kb == 500
+
+    args_default = parser.parse_args(
+        [
+            "--genotype_data_path",
+            "test_path",
+            "--label_file_path",
+            "test_labels.csv",
+            "--output_path",
+            "test_output",
+            "--target_names",
+            "CAD",
+        ]
+    )
+
+    assert args_default.ld_clump is False
+    assert args_default.ld_clump_r2 == 0.1
+    assert args_default.ld_clump_kb == 250
+
+
+def test_gwas_pre_filter_config_ld_clump():
+    parser = get_gwas_parser()
+    args = parser.parse_args(
+        [
+            "--genotype_data_path",
+            "test_path",
+            "--label_file_path",
+            "test_labels.csv",
+            "--output_path",
+            "test_output",
+            "--target_names",
+            "CAD",
+            "--ld_clump",
+            "--ld_clump_r2",
+            "0.15",
+            "--ld_clump_kb",
+            "300",
+        ]
+    )
+
+    config = get_gwas_pre_filter_config(cl_args=args)
+
+    assert config.ld_clump is True
+    assert config.ld_clump_r2 == 0.15
+    assert config.ld_clump_kb == 300

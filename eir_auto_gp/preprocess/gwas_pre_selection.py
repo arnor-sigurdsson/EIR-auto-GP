@@ -96,6 +96,10 @@ def run_gwas_pre_filter_wrapper(filter_config: "GWASPreFilterConfig") -> None:
     snps_to_keep_path = gather_all_snps_to_keep(
         gwas_output_folder=gwas_output_path,
         p_value_threshold=filter_config.p_value_threshold,
+        ld_clump=filter_config.ld_clump,
+        ld_clump_r2=filter_config.ld_clump_r2,
+        ld_clump_kb=filter_config.ld_clump_kb,
+        base_path=base_path if filter_config.ld_clump else None,
     )
 
     if filter_config.only_gwas:
@@ -384,26 +388,182 @@ def _read_fam(fam_path: Path) -> pd.DataFrame:
     return df_fam
 
 
-def gather_all_snps_to_keep(gwas_output_folder: Path, p_value_threshold: float) -> Path:
+def run_ld_clumping(
+    gwas_output_folder: Path,
+    base_path: Path,
+    r2_threshold: float = 0.1,
+    kb_window: int = 250,
+) -> Path:
+    clump_output_path = gwas_output_folder / "clumped_snps.txt"
+
+    if clump_output_path.exists():
+        logger.info("Found existing clumped SNPs file: %s", clump_output_path)
+        return clump_output_path
+
+    gwas_files = []
+    for gwas_file in gwas_output_folder.iterdir():
+        if "logistic" in gwas_file.name or "linear" in gwas_file.name:
+            gwas_files.append(gwas_file)
+
+    if not gwas_files:
+        raise ValueError(f"No GWAS result files found in {gwas_output_folder}")
+
+    gwas_files_sorted = sorted(
+        gwas_files, key=lambda f: (0 if "gwas" in f.name.lower() else 1, f.name)
+    )
+
+    gwas_file = gwas_files_sorted[0]
+    logger.info(
+        "Using %s for LD clumping (selected from %d available files)",
+        gwas_file.name,
+        len(gwas_files),
+    )
+
+    if len(gwas_files) > 1:
+        logger.warning(
+            "Multiple GWAS files found. Using %s for clumping. " "Other files: %s",
+            gwas_file.name,
+            [f.name for f in gwas_files_sorted[1:]],
+        )
+
+    clump_command = [
+        "plink2",
+        "--bfile",
+        str(base_path),
+        "--clump",
+        str(gwas_file),
+        "--clump-p1",
+        "1",
+        "--clump-r2",
+        str(r2_threshold),
+        "--clump-kb",
+        str(kb_window),
+        "--out",
+        str(clump_output_path.with_suffix("")),
+    ]
+
+    logger.info("Running LD clumping with command: %s", " ".join(clump_command))
+
+    try:
+        subprocess.run(clump_command, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        logger.error("LD clumping failed: %s", e.stderr)
+        raise
+
+    clumps_file = clump_output_path.with_suffix(".clumps")
+    if not clumps_file.exists():
+        created_files = list(gwas_output_folder.glob(f"{clump_output_path.stem}*"))
+        raise FileNotFoundError(
+            f"Expected PLINK2 clumps file not found: {clumps_file}. "
+            f"Files created: {[f.name for f in created_files]}"
+        )
+
+    try:
+        df_clumps = pd.read_csv(clumps_file, sep=r"\s+")
+
+        if "ID" in df_clumps.columns:
+            snp_column = "ID"
+        elif "SNP" in df_clumps.columns:
+            snp_column = "SNP"
+        else:
+            raise KeyError(
+                f"Required column 'SNP' or 'ID' not found in PLINK clumps "
+                f"file: {clumps_file}. "
+                f"Available columns: {df_clumps.columns.tolist()}"
+            )
+
+        clumped_snps = df_clumps[snp_column].tolist()
+
+        if not clumped_snps:
+            logger.warning(
+                "LD clumping produced no SNPs. This could indicate "
+                "no variants passed the clumping criteria or "
+                "insufficient LD information in the dataset."
+            )
+        else:
+            logger.info("LD clumping identified %d independent SNPs", len(clumped_snps))
+
+        invalid_snps = [snp for snp in clumped_snps if not snp or pd.isna(snp)]
+        if invalid_snps:
+            logger.warning(
+                "Found %d invalid SNP IDs in clumped output", len(invalid_snps)
+            )
+            clumped_snps = [snp for snp in clumped_snps if snp and not pd.isna(snp)]
+
+    except Exception as e:
+        logger.error("Failed to parse clumps file %s: %s", clumps_file, e)
+        raise
+
+    with open(clump_output_path, "w") as f:
+        f.write("\n".join(clumped_snps))
+
+    logger.info("Clumped SNPs written to %s", clump_output_path)
+    return clump_output_path
+
+
+def gather_all_snps_to_keep(
+    gwas_output_folder: Path,
+    p_value_threshold: float,
+    ld_clump: bool = False,
+    ld_clump_r2: float = 0.1,
+    ld_clump_kb: int = 250,
+    base_path: Optional[Path] = None,
+) -> Path:
     snps_to_keep_path = Path(gwas_output_folder, "snps_to_keep.txt")
     if snps_to_keep_path.exists():
         logger.info("Found existing %s file, not overwriting.", snps_to_keep_path)
         return snps_to_keep_path
 
-    snps_to_keep = set()
-    for gwas_file in gwas_output_folder.iterdir():
-        if "logistic" not in gwas_file.name and "linear" not in gwas_file.name:
-            continue
+    if ld_clump:
+        if base_path is None:
+            raise ValueError("base_path is required when ld_clump=True")
 
-        cur_snps = _gather_snps_to_keep_from_gwas_output(
-            gwas_file_path=gwas_file,
-            p_value_threshold=p_value_threshold,
+        logger.info(
+            "Running LD clumping with r²=%.3f, window=%dkb", ld_clump_r2, ld_clump_kb
         )
-        snps_to_keep.update(cur_snps)
+        clumped_snps_path = run_ld_clumping(
+            gwas_output_folder=gwas_output_folder,
+            base_path=base_path,
+            r2_threshold=ld_clump_r2,
+            kb_window=ld_clump_kb,
+        )
+
+        with open(clumped_snps_path, "r") as f:
+            clumped_snps = set(line.strip() for line in f if line.strip())
+
+        snps_to_keep = set()
+        for gwas_file in gwas_output_folder.iterdir():
+            if "logistic" not in gwas_file.name and "linear" not in gwas_file.name:
+                continue
+
+            cur_snps = _gather_snps_to_keep_from_gwas_output(
+                gwas_file_path=gwas_file,
+                p_value_threshold=p_value_threshold,
+            )
+            snps_to_keep.update(set(cur_snps) & clumped_snps)
+
+        logger.info(
+            "After LD clumping and p-value filtering: keeping %d SNPs "
+            "(from %d clumped SNPs)",
+            len(snps_to_keep),
+            len(clumped_snps),
+        )
+
+    else:
+        snps_to_keep = set()
+        for gwas_file in gwas_output_folder.iterdir():
+            if "logistic" not in gwas_file.name and "linear" not in gwas_file.name:
+                continue
+
+            cur_snps = _gather_snps_to_keep_from_gwas_output(
+                gwas_file_path=gwas_file,
+                p_value_threshold=p_value_threshold,
+            )
+            snps_to_keep.update(cur_snps)
+
+        logger.info("Keeping %d SNPs in total (no LD clumping).", len(snps_to_keep))
 
     snps_to_keep = list(snps_to_keep)
-    logger.info("Keeping %d SNPs in total.", len(snps_to_keep))
-
     with open(snps_to_keep_path, "w") as f:
         f.write("\n".join(snps_to_keep))
 
@@ -686,6 +846,9 @@ class GWASPreFilterConfig:
     only_gwas: bool
     p_value_threshold: float = 1e-04
     do_plot: bool = True
+    ld_clump: bool = False
+    ld_clump_r2: float = 0.1
+    ld_clump_kb: int = 250
 
 
 def get_gwas_parser() -> ArgumentParser:
@@ -758,6 +921,26 @@ def get_gwas_parser() -> ArgumentParser:
         help="Whether to plot GWAS results.",
     )
 
+    parser.add_argument(
+        "--ld_clump",
+        action="store_true",
+        help="Enable LD clumping to remove correlated SNPs.",
+    )
+
+    parser.add_argument(
+        "--ld_clump_r2",
+        type=float,
+        default=0.1,
+        help="LD clumping r² threshold (default: 0.1).",
+    )
+
+    parser.add_argument(
+        "--ld_clump_kb",
+        type=int,
+        default=250,
+        help="LD clumping window size in kb (default: 250).",
+    )
+
     return parser
 
 
@@ -772,6 +955,9 @@ def get_gwas_pre_filter_config(cl_args: argparse.Namespace) -> GWASPreFilterConf
         p_value_threshold=cl_args.gwas_p_value_threshold,
         only_gwas=cl_args.only_gwas,
         do_plot=cl_args.do_plot,
+        ld_clump=cl_args.ld_clump,
+        ld_clump_r2=cl_args.ld_clump_r2,
+        ld_clump_kb=cl_args.ld_clump_kb,
     )
 
 
