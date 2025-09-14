@@ -57,9 +57,14 @@ def _gather_best_val_performances(folder_with_runs: Path) -> pd.DataFrame:
 
 def _get_snp_fractions(feature_selection_output_folder: Path) -> pd.DataFrame:
     results = {}
-    for f in _iterdir_ignore_hidden(
-        path=feature_selection_output_folder / "snp_importance" / "snp_subsets"
-    ):
+    snp_subsets_folder = (
+        feature_selection_output_folder / "snp_importance" / "snp_subsets"
+    )
+
+    if not snp_subsets_folder.exists():
+        return pd.DataFrame(columns=["fraction"])
+
+    for f in _iterdir_ignore_hidden(path=snp_subsets_folder):
         if "_fraction" not in f.name:
             continue
 

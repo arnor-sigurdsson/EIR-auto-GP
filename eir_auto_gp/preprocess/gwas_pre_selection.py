@@ -930,8 +930,8 @@ def get_gwas_parser() -> ArgumentParser:
     parser.add_argument(
         "--ld_clump_r2",
         type=float,
-        default=0.1,
-        help="LD clumping r² threshold (default: 0.1).",
+        default=0.5,
+        help="LD clumping r² threshold (default: 0.5).",
     )
 
     parser.add_argument(
