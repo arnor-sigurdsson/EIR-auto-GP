@@ -14,13 +14,21 @@ from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
 
+SMALLEST_P_VAL = 1e-300
+
 
 def calculate_dynamic_bounds(
-    df_gwas: pd.DataFrame, gwas_p_value_threshold: Optional[float], min_n_snps: int
+    df_gwas: pd.DataFrame,
+    gwas_p_value_threshold: Optional[float],
+    min_n_snps: int,
 ) -> Tuple[float, float]:
     df_gwas_safe = df_gwas.copy()
+
     df_gwas_safe["GWAS P-VALUE"] = df_gwas_safe["GWAS P-VALUE"].replace(
-        0.0, np.finfo(float).tiny
+        0.0, SMALLEST_P_VAL
+    )
+    df_gwas_safe["GWAS P-VALUE"] = np.maximum(
+        df_gwas_safe["GWAS P-VALUE"], SMALLEST_P_VAL
     )
 
     if gwas_p_value_threshold:
@@ -36,6 +44,8 @@ def calculate_dynamic_bounds(
         min_log_p = np.log10(min_p_val_cutoff)
     else:
         min_log_p = np.log10(df_gwas_safe["GWAS P-VALUE"].min())
+
+    min_log_p = max(min_log_p, -8.0)
 
     if min_log_p >= max_log_p:
         logger.warning(
