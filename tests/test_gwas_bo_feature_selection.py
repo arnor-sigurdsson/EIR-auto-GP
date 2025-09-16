@@ -304,7 +304,10 @@ class TestOptimizationConvergence:
             "gather_fractions_and_performances"
         ) as mock_gather:
             mock_gather.return_value = pd.DataFrame(
-                {"fraction": [], "best_val_performance": []}
+                {
+                    "fraction": [0.01, 0.05, 0.1, 0.2, 0.3],
+                    "best_val_performance": [0.75, 0.82, 0.85, 0.83, 0.80],
+                }
             )
 
             with patch(
@@ -312,6 +315,7 @@ class TestOptimizationConvergence:
             ) as mock_opt_class:
                 mock_optimizer = Mock()
                 mock_optimizer.ask.return_value = [-5.0]
+                mock_optimizer.tell = Mock()
                 mock_opt_class.return_value = mock_optimizer
 
                 get_gwas_bo_auto_top_n(
