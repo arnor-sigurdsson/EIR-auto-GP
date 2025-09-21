@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional, Tuple
 
+import numpy as np
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists
 from skopt import Optimizer
@@ -12,6 +13,65 @@ from eir_auto_gp.single_task.modelling.feature_selection_utils import (
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
+
+
+def calculate_dynamic_bounds(
+    df_gwas: pd.DataFrame, gwas_p_value_threshold: Optional[float], min_n_snps: int
+) -> Tuple[float, float]:
+    df_gwas_safe = df_gwas.copy()
+    df_gwas_safe["GWAS P-VALUE"] = df_gwas_safe["GWAS P-VALUE"].replace(
+        0.0, np.finfo(float).tiny
+    )
+
+    if gwas_p_value_threshold:
+        max_log_p = np.log10(gwas_p_value_threshold)
+    else:
+        max_log_p = np.log10(df_gwas_safe["GWAS P-VALUE"].quantile(0.5))
+
+    n_snps = len(df_gwas_safe)
+    if n_snps > min_n_snps:
+        min_p_val_cutoff = df_gwas_safe.nsmallest(min_n_snps, "GWAS P-VALUE")[
+            "GWAS P-VALUE"
+        ].iloc[-1]
+        min_log_p = np.log10(min_p_val_cutoff)
+    else:
+        min_log_p = np.log10(df_gwas_safe["GWAS P-VALUE"].min())
+
+    if min_log_p >= max_log_p:
+        logger.warning(
+            "Invalid search space bounds: min_log_p=%.2f >= max_log_p=%.2f. "
+            "Using fallback range [-8.0, -3.0].",
+            min_log_p,
+            max_log_p,
+        )
+        return -8.0, -3.0
+
+    logger.debug(
+        "Dynamic bounds calculated: log10(p-value) in [%.2f, %.2f]",
+        min_log_p,
+        max_log_p,
+    )
+    return min_log_p, max_log_p
+
+
+def fraction_to_log_p_value(fraction: float, df_gwas: pd.DataFrame) -> float:
+    if fraction <= 0.0:
+        return -8.0
+
+    df_sorted = df_gwas.sort_values("GWAS P-VALUE")
+    df_sorted = df_sorted.copy()
+    df_sorted["GWAS P-VALUE"] = df_sorted["GWAS P-VALUE"].replace(
+        0.0, np.finfo(float).tiny
+    )
+
+    n_snps = len(df_sorted)
+    index = min(max(0, int(fraction * n_snps) - 1), n_snps - 1)
+
+    if index < 0:
+        return -8.0
+
+    p_value = df_sorted.iloc[index]["GWAS P-VALUE"]
+    return np.log10(p_value)
 
 
 def run_gwas_bo_feature_selection(
@@ -61,56 +121,73 @@ def get_gwas_bo_auto_top_n(
     gwas_p_value_threshold: Optional[float],
     min_n_snps: int = 16,
 ) -> Tuple[int, float]:
-    max_fraction = _compute_max_fraction(
-        df_gwas=df_gwas,
-        gwas_p_value_threshold=gwas_p_value_threshold,
-    )
-
-    manual_fractions, manual_p_values = _get_manual_gwas_bo_fractions(
-        df_gwas=df_gwas,
-        min_snps_cutoff=1,
-        max_fraction=max_fraction,
-    )
-
     n_snps = len(df_gwas)
 
-    if fold < len(manual_fractions):
-        next_fraction = manual_fractions[fold]
-        logger.info(
-            "Next manual fraction for GWAS+BO: %f (p-value: %.2e)",
-            next_fraction,
-            manual_p_values[fold],
-        )
-    else:
-        threshold_snps = min(min_n_snps, n_snps)
-        min_fraction = threshold_snps / n_snps
-        logger.debug("Setting minimum fraction to %.2e.", min_fraction)
+    min_log_p, max_log_p = calculate_dynamic_bounds(
+        df_gwas=df_gwas,
+        gwas_p_value_threshold=gwas_p_value_threshold,
+        min_n_snps=min_n_snps,
+    )
 
-        opt = Optimizer(
-            dimensions=[(min_fraction, max_fraction, "log-uniform")],
-            n_initial_points=len(manual_fractions),
-        )
-        df_history = gather_fractions_and_performances(
-            folder_with_runs=folder_with_runs,
-            feature_selection_output_folder=feature_selection_output_folder,
-        )
+    n_initial_points = max(5, min(10, int((max_log_p - min_log_p) * 2)))
 
-        for t in df_history.itertuples():
+    logger.info(
+        "Using unified BO for GWAS+BO with %d initial points in range [%.2f, %.2f]",
+        n_initial_points,
+        min_log_p,
+        max_log_p,
+    )
+
+    opt = Optimizer(
+        dimensions=[(min_log_p, max_log_p, "uniform")],
+        n_initial_points=n_initial_points,
+        initial_point_generator="sobol",
+    )
+
+    df_history = gather_fractions_and_performances(
+        folder_with_runs=folder_with_runs,
+        feature_selection_output_folder=feature_selection_output_folder,
+    )
+
+    points_loaded = 0
+    points_skipped = 0
+
+    for t in df_history.itertuples():
+        log_p_value = fraction_to_log_p_value(t.fraction, df_gwas)
+
+        if min_log_p <= log_p_value <= max_log_p:
             negated_performance = -t.best_val_performance
-            opt.tell([t.fraction], negated_performance)
+            opt.tell([log_p_value], negated_performance)
+            points_loaded += 1
+        else:
+            points_skipped += 1
 
-        next_fraction = opt.ask()[0]
-        logger.info("Next computed fraction for GWAS+BO: %f", next_fraction)
+    if points_skipped > 0:
+        logger.debug(
+            "Loaded %d historical points, skipped %d out-of-bounds points",
+            points_loaded,
+            points_skipped,
+        )
 
-    top_n = int(next_fraction * len(df_gwas))
+    next_log_p_value = opt.ask()[0]
+    next_p_value_threshold = 10**next_log_p_value
+
+    logger.info(
+        "Next BO suggestion for GWAS+BO: log10(p-value)=%.2f (p-value=%.2e)",
+        next_log_p_value,
+        next_p_value_threshold,
+    )
+
+    top_n = len(df_gwas[df_gwas["GWAS P-VALUE"] < next_p_value_threshold])
 
     if top_n < min_n_snps:
         if n_snps >= min_n_snps:
             top_n = min_n_snps
             logger.info(
-                "Computed top_n for GWAS+BO %d is too small (< %d). Setting to 16.",
-                min_n_snps,
+                "Computed top_n for GWAS+BO %d is too small (< %d). Setting to %d.",
                 top_n,
+                min_n_snps,
+                min_n_snps,
             )
         else:
             top_n = n_snps
@@ -121,67 +198,11 @@ def get_gwas_bo_auto_top_n(
                 top_n,
             )
 
-        next_fraction = top_n / n_snps
+    final_fraction = top_n / n_snps
 
-    return top_n, next_fraction
+    logger.info("Selected %d SNPs (fraction: %.4f)", top_n, final_fraction)
 
-
-def _compute_max_fraction(
-    df_gwas: pd.DataFrame,
-    gwas_p_value_threshold: Optional[float],
-) -> float:
-    if gwas_p_value_threshold is None:
-        return 1.0
-
-    df_subset = df_gwas[df_gwas["GWAS P-VALUE"] < gwas_p_value_threshold].copy()
-    n_snps = len(df_subset)
-    fraction = n_snps / len(df_gwas)
-
-    logger.info(
-        "Computed max fraction of SNPs with p-value < %f: %f for GWAS+BO.",
-        gwas_p_value_threshold,
-        fraction,
-    )
-
-    assert fraction > 0.0
-    return fraction
-
-
-def _get_manual_gwas_bo_fractions(
-    df_gwas: pd.DataFrame,
-    min_snps_cutoff: int,
-    max_fraction: float,
-) -> tuple[list[float], list[float]]:
-    p_values = []
-    fractions = []
-    for p in range(8, 2, -1):
-        p_value = 10**-p
-        df_subset = df_gwas[df_gwas["GWAS P-VALUE"] < p_value]
-        n_snps = len(df_subset)
-
-        if n_snps < min_snps_cutoff:
-            logger.info(
-                "Skipping p-value for GWAS+BO %f due to %d SNPs being too few (<%d).",
-                p_value,
-                n_snps,
-                min_snps_cutoff,
-            )
-            continue
-
-        fraction = n_snps / len(df_gwas)
-        if fraction > max_fraction:
-            logger.info(
-                "Skipping p-value for GWAS+BO %f due to %d SNPs being too many (> %f).",
-                p_value,
-                n_snps,
-                max_fraction,
-            )
-            continue
-
-        fractions.append(fraction)
-        p_values.append(p_value)
-
-    return fractions, p_values
+    return top_n, final_fraction
 
 
 def get_gwas_top_n_snp_list_df(df_gwas: pd.DataFrame, top_n_snps: int) -> pd.DataFrame:
