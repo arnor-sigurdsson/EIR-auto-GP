@@ -560,7 +560,7 @@ def _get_global_injections(
     n_workers = get_dataloader_workers(memory_dataset=memory_dataset, device=device)
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
     early_stopping_buffer = max(early_stopping_buffer, 1000)
-    sample_interval = min(2000, iter_per_epoch)
+    sample_interval = min(1000, iter_per_epoch)
     lr = _get_learning_rate(n_snps=n_snps)
 
     injections = {
@@ -991,7 +991,9 @@ def get_column_label_counts(
 
 
 def get_num_iter_per_epoch(
-    num_samples_per_epoch: int, batch_size: int, valid_size: int
+    num_samples_per_epoch: int,
+    batch_size: int,
+    valid_size: int,
 ) -> int:
     iter_per_epoch = (num_samples_per_epoch - valid_size) // batch_size
     iter_per_epoch = max(50, iter_per_epoch)
@@ -1017,15 +1019,11 @@ def _get_learning_rate(n_snps: int) -> float:
 
 
 def get_gln_kernel_parameters(n_snps: int) -> tuple[int, int]:
-    if n_snps < 1000:
+    if n_snps < 100_000:
         params = 16, -4
-    elif n_snps < 10000:
-        params = 16, -2
-    elif n_snps < 100000:
-        params = 16, 1
-    elif n_snps < 500000:
+    elif n_snps < 500_000:
         params = 16, 2
-    elif n_snps < 2000000:
+    elif n_snps < 2_000_000:
         params = 16, 4
     else:
         params = 16, 8
