@@ -14,13 +14,21 @@ from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
 
+SMALLEST_P_VAL = 1e-300
+
 
 def calculate_dynamic_bounds(
-    df_gwas: pd.DataFrame, gwas_p_value_threshold: Optional[float], min_n_snps: int
+    df_gwas: pd.DataFrame,
+    gwas_p_value_threshold: Optional[float],
+    min_n_snps: int,
 ) -> Tuple[float, float]:
     df_gwas_safe = df_gwas.copy()
+
     df_gwas_safe["GWAS P-VALUE"] = df_gwas_safe["GWAS P-VALUE"].replace(
-        0.0, np.finfo(float).tiny
+        0.0, SMALLEST_P_VAL
+    )
+    df_gwas_safe["GWAS P-VALUE"] = np.maximum(
+        df_gwas_safe["GWAS P-VALUE"], SMALLEST_P_VAL
     )
 
     if gwas_p_value_threshold:
@@ -36,6 +44,8 @@ def calculate_dynamic_bounds(
         min_log_p = np.log10(min_p_val_cutoff)
     else:
         min_log_p = np.log10(df_gwas_safe["GWAS P-VALUE"].min())
+
+    min_log_p = max(min_log_p, -8.0)
 
     if min_log_p >= max_log_p:
         logger.warning(
@@ -129,51 +139,57 @@ def get_gwas_bo_auto_top_n(
         min_n_snps=min_n_snps,
     )
 
-    n_initial_points = max(5, min(10, int((max_log_p - min_log_p) * 2)))
-
-    logger.info(
-        "Using unified BO for GWAS+BO with %d initial points in range [%.2f, %.2f]",
-        n_initial_points,
-        min_log_p,
-        max_log_p,
-    )
-
-    opt = Optimizer(
-        dimensions=[(min_log_p, max_log_p, "uniform")],
-        n_initial_points=n_initial_points,
-        initial_point_generator="sobol",
-    )
-
     df_history = gather_fractions_and_performances(
         folder_with_runs=folder_with_runs,
         feature_selection_output_folder=feature_selection_output_folder,
     )
 
-    points_loaded = 0
-    points_skipped = 0
+    num_priming_points = 4
+    manual_priming_points = np.linspace(min_log_p, max_log_p, num_priming_points)
 
-    for t in df_history.itertuples():
-        log_p_value = fraction_to_log_p_value(t.fraction, df_gwas)
+    if len(df_history) < num_priming_points:
+        next_log_p_value = manual_priming_points[len(df_history)]
+        logger.info(
+            "Suggesting manual priming point %d/%d: log10(p-value)=%.2f",
+            len(df_history) + 1,
+            num_priming_points,
+            next_log_p_value,
+        )
+    else:
+        logger.info("Manual priming complete. Using BO for next suggestion.")
+        n_initial_points = max(5, min(10, int((max_log_p - min_log_p) * 2)))
 
-        if min_log_p <= log_p_value <= max_log_p:
-            negated_performance = -t.best_val_performance
-            opt.tell([log_p_value], negated_performance)
-            points_loaded += 1
-        else:
-            points_skipped += 1
-
-    if points_skipped > 0:
-        logger.debug(
-            "Loaded %d historical points, skipped %d out-of-bounds points",
-            points_loaded,
-            points_skipped,
+        opt = Optimizer(
+            dimensions=[(min_log_p, max_log_p, "uniform")],
+            n_initial_points=n_initial_points,
+            initial_point_generator="sobol",
         )
 
-    next_log_p_value = opt.ask()[0]
+        points_loaded = 0
+        points_skipped = 0
+
+        for t in df_history.itertuples():
+            log_p_value = fraction_to_log_p_value(t.fraction, df_gwas)
+            if min_log_p <= log_p_value <= max_log_p:
+                negated_performance = -t.best_val_performance
+                opt.tell([log_p_value], negated_performance)
+                points_loaded += 1
+            else:
+                points_skipped += 1
+
+        if points_skipped > 0:
+            logger.debug(
+                "Loaded %d historical points, skipped %d out-of-bounds points",
+                points_loaded,
+                points_skipped,
+            )
+
+        next_log_p_value = opt.ask()[0]
+
     next_p_value_threshold = 10**next_log_p_value
 
     logger.info(
-        "Next BO suggestion for GWAS+BO: log10(p-value)=%.2f (p-value=%.2e)",
+        "Next suggestion: log10(p-value)=%.2f (p-value=%.2e)",
         next_log_p_value,
         next_p_value_threshold,
     )
@@ -199,9 +215,7 @@ def get_gwas_bo_auto_top_n(
             )
 
     final_fraction = top_n / n_snps
-
     logger.info("Selected %d SNPs (fraction: %.4f)", top_n, final_fraction)
-
     return top_n, final_fraction
 
 

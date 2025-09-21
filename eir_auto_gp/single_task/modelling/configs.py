@@ -83,12 +83,13 @@ def get_base_global_config() -> Dict[str, Any]:
         },
         "metrics": {
             "con_averaging_metrics": ["pcc", "r2"],
+            "cat_averaging_metrics": ["roc-auc-macro", "ap-macro"],
         },
     }
     return base
 
 
-def get_base_input_genotype_config() -> Dict[str, Any]:
+def get_base_input_genotype_config(use_tensor_broker: bool = False) -> Dict[str, Any]:
     base = {
         "input_info": {
             "input_source": "FILL",
@@ -116,7 +117,10 @@ def get_base_input_genotype_config() -> Dict[str, Any]:
                 "attention_inclusion_cutoff": 0,
             },
         },
-        "tensor_broker_config": {
+    }
+
+    if use_tensor_broker:
+        base["tensor_broker_config"] = {
             "message_configs": [
                 {
                     "name": "first_layer_tensor",
@@ -125,8 +129,7 @@ def get_base_input_genotype_config() -> Dict[str, Any]:
                     "layer_cache_target": "input",
                 }
             ]
-        },
-    }
+        }
 
     return base
 
@@ -154,32 +157,10 @@ def get_base_tabular_input_config() -> Dict[str, Any]:
     return base
 
 
-def get_base_fusion_config(model_size: str = "medium") -> Dict[str, Any]:
+def get_base_fusion_config(
+    model_size: str = "medium", use_tensor_broker: bool = False
+) -> Dict[str, Any]:
     fmsp = get_st_fusion_model_size_params(model_size)
-
-    message_configs = [
-        {
-            "name": "base_fusion_residual_block",
-            "layer_path": "fusion_modules.computed.fusion_modules.fusion.0.0",
-            "use_from_cache": ["first_layer_tensor"],
-            "projection_type": "lcl+mlp_residual",
-            "cache_fusion_type": "sum",
-        }
-    ]
-
-    num_layers_adjusted = fmsp.n_layers - 2 if fmsp.n_layers > 1 else 0
-    for layer in range(0, num_layers_adjusted + 1):
-        if layer % fmsp.tb_block_frequency == 0:
-            message_configs.append(
-                {
-                    "name": f"{layer}_fusion_residual_block",
-                    "layer_path": f"fusion_modules.computed.fusion_modules."
-                    f"fusion.1.{layer}",
-                    "use_from_cache": ["first_layer_tensor"],
-                    "projection_type": "lcl+mlp_residual",
-                    "cache_fusion_type": "sum",
-                }
-            )
 
     base = {
         "model_config": {
@@ -190,30 +171,44 @@ def get_base_fusion_config(model_size: str = "medium") -> Dict[str, Any]:
             "stochastic_depth_p": 0.1,
         },
         "model_type": "mlp-residual",
-        "tensor_broker_config": {"message_configs": message_configs},
     }
+
+    if use_tensor_broker:
+        message_configs = [
+            {
+                "name": "base_fusion_residual_block",
+                "layer_path": "fusion_modules.computed.fusion_modules.fusion.0.0",
+                "use_from_cache": ["first_layer_tensor"],
+                "projection_type": "lcl+mlp_residual",
+                "cache_fusion_type": "sum",
+            }
+        ]
+
+        num_layers_adjusted = fmsp.n_layers - 2 if fmsp.n_layers > 1 else 0
+        for layer in range(0, num_layers_adjusted + 1):
+            if layer % fmsp.tb_block_frequency == 0:
+                message_configs.append(
+                    {
+                        "name": f"{layer}_fusion_residual_block",
+                        "layer_path": f"fusion_modules.computed.fusion_modules."
+                        f"fusion.1.{layer}",
+                        "use_from_cache": ["first_layer_tensor"],
+                        "projection_type": "lcl+mlp_residual",
+                        "cache_fusion_type": "sum",
+                    }
+                )
+
+        base["tensor_broker_config"] = {"message_configs": message_configs}
+
     return base
 
 
 def get_base_output_config(
-    model_size: str = "medium", target_columns: list[str] = None
+    model_size: str = "medium",
+    target_columns: list[str] = None,
+    use_tensor_broker: bool = False,
 ) -> Dict[str, Any]:
     ohsp = get_st_output_head_size_params(model_size)
-
-    message_configs = []
-
-    if target_columns:
-        for target_column in target_columns:
-            message_configs.append(
-                {
-                    "name": f"final_layer_{target_column}",
-                    "layer_path": f"output_modules.eir_auto_gp."
-                    f"multi_task_branches.{target_column}.2.final",
-                    "use_from_cache": ["first_layer_tensor"],
-                    "projection_type": "lcl+mlp_residual",
-                    "cache_fusion_type": "sum",
-                }
-            )
 
     base = {
         "output_info": {
@@ -238,7 +233,19 @@ def get_base_output_config(
         },
     }
 
-    if message_configs:
+    if use_tensor_broker and target_columns:
+        message_configs = []
+        for target_column in target_columns:
+            message_configs.append(
+                {
+                    "name": f"final_layer_{target_column}",
+                    "layer_path": f"output_modules.eir_auto_gp."
+                    f"multi_task_branches.{target_column}.2.final",
+                    "use_from_cache": ["first_layer_tensor"],
+                    "projection_type": "lcl+mlp_residual",
+                    "cache_fusion_type": "sum",
+                }
+            )
         base["tensor_broker_config"] = {"message_configs": message_configs}
 
     return base
@@ -254,14 +261,22 @@ class AggregateConfig:
 
 
 def get_aggregate_config(
-    model_size: str = "medium", target_columns: list[str] = None
+    model_size: str = "medium",
+    target_columns: list[str] = None,
+    use_tensor_broker: bool = False,
 ) -> AggregateConfig:
     global_config = get_base_global_config()
-    input_genotype_config = get_base_input_genotype_config()
+    input_genotype_config = get_base_input_genotype_config(
+        use_tensor_broker=use_tensor_broker
+    )
     input_tabular_config = get_base_tabular_input_config()
-    fusion_config = get_base_fusion_config(model_size=model_size)
+    fusion_config = get_base_fusion_config(
+        model_size=model_size, use_tensor_broker=use_tensor_broker
+    )
     output_config = get_base_output_config(
-        model_size=model_size, target_columns=target_columns
+        model_size=model_size,
+        target_columns=target_columns,
+        use_tensor_broker=use_tensor_broker,
     )
 
     return AggregateConfig(
