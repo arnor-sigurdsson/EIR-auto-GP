@@ -8,11 +8,13 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import torch
 import yaml
 from aislib.misc_utils import get_logger
 from eir.train_utils.train_handlers import _iterdir_ignore_hidden
+from scipy.special import softmax
 
 from eir_auto_gp.multi_task.modelling.run_modelling import (
     get_testing_string_from_config_folder,
@@ -187,25 +189,7 @@ def compute_continuous_ensemble(
 ) -> pd.DataFrame:
     results = pd.DataFrame()
     results[f"{target} Ensemble"] = df[target_columns].mean(axis=1)
-
-    bootstrap_lower_ci, bootstrap_upper_ci = [], []
-    for row in df[target_columns].to_numpy():
-        lower_ci, upper_ci = sample_bootstrap_ci(
-            data=row,
-            n_bootstraps=1000,
-            ci=[2.5, 97.5],
-        )
-        bootstrap_lower_ci.append(lower_ci)
-        bootstrap_upper_ci.append(upper_ci)
-
-    results[f"{target} 2.5% CI"] = bootstrap_lower_ci
-    results[f"{target} 97.5% CI"] = bootstrap_upper_ci
     return results
-
-
-import numpy as np
-import pandas as pd
-from scipy.special import softmax
 
 
 def compute_categorical_ensemble(
@@ -239,11 +223,6 @@ def compute_categorical_ensemble(
     for i, class_name in enumerate(classes):
         results[f"{target} Ensemble Prob {class_name}"] = softmax_probs[:, i]
 
-    epsilon = 1e-10
-    entropies = -np.sum(softmax_probs * np.log(softmax_probs + epsilon), axis=1)
-    max_entropy = np.log(len(classes))
-    results[f"{target} Uncertainty"] = entropies / max_entropy
-
     results[f"{target} Predicted Class"] = [
         classes[i] for i in np.argmax(a=softmax_probs, axis=1)
     ]
@@ -256,7 +235,6 @@ def compute_ensemble_and_uncertainty(
     target: str,
     data_type: str,
 ) -> pd.DataFrame:
-
     results = pd.DataFrame({"ID": df["ID"]})
     target_columns = [col for col in df.columns if col.startswith(target)]
     results = pd.concat([results, df[target_columns]], axis=1)
@@ -278,17 +256,6 @@ def compute_ensemble_and_uncertainty(
 
     results = pd.concat([results, ensemble_results], axis=1)
     return results
-
-
-def sample_bootstrap_ci(data, n_bootstraps=1000, ci=(2.5, 97.5)):
-    bootstrap_samples = np.random.choice(
-        data,
-        size=(n_bootstraps, data.shape[0]),
-        replace=True,
-    )
-    bootstrap_means = np.mean(bootstrap_samples, axis=1)
-    lower_ci, upper_ci = np.percentile(bootstrap_means, ci)
-    return lower_ci, upper_ci
 
 
 def run_predict(
