@@ -122,7 +122,13 @@ class TestSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"],
         )
 
-        base_aggregate_config = get_aggregate_config()
+        base_aggregate_config = get_aggregate_config(
+            model_size=self.modelling_config["model_size"],
+            target_columns=(
+                list(self.modelling_config["output_cat_columns"])
+                + list(self.modelling_config["output_con_columns"])
+            ),
+        )
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
             build_configs(
@@ -162,6 +168,7 @@ def get_testing_string_from_config_folder(
     base_string = "eirpredict"
     globals_string = " --global_configs "
     inputs_string = " --input_configs "
+    fusion_string = " --fusion_configs "
     output_string = " --output_configs "
 
     for file in config_folder.iterdir():
@@ -170,10 +177,14 @@ def get_testing_string_from_config_folder(
                 globals_string += " " + f"{str(file)}" + " "
             elif "input" in file.stem:
                 inputs_string += " " + f"{str(file)}" + " "
+            elif "fusion" in file.stem:
+                fusion_string += " " + f"{str(file)}" + " "
             elif "output" in file.stem:
                 output_string += " " + f"{str(file)}" + " "
 
-    final_string = base_string + globals_string + inputs_string + output_string
+    final_string = (
+        base_string + globals_string + inputs_string + fusion_string + output_string
+    )
 
     saved_models = list((train_run_folder / "saved_models").iterdir())
     assert len(saved_models) == 1, "Expected only one saved model."
@@ -230,7 +241,13 @@ class TrainSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"],
         )
 
-        base_aggregate_config = get_aggregate_config()
+        base_aggregate_config = get_aggregate_config(
+            model_size=self.modelling_config["model_size"],
+            target_columns=(
+                list(self.modelling_config["output_cat_columns"])
+                + list(self.modelling_config["output_con_columns"])
+            ),
+        )
         with TemporaryDirectory() as temp_dir:
             temp_config_folder = Path(temp_dir)
             build_configs(
@@ -481,27 +498,28 @@ def build_configs(
         else:
             continue
 
-        validate_complete_config(config_element=config)
+        validate_complete_config(config_element=config, path=config_name)
         with open(output_folder / f"{config_name}.yaml", "w") as f:
             yaml.dump(config, f)
 
 
-def validate_complete_config(config_element: dict | list | str) -> None:
+def validate_complete_config(config_element: dict | list | str, path: str = "") -> None:
     match config_element:
         case dict(config_element):
             for key, value in config_element.items():
-                validate_complete_config(config_element=value)
+                validate_complete_config(config_element=value, path=f"{path}.{key}")
         case list(config_element):
-            for value in config_element:
-                validate_complete_config(config_element=value)
+            for i, value in enumerate(config_element):
+                validate_complete_config(config_element=value, path=f"{path}[{i}]")
         case str(config_element):
-            assert config_element != "FILL"
+            assert config_element != "FILL", f"Found 'FILL' at {path}"
 
 
 def get_training_string_from_config_folder(config_folder: Path) -> str:
     base_string = "eirtrain"
     globals_string = " --global_configs "
     inputs_string = " --input_configs "
+    fusion_string = " --fusion_configs "
     output_string = " --output_configs "
 
     for file in config_folder.iterdir():
@@ -510,10 +528,14 @@ def get_training_string_from_config_folder(config_folder: Path) -> str:
                 globals_string += " " + f"{str(file)}" + " "
             elif "input" in file.stem:
                 inputs_string += " " + f"{str(file)}" + " "
+            elif "fusion" in file.stem:
+                fusion_string += " " + f"{str(file)}" + " "
             elif "output" in file.stem:
                 output_string += " " + f"{str(file)}" + " "
 
-    final_string = base_string + globals_string + inputs_string + output_string
+    final_string = (
+        base_string + globals_string + inputs_string + fusion_string + output_string
+    )
 
     return final_string
 
@@ -539,6 +561,7 @@ def _get_global_injections(
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
     early_stopping_buffer = max(early_stopping_buffer, 1000)
     sample_interval = min(2000, iter_per_epoch)
+    lr = _get_learning_rate(n_snps=n_snps)
 
     injections = {
         "basic_experiment": {
@@ -549,6 +572,9 @@ def _get_global_injections(
             "manual_valid_ids_file": manual_valid_ids_file,
             "dataloader_workers": n_workers,
             "memory_dataset": memory_dataset,
+        },
+        "optimization": {
+            "lr": lr,
         },
         "evaluation_checkpoint": {
             "sample_interval": sample_interval,
@@ -714,11 +740,14 @@ def get_dataloader_workers(memory_dataset: bool, device: str) -> int:
 def _get_genotype_injections(
     input_source: str,
     genotype_use_snps_file: Optional[str],
+    n_snps: int,
 ) -> Dict[str, Any]:
     base_snp_path = (
         Path(input_source).parent.parent / "processed/parsed_files/data_final.bim"
     )
     assert base_snp_path.exists(), f"SNP file not found at {base_snp_path}"
+
+    kernel_width, first_kernel_expansion = get_gln_kernel_parameters(n_snps=n_snps)
 
     injections = {
         "input_info": {
@@ -726,6 +755,12 @@ def _get_genotype_injections(
         },
         "input_type_info": {
             "snp_file": str(base_snp_path),
+        },
+        "model_config": {
+            "model_init_config": {
+                "kernel_width": kernel_width,
+                "first_kernel_expansion": first_kernel_expansion,
+            }
         },
     }
 
@@ -750,9 +785,25 @@ def _get_tabular_injections(
     return injections
 
 
+def is_binary_column(df: pl.DataFrame, col: str) -> bool:
+    n_unique = df.select(pl.col(col)).filter(pl.col(col).is_not_null()).unique().height
+    return n_unique <= 2
+
+
 def _get_output_injections(
     label_file_path: str, output_cat_columns: list[str], output_con_columns: list[str]
 ) -> Dict[str, Any]:
+    cat_loss = "CrossEntropyLoss"
+    if output_cat_columns:
+        df = pl.scan_csv(source=label_file_path).select(output_cat_columns).collect()
+        all_binary = all(is_binary_column(df=df, col=col) for col in output_cat_columns)
+        if all_binary:
+            cat_loss = "BCEWithLogitsLoss"
+            logger.info(
+                "All categorical outputs are binary. "
+                "Setting loss to BCEWithLogitsLoss."
+            )
+
     injections = {
         "output_info": {
             "output_source": label_file_path,
@@ -760,6 +811,7 @@ def _get_output_injections(
         "output_type_info": {
             "target_cat_columns": output_cat_columns,
             "target_con_columns": output_con_columns,
+            "cat_loss_name": cat_loss,
         },
     }
 
@@ -806,7 +858,9 @@ def _get_all_dynamic_injections(
         "input_genotype_config": _get_genotype_injections(
             input_source=mip.genotype_input_source,
             genotype_use_snps_file=mip.genotype_subset_snps_file,
+            n_snps=n_snps,
         ),
+        "fusion_config": {},
         "output_config": _get_output_injections(
             label_file_path=mip.label_file_path,
             output_cat_columns=list(mip.output_cat_columns),
@@ -942,6 +996,47 @@ def get_num_iter_per_epoch(
     iter_per_epoch = (num_samples_per_epoch - valid_size) // batch_size
     iter_per_epoch = max(50, iter_per_epoch)
     return iter_per_epoch
+
+
+def _get_learning_rate(n_snps: int) -> float:
+    if n_snps < 1_000:
+        lr = 1e-03
+    elif n_snps < 10_000:
+        lr = 5e-04
+    elif n_snps < 100_000:
+        lr = 2e-04
+    elif n_snps < 500_000:
+        lr = 1e-04
+    elif n_snps < 2_000_000:
+        lr = 5e-05
+    else:
+        lr = 1e-05
+
+    logger.info("Setting learning rate to %f based on %d SNPs.", lr, n_snps)
+    return lr
+
+
+def get_gln_kernel_parameters(n_snps: int) -> tuple[int, int]:
+    if n_snps < 1000:
+        params = 16, -4
+    elif n_snps < 10000:
+        params = 16, -2
+    elif n_snps < 100000:
+        params = 16, 1
+    elif n_snps < 500000:
+        params = 16, 2
+    elif n_snps < 2000000:
+        params = 16, 4
+    else:
+        params = 16, 8
+
+    logger.info(
+        "Setting kernel width to %d and first kernel expansion to %d based on %d SNPs.",
+        params[0],
+        params[1],
+        n_snps,
+    )
+    return params
 
 
 if __name__ == "__main__":
