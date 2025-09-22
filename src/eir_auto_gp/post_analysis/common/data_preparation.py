@@ -6,10 +6,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from aislib.misc_utils import get_logger
-from eir.data_load.data_source_modules.deeplake_ops import (
-    is_deeplake_dataset,
-    load_deeplake_dataset,
-)
 from eir.setup.input_setup_modules import setup_omics as eir_setup_omics
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
@@ -309,18 +305,11 @@ def load_genotype_samples_into_df(
 
 
 def _get_genotype_id_iterator(genotype_input_path: Path) -> Generator:
-    if is_deeplake_dataset(data_source=str(genotype_input_path)):
-        deeplake_ds = load_deeplake_dataset(data_source=str(genotype_input_path))
-        for deeplake_sample in deeplake_ds:
-            sample_id = deeplake_sample["ID"]
-            sample_genotype = deeplake_sample["genotype"]
-            yield sample_id, sample_genotype
-    else:
-        for f in genotype_input_path.iterdir():
-            sample_id = f.stem
-            sample_genotype = np.load(f)
+    for f in genotype_input_path.iterdir():
+        sample_id = f.stem
+        sample_genotype = np.load(f)
 
-            yield sample_id, sample_genotype
+        yield sample_id, sample_genotype
 
 
 def load_tabular_data_into_df(

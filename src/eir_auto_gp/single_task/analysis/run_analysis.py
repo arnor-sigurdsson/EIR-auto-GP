@@ -3,7 +3,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
 import luigi
 import matplotlib.pyplot as plt
@@ -327,8 +327,16 @@ def compute_metrics(
 ) -> dict[str, float | str]:
     cur_metrics = metrics[target_type]
 
-    metrics = {}
-    for metric_record in cur_metrics:
+    if not hasattr(cur_metrics, "__iter__"):
+        raise TypeError(f"Metrics for target_type '{target_type}' is not iterable")
+
+    metrics_dict = {}
+    metric_records = cast(Any, cur_metrics)
+    for metric_record in metric_records:
+        if not (hasattr(metric_record, "function") and hasattr(metric_record, "name")):
+            raise TypeError(
+                "Metric record missing required 'function' or 'name' attribute"
+            )
         cur_labels = df["True Label"].values
         output_columns = [
             col
@@ -347,10 +355,10 @@ def compute_metrics(
         )
 
         cur_metric_name = metric_record.name.upper()
-        metrics[cur_metric_name] = cur_metric_value
+        metrics_dict[cur_metric_name] = cur_metric_value
 
-    metrics["Fold"] = "Ensemble"
-    return metrics
+    metrics_dict["Fold"] = "Ensemble"
+    return metrics_dict
 
 
 def get_target_type(

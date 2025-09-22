@@ -43,12 +43,6 @@ class Config(luigi.Task, RenameOnFailureMixin):
         return self.output_target(self.file_name)
 
 
-def _get_plink_inputs_from_folder(folder_path: Path) -> list[Path]:
-    files = [i.with_suffix("") for i in folder_path.iterdir() if i.suffix == ".bed"]
-
-    return files
-
-
 class ExternalRawData(luigi.ExternalTask):
     raw_data_path = luigi.Parameter()
 
@@ -70,7 +64,7 @@ class ExternalRawData(luigi.ExternalTask):
 def get_encoded_snp_stream(
     bed_path: Path,
     chunk_size: int,
-    output_format: Literal["disk", "deeplake"],
+    output_format: Literal["disk"],
 ) -> Generator[tuple[str, np.ndarray]]:
     chunk_generator = get_sample_generator_from_bed(
         bed_path=bed_path,

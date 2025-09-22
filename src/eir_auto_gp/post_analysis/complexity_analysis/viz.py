@@ -2,10 +2,8 @@ from pathlib import Path
 
 import pandas as pd
 import seaborn as sns
-import xgboost
 from aislib.misc_utils import ensure_path_exists
 from matplotlib import pyplot as plt
-from sklearn.linear_model import ElasticNetCV, LogisticRegressionCV
 
 
 def assign_complexity(row):
@@ -95,27 +93,3 @@ def plot_performance(
     plt.tight_layout()
     ensure_path_exists(path=output_path, is_folder=True)
     plt.savefig(output_path / f"{metric}_performance.pdf")
-
-
-def plot_xgboost_feature_importance(
-    model: xgboost.Booster, output_folder: Path
-) -> None:
-    if hasattr(xgboost, "plot_importance") and callable(xgboost.plot_importance):
-        xgboost.plot_importance(model)
-    plt.title("Feature Importance")
-    plt.tight_layout()
-    plt.savefig(output_folder / "xgboost_feature_importance.pdf")
-
-
-def plot_linear_coefficients(
-    model: LogisticRegressionCV | ElasticNetCV,
-    feature_names: list,
-    output_folder: Path,
-) -> None:
-    coefficients = pd.Series(model.coef_, index=feature_names)
-    sns.barplot(x=coefficients.values, y=coefficients.index)
-    plt.xlabel("Coefficients")
-    plt.ylabel("Features")
-    plt.title("Feature Importance")
-    plt.tight_layout()
-    plt.savefig(output_folder / "linear_coefficients.pdf")

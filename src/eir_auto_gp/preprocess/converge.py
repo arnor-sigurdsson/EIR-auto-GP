@@ -1,19 +1,14 @@
 import math
 import os
-import warnings
 from collections.abc import Generator, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-import numpy as np
-
-warnings.filterwarnings("ignore", message=".*newer version of deeplake.*")
-
-import deeplake
 import eir.data_load.label_setup
 import luigi
+import numpy as np
 import pandas as pd
 import polars as pl
 from aislib.misc_utils import ensure_path_exists
@@ -119,16 +114,7 @@ class CommonSplitIntoTestSet(luigi.Task):
             output_format=self.data_storage_format,
         )
 
-        if self.data_storage_format == "deeplake":
-            build_deeplake_train_and_test_ds_from_stream(
-                train_ids=train_and_valid_ids,
-                test_ids=test_ids,
-                destination=output_root / "genotype" / "final",
-                source_stream=one_hot_stream,
-                commit_frequency=int(self.genotype_processing_chunk_size),
-                chunk_size=int(self.genotype_processing_chunk_size),
-            )
-        elif self.data_storage_format == "disk":
+        if self.data_storage_format == "disk":
             _build_disk_array_folders_from_stream(
                 train_ids=train_and_valid_ids,
                 test_ids=test_ids,
@@ -152,15 +138,6 @@ class CommonSplitIntoTestSet(luigi.Task):
             outputs[f"{split}_tabular"] = cur_tabular_target
 
         return outputs
-
-
-def get_genotype_path(task_input_path: str, data_storage_format: str) -> Path:
-    if data_storage_format == "disk":
-        return Path(task_input_path)
-    elif data_storage_format == "deeplake":
-        return Path(task_input_path) / "genotype"
-    else:
-        raise ValueError(f"Unknown output format: {data_storage_format}")
 
 
 def _id_setup_wrapper(
@@ -388,110 +365,6 @@ def _split_ids(
     assert len(train_ids_set.intersection(test_ids_set)) == 0
 
     return train_ids, test_or_valid_ids
-
-
-def build_deeplake_train_and_test_ds_from_stream(
-    train_ids: Sequence[str],
-    test_ids: Sequence[str],
-    source_stream: Generator[tuple[str, np.ndarray]],
-    destination: Path,
-    chunk_size: int,
-    commit_frequency: int,
-) -> None:
-    train_ids_set = set(train_ids)
-    test_ids_set = set(test_ids)
-    assert len(train_ids_set.intersection(test_ids_set)) == 0
-
-    train_path = destination / "train"
-    test_path = destination / "test"
-
-    if deeplake.exists(str(train_path)) and deeplake.exists(str(test_path)):
-        return
-
-    ensure_path_exists(path=train_path, is_folder=True)
-    ensure_path_exists(path=test_path, is_folder=True)
-
-    ds_train = deeplake.create(str(train_path))
-    ds_test = deeplake.create(str(test_path))
-
-    try:
-        first_id, first_array = next(source_stream)
-        array_shape = list(first_array.shape)
-    except StopIteration:
-        raise ValueError("Source stream is empty")
-
-    for ds in (ds_train, ds_test):
-        ds.add_column("ID", dtype=deeplake.types.Text())
-        array_schema = deeplake.types.Array(dtype="bool", shape=array_shape)
-        ds.add_column("genotype", dtype=array_schema)
-        ds.commit("Created schema")
-
-    batch_size = chunk_size // 2
-    train_batch = {"ID": [], "genotype": []}
-    test_batch = {"ID": [], "genotype": []}
-
-    if first_id in train_ids_set:
-        train_batch["ID"].append(first_id)
-        train_batch["genotype"].append(first_array)
-    elif first_id in test_ids_set:
-        test_batch["ID"].append(first_id)
-        test_batch["genotype"].append(first_array)
-
-    total_processed = 1
-    skipped_samples = 0
-
-    try:
-        for id_, array in source_stream:
-            if id_ in train_ids_set:
-                train_batch["ID"].append(id_)
-                train_batch["genotype"].append(array)
-
-                if len(train_batch["ID"]) >= batch_size:
-                    ds_train.append(train_batch)
-                    train_batch = {"ID": [], "genotype": []}
-
-            elif id_ in test_ids_set:
-                test_batch["ID"].append(id_)
-                test_batch["genotype"].append(array)
-
-                if len(test_batch["ID"]) >= batch_size:
-                    ds_test.append(test_batch)
-                    test_batch = {"ID": [], "genotype": []}
-            else:
-                skipped_samples += 1
-
-            total_processed += 1
-
-            if total_processed % commit_frequency == 0:
-                if train_batch["ID"]:
-                    ds_train.append(train_batch)
-                    train_batch = {"ID": [], "genotype": []}
-                if test_batch["ID"]:
-                    ds_test.append(test_batch)
-                    test_batch = {"ID": [], "genotype": []}
-
-                ds_train.commit(f"Processed {total_processed} samples")
-                ds_test.commit(f"Processed {total_processed} samples")
-
-                logger.info(
-                    "Iterated over %d samples while splitting into train and test. "
-                    "Skipped %d samples.",
-                    total_processed,
-                    skipped_samples,
-                )
-
-        if train_batch["ID"]:
-            ds_train.append(train_batch)
-        if test_batch["ID"]:
-            ds_test.append(test_batch)
-
-        ds_train.commit(f"Completed processing {total_processed} samples")
-        ds_test.commit(f"Completed processing {total_processed} samples")
-
-    except Exception as e:
-        ds_train.rollback()
-        ds_test.rollback()
-        raise RuntimeError(f"Error splitting dataset: {str(e)}") from e
 
 
 @dataclass

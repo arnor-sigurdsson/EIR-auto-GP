@@ -613,16 +613,6 @@ def gather_all_ids(fam_file_path: str | Path, label_file_path: str | Path) -> li
     return list(common_ids)
 
 
-def _get_train_ids_file(filter_config: "GWASPreFilterConfig") -> Path:
-    if filter_config.pre_split_folder:
-        train_ids_file = Path(filter_config.pre_split_folder, "train_ids.txt")
-    else:
-        train_ids_file = Path(filter_config.output_path, "ids/train_ids.txt")
-    assert train_ids_file.exists(), f"Train ids file {train_ids_file} does not exist."
-
-    return train_ids_file
-
-
 def prepare_gwas_label_file(
     label_file_path: str | Path,
     fam_file_path: str | Path,

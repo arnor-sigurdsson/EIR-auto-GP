@@ -1,4 +1,3 @@
-import shutil
 from pathlib import Path
 
 import pandas as pd
@@ -184,12 +183,3 @@ def read_bim_and_cast_dtypes(bim_file_path: Path | str) -> pd.DataFrame:
     df_bim = df_bim.astype(dtypes)
 
     return df_bim
-
-
-def validate_executable_exists_in_path(executable: str) -> None:
-    if shutil.which(executable) is None:
-        msg = (
-            f"{executable} is not installed or not in the path. "
-            f"Please install {executable} and try again."
-        )
-        raise ValueError(msg)

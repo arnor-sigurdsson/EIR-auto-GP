@@ -61,9 +61,7 @@ def test_post_analysis_classification(
 
     simulated_path = simulate_genetic_data_to_bed(10000, 12, "binary")
 
-    data_storage_format = "deeplake"
-    if feature_selection in ("gwas->dl", "gwas+bo"):
-        data_storage_format = "disk"
+    data_storage_format = "disk"
 
     command = _get_test_modelling_cl_command(
         folder_path=simulated_path,
@@ -129,9 +127,7 @@ def test_post_analysis_regression(
 
     simulated_path = simulate_genetic_data_to_bed(10000, 12, "continuous")
 
-    data_storage_format = "deeplake"
-    if feature_selection in ("gwas->dl", "gwas+bo"):
-        data_storage_format = "disk"
+    data_storage_format = "disk"
 
     command = _get_test_modelling_cl_command(
         folder_path=simulated_path,

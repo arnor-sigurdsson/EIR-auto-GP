@@ -27,7 +27,7 @@ def _get_test_cl_commands() -> list[str]:
 
     commands = []
 
-    for data_storage_format in ("disk", "deeplake"):
+    for data_storage_format in ("disk",):
         data_fmt_str = f"--data_storage_format {data_storage_format} "
         cur_command = base + data_fmt_str
         commands.append(cur_command)

@@ -381,10 +381,6 @@ def get_projected_snp_stream(
         yield sample_id, projected_array
 
 
-def get_prepared_folder_path(output_folder: str) -> Path:
-    return Path(output_folder, "processed/full_inds/full_chrs/encoded_outputs")
-
-
 def run_prepare_wrapper(cl_args: argparse.Namespace) -> None:
     genotype_data_path = Path(cl_args.genotype_data_path)
     reference_bim_path = Path(cl_args.reference_bim_path)

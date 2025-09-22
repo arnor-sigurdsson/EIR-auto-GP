@@ -61,7 +61,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--data_storage_format",
         type=str,
-        choices=["disk", "deeplake"],
+        choices=["disk"],
         default="disk",
     )
 
