@@ -316,8 +316,8 @@ def build_injection_params(
         feature_selection_config=feature_selection_config,
         fold=fold,
     )
-    weighted_sampling_columns = (
-        get_weighted_sampling_columns(modelling_config=modelling_config) or []
+    weighted_sampling_columns = get_weighted_sampling_columns(
+        modelling_config=modelling_config
     )
     gwas_manual_subset_file = get_gwas_manual_subset_file(
         task=task,
