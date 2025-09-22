@@ -60,7 +60,6 @@ def get_base_input_genotype_config() -> dict[str, Any]:
             "input_source": "FILL",
             "input_name": "genotype",
             "input_type": "omics",
-            "input_inner_key": "genotype",
         },
         "input_type_info": {
             "mixing_subtype": "mixup",

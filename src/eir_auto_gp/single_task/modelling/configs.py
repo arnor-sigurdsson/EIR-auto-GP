@@ -95,7 +95,6 @@ def get_base_input_genotype_config(use_tensor_broker: bool = False) -> dict[str,
             "input_source": "FILL",
             "input_name": "genotype",
             "input_type": "omics",
-            "input_inner_key": "genotype",
         },
         "input_type_info": {
             "mixing_subtype": "cutmix-block",
