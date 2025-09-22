@@ -298,7 +298,7 @@ class SingleTaskModelInjectionParams:
     output_cat_columns: list[str]
     output_con_columns: list[str]
     compute_attributions: bool
-    weighted_sampling_columns: list[str]
+    weighted_sampling_columns: list[str] | None
 
 
 def build_injection_params(
@@ -556,7 +556,7 @@ def _get_global_injections(
     n_samples: int,
     compute_attributions: bool,
     iter_per_epoch: int,
-    weighted_sampling_columns: list[str],
+    weighted_sampling_columns: list[str] | None,
 ) -> dict[str, Any]:
     mixing_candidates = [0.0]
     cur_mixing = mixing_candidates[fold % len(mixing_candidates)]

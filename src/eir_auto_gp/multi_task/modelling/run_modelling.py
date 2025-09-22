@@ -308,7 +308,7 @@ class MultiTaskModelInjectionParams:
     input_con_columns: list[str]
     output_cat_columns: list[str]
     output_con_columns: list[str]
-    weighted_sampling_columns: list[str]
+    weighted_sampling_columns: list[str] | None
     modelling_data_format: str
     output_configs: list[dict[str, Any]]
 
@@ -321,8 +321,8 @@ def build_injection_params(
     modelling_config: dict[str, Any],
     output_configs: list[dict[str, Any]],
 ) -> MultiTaskModelInjectionParams:
-    weighted_sampling_columns = (
-        get_weighted_sampling_columns(modelling_config=modelling_config) or []
+    weighted_sampling_columns = get_weighted_sampling_columns(
+        modelling_config=modelling_config
     )
 
     base_output_folder = modelling_config["modelling_output_folder"]
@@ -505,7 +505,7 @@ def _get_global_injections(
     n_snps: int,
     n_samples: int,
     iter_per_epoch: int,
-    weighted_sampling_columns: list[str],
+    weighted_sampling_columns: list[str] | None,
     modelling_data_format: str,
 ) -> dict[str, Any]:
     mixing_candidates = [0.0]
