@@ -1,53 +1,52 @@
-[tool.poetry]
+[project]
 name = "EIR-auto-GP"
 version = "0.9.0"
 description = ""
-authors = ["Arnor Sigurdsson <arnor-sigurdsson@users.noreply.github.com>"]
+authors = [{name = "Arnor Sigurdsson", email = "arnor-sigurdsson@users.noreply.github.com"}]
 readme = "README.md"
-packages = [{include = "eir_auto_gp"}]
+requires-python = ">=3.13"
+dependencies = [
+    "eir-dl==0.13.11",
+    "plink-pipelines==0.7.0",
+    "scikit-optimize>=0.9.0",
+    "qmplot>=0.3.2",
+    "pandas>=2.2.2",
+    "xgboost>=2.0.3",
+    "statsmodels>=0.14.0",
+    "lxml>=5.2.2",
+    "nxviz>=0.7.4",
+    "networkx>=3.3",
+    "psutil>=5.9.8",
+    "rich>=13.7.1",
+    "deeplake==4.2.6",
+    "aislib>=0.3.0",
+    "polars>=1.15.0",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.12,<3.12.10"
-eir-dl = "0.13.11"
-plink-pipelines = "0.7.0"
-scikit-optimize = "^0.9.0"
-qmplot = "^0.3.2"
-pandas = "^2.2.2"
-xgboost = "^2.0.3"
-statsmodels = "^0.14.0"
-lxml = "^5.2.2"
-nxviz = "^0.7.4"
-networkx = "^3.3"
-psutil = "^5.9.8"
-rich = "^13.7.1"
-deeplake = "4.2.6"
-aislib = "^0.3.0"
-polars = "^1.15.0"
-
-[tool.poetry.group.dev.dependencies]
-black = "^24.4.2"
-jupyter = "^1.0.0"
-pre-commit = "^3.7.1"
-tox = "^4.15.1"
-flake8 = "^7.0.0"
-pytest = "^8.2.2"
-pytest-cov = "^5.0.0"
-sphinx = "^7.3.7"
-sphinx-copybutton = "^0.5.1"
-sphinx-rtd-theme = "^2.0.0"
-pdf2image = "^1.17.0"
-gdown = "^5.2.0"
-coverage = "^7.5.3"
-isort = "^5.13.2"
-pytest-split = "^0.9.0"
-deptry = "^0.23.1"
-vulture = "^2.14"
+[dependency-groups]
+dev = [
+    "pytest>=8.3.3",
+    "tox>=4.23.2",
+    "ruff>=0.8.0",
+    "coverage>=7.6.4",
+    "pytest-cov>=6.0.0",
+    "pre-commit>=4.0.1",
+    "deptry>=0.23.1",
+    "jupyter>=1.0.0",
+    "sphinx>=7.3.7",
+    "sphinx-copybutton>=0.5.1",
+    "sphinx-rtd-theme>=2.0.0",
+    "pdf2image>=1.17.0",
+    "gdown>=5.2.0",
+    "pytest-split>=0.9.0",
+    "vulture>=2.14",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["uv_build>=0.8.16,<0.9.0"]
+build-backend = "uv_build"
 
-[tool.poetry.scripts]
+[project.scripts]
 eirautogp = "eir_auto_gp.single_task.run_single_task:main"
 eirautogpmulti = "eir_auto_gp.multi_task.run_multi_task:main"
 eirautogwas = "eir_auto_gp.preprocess.gwas_pre_selection:main"
@@ -56,5 +55,29 @@ eirautogppack = "eir_auto_gp.predict.pack:main"
 eirautogppredict = "eir_auto_gp.predict.run_predict:main"
 eirautogpsync = "eir_auto_gp.predict.prepare_data:main"
 
-[tool.isort]
-profile = "black"
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["eir_auto_gp"]
+
+[tool.ruff.lint.per-file-ignores]
+"docs/doc_modules/generate_diagrams.py" = ["ALL"]
+"misc/release.py" = ["B904"]
+"src/eir_auto_gp/post_analysis/iterative_complexity_analysis.py" = ["B023"]
+"src/eir_auto_gp/preprocess/converge.py" = ["E402", "B904"]
+
+[tool.deptry]
+ignore = ["DEP003"]

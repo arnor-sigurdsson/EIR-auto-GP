@@ -1,5 +1,5 @@
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence
 
 from docs.doc_modules.experiments import AutoDocExperimentInfo, run_capture_and_save
 from docs.doc_modules.utils import post_process_csv_files
@@ -82,7 +82,7 @@ def get_tutorial_02_run_multi_targets() -> Sequence[AutoDocExperimentInfo]:
         yield get_tutorial_02_run_single_target(target=target)
 
 
-def get_command(target: str) -> List[str]:
+def get_command(target: str) -> list[str]:
     t = target
     command = [
         "eirautogp",

@@ -1,5 +1,5 @@
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from docs.doc_modules.experiments import AutoDocExperimentInfo, run_capture_and_save
 from docs.doc_modules.utils import post_process_csv_files
@@ -121,7 +121,7 @@ def get_tutorial_01_run_1_info() -> AutoDocExperimentInfo:
         {
             "command": [
                 "tree",
-                "eir_auto_gp_tutorials/tutorial_runs/" "01_basic_tutorial_1/analysis",
+                "eir_auto_gp_tutorials/tutorial_runs/01_basic_tutorial_1/analysis",
                 "-L",
                 "3",
                 "--noreport",

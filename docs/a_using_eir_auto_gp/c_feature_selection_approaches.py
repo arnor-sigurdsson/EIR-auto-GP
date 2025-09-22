@@ -1,5 +1,5 @@
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence
 
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists
@@ -48,7 +48,7 @@ def get_tutorial_03_run_data_info() -> AutoDocExperimentInfo:
 
 
 def get_feature_selection_tutorial_info(
-    feature_selection_method: Optional[str],
+    feature_selection_method: str | None,
 ) -> AutoDocExperimentInfo:
     feature_selection_method_str = (
         feature_selection_method if feature_selection_method is not None else "none"
@@ -73,8 +73,7 @@ def get_feature_selection_tutorial_info(
         f"eir_auto_gp_tutorials/tutorial_runs/"
         f"03_feature_selection_{fsms}/feature_selection",
         "--modelling_output_folder",
-        f"eir_auto_gp_tutorials/tutorial_runs/"
-        f"03_feature_selection_{fsms}/modelling",
+        f"eir_auto_gp_tutorials/tutorial_runs/03_feature_selection_{fsms}/modelling",
         "--analysis_output_folder",
         f"eir_auto_gp_tutorials/tutorial_runs/03_feature_selection_{fsms}/analysis",
         "--output_cat_columns",

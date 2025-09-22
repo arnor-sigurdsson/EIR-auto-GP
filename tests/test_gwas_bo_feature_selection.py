@@ -155,7 +155,6 @@ class TestFractionToLogPValue:
 
 
 class TestGetGwasBoAutoTopN:
-
     @patch(
         "eir_auto_gp.single_task.modelling.gwas_bo_feature_selection."
         "gather_fractions_and_performances"
@@ -238,7 +237,6 @@ class TestGetGwasBoAutoTopN:
 
 
 class TestOptimizationConvergence:
-
     @patch(
         "eir_auto_gp.single_task.modelling.gwas_bo_feature_selection."
         "gather_fractions_and_performances"
@@ -499,6 +497,6 @@ class TestIntegrationScenarios:
         assert len(set(fractions)) > 1, "Should explore different fractions"
 
         avg_fraction = np.mean(fractions)
-        assert (
-            0.001 <= avg_fraction <= 0.2
-        ), f"Average fraction {avg_fraction} should be reasonable"
+        assert 0.001 <= avg_fraction <= 0.2, (
+            f"Average fraction {avg_fraction} should be reasonable"
+        )

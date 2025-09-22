@@ -45,7 +45,6 @@ def test_modelling(command: str, tmp_path: Path) -> None:
     model_folder = tmp_path / "modelling"
     check_test = True if "do_test" in command else False
     for modelling_run in _iterdir_ignore_hidden(path=model_folder):
-
         if not modelling_run.name.startswith("fold_"):
             continue
 
@@ -78,7 +77,7 @@ def check_average_performances(file_path: Path, threshold: float = 0.5) -> None:
 
 
 def find_numeric_values(input_dict: dict, accumulator: list) -> list[float | int]:
-    for key, value in input_dict.items():
+    for _key, value in input_dict.items():
         match value:
             case dict(value):
                 find_numeric_values(input_dict=value, accumulator=accumulator)
