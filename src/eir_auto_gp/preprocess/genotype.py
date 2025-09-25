@@ -9,6 +9,7 @@ from plink_pipelines.make_dataset import (
     RenameOnFailureMixin,
     _get_one_hot_encoded_generator,
     get_sample_generator_from_bed,
+    rechunk_generator,
 )
 
 from eir_auto_gp.utils.utils import get_logger
@@ -66,13 +67,19 @@ def get_encoded_snp_stream(
     chunk_size: int,
     output_format: Literal["disk"],
 ) -> Generator[tuple[str, np.ndarray]]:
-    chunk_generator = get_sample_generator_from_bed(
+    read_generator = get_sample_generator_from_bed(
         bed_path=bed_path,
-        chunk_size=chunk_size,
+        read_chunk_size=chunk_size,
+    )
+
+    process_chunk_size = max(1, chunk_size // 4)
+    to_process_generator = rechunk_generator(
+        chunk_generator=read_generator,
+        new_chunk_size=process_chunk_size,
     )
 
     yield from _get_one_hot_encoded_generator(
-        chunked_sample_generator=chunk_generator,
+        chunked_sample_generator=to_process_generator,
         output_format=output_format,
     )
 
