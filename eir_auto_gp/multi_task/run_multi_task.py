@@ -10,10 +10,10 @@ from typing import Any, Dict, Optional, Sequence
 import luigi
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists
-
 from eir_auto_gp.multi_task.analysis.run_analysis import RunAnalysisWrapper
 from eir_auto_gp.preprocess.converge import ParseDataWrapper
 from eir_auto_gp.preprocess.gwas_pre_selection import validate_geno_data_path
+
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
@@ -216,6 +216,14 @@ def get_argument_parser() -> argparse.ArgumentParser:
         "--do_test",
         action="store_true",
         help="Whether to run test set prediction.",
+    )
+
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        required=False,
+        help="Manual batch size override. If not specified, batch size will be "
+        "calculated automatically based on samples per epoch.",
     )
 
     return parser
@@ -456,6 +464,7 @@ def build_modelling_config(cl_args: argparse.Namespace) -> Dict[str, Any]:
         "genotype_feature_selection",
         "model_size",
         "do_test",
+        "batch_size",
     ]
 
     return extract_from_namespace(namespace=cl_args, keys=modelling_keys)

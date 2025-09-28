@@ -12,7 +12,6 @@ import yaml
 from aislib.misc_utils import ensure_path_exists
 from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_inject
 from eir.setup.input_setup_modules.setup_omics import read_bim
-
 from eir_auto_gp.multi_task.modelling.configs import (
     AggregateConfig,
     get_aggregate_config,
@@ -30,6 +29,7 @@ from eir_auto_gp.single_task.modelling.run_modelling import (
     get_samples_per_epoch,
     lines_in_file,
 )
+
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
@@ -127,6 +127,7 @@ class TestSingleRun(luigi.Task):
         injections = _get_all_dynamic_injections(
             injection_params=injection_params,
             genotype_data_path=self.data_config["genotype_data_path"],
+            manual_batch_size=self.modelling_config.get("batch_size"),
         )
 
         with TemporaryDirectory() as temp_dir:
@@ -256,6 +257,7 @@ class TrainSingleRun(luigi.Task):
         injections = _get_all_dynamic_injections(
             injection_params=injection_params,
             genotype_data_path=self.data_config["genotype_data_path"],
+            manual_batch_size=self.modelling_config.get("batch_size"),
         )
 
         with TemporaryDirectory() as temp_dir:
@@ -682,12 +684,16 @@ def is_binary_column(df: pl.DataFrame, col: str) -> bool:
 def _get_all_dynamic_injections(
     injection_params: ModelInjectionParams,
     genotype_data_path: str,
+    manual_batch_size: Optional[int] = None,
 ) -> Dict[str, Any]:
     mip = injection_params
 
     spe = get_samples_per_epoch(model_injection_params=mip)
 
-    batch_size = get_batch_size(samples_per_epoch=spe.samples_per_epoch)
+    if manual_batch_size is not None:
+        batch_size = manual_batch_size
+    else:
+        batch_size = get_batch_size(samples_per_epoch=spe.samples_per_epoch)
 
     valid_size = get_dynamic_valid_size(
         num_samples_per_epoch=spe.samples_per_epoch,
