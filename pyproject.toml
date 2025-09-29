@@ -20,7 +20,7 @@ dependencies = [
     "polars>=1.15.0",
     "eir-dl>=0.23.0",
     "torch>=2.7.1",
-    "plink-pipelines>=0.7.0",
+    "plink-pipelines @ git+https://github.com/arnor-sigurdsson/plink_pipelines.git@more-chunk-size-options",
 ]
 
 [dependency-groups]
@@ -81,6 +81,3 @@ known-first-party = ["eir_auto_gp"]
 
 [tool.deptry]
 ignore = ["DEP003"]
-
-[tool.uv.sources]
-plink-pipelines = { git = "https://github.com/arnor-sigurdsson/plink_pipelines.git", rev = "more-chunk-size-options" }
