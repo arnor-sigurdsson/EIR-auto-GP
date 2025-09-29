@@ -256,6 +256,20 @@ wheels = [
 ]
 
 [[package]]
+name = "bed-reader"
+version = "1.0.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/19/e5/07c60f12dbdc0169295e0ef3ff58a2db4209021bf3e09260ea3e4e3e18ad/bed_reader-1.0.6.tar.gz", hash = "sha256:d6b439730d422590b6608908f049afd35113be562a41e70e4f06acf1375f11b1", size = 2844020, upload-time = "2024-11-02T22:08:55.249Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3d/bc/7e7fcee5e132cfba9e5ebda749b6f9fcbd4ab6acb5435d151c1e68aadd5f/bed_reader-1.0.6-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c49afb7beb8e8b6264f8654f4ffabb10eba5bd4c4804f0c4831f8962e54fa9b5", size = 6242128, upload-time = "2024-11-02T22:08:38.78Z" },
+    { url = "https://files.pythonhosted.org/packages/50/f1/190bfa353a29d1870fafa486d22d8cb7b09c2f191a588fd35df07c801e52/bed_reader-1.0.6-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:aa5ae0474fbdee2097de7f6cee76b7b8baa8158c63e8e0b59440e663c164eacd", size = 6315915, upload-time = "2024-11-02T22:08:42.275Z" },
+    { url = "https://files.pythonhosted.org/packages/26/9b/517d80d3dcbc956be18f198be8f303f963353185344931ec01171a84f483/bed_reader-1.0.6-cp313-none-win_amd64.whl", hash = "sha256:77bb57b565a9bb30ec8adcd952e4973774b80e12ba51895286e7751372d58892", size = 5607970, upload-time = "2024-11-02T22:08:44.953Z" },
+]
+
+[[package]]
 name = "bleach"
 version = "6.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -723,6 +737,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "bed-reader" },
     { name = "coverage" },
     { name = "deptry" },
     { name = "gdown" },
@@ -761,6 +776,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "bed-reader", specifier = ">=1.0.6" },
     { name = "coverage", specifier = ">=7.6.4" },
     { name = "deptry", specifier = ">=0.23.1" },
     { name = "gdown", specifier = ">=5.2.0" },

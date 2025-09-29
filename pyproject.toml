@@ -40,6 +40,7 @@ dev = [
     "gdown>=5.2.0",
     "pytest-split>=0.9.0",
     "vulture>=2.14",
+    "bed-reader>=1.0.6",
 ]
 
 [build-system]
