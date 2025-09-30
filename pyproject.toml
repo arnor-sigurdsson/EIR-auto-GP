@@ -11,8 +11,6 @@ dependencies = [
     "pandas>=2.2.2",
     "xgboost>=2.0.3",
     "statsmodels>=0.14.0",
-    "lxml>=5.2.2",
-    "nxviz>=0.7.4",
     "networkx>=3.3",
     "psutil>=5.9.8",
     "rich>=13.7.1",
@@ -82,3 +80,4 @@ known-first-party = ["eir_auto_gp"]
 
 [tool.deptry]
 ignore = ["DEP003"]
+exclude = ["misc", "tests", ".venv", ".tox", "docs"]
