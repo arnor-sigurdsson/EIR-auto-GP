@@ -264,6 +264,18 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--weighted_sampling",
+        type=str,
+        default="auto",
+        choices=["auto", "true", "false"],
+        help="Control weighted sampling behavior during training.\\n"
+        "  - 'auto' (default): Enable weighted sampling only when there are\\n"
+        "    categorical targets but no continuous targets.\\n"
+        "  - 'true': Always enable weighted sampling.\\n"
+        "  - 'false': Always disable weighted sampling.",
+    )
+
+    parser.add_argument(
         "--do_test",
         action="store_true",
         help="Whether to run test set prediction.",
@@ -566,6 +578,7 @@ def build_modelling_config(cl_args: argparse.Namespace) -> dict[str, Any]:
         "n_output_layers",
         "output_dim",
         "batch_size",
+        "weighted_sampling",
         "do_test",
     ]
 

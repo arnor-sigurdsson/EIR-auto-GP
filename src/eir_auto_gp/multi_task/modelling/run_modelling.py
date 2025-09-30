@@ -376,7 +376,21 @@ def build_injection_params(
 def get_weighted_sampling_columns(
     modelling_config: dict[str, Any],
 ) -> list[str] | None:
-    return ["all"] if modelling_config["output_cat_columns"] else None
+    weighted_sampling = modelling_config["weighted_sampling"]
+
+    if weighted_sampling == "true":
+        return ["all"]
+    elif weighted_sampling == "false":
+        return None
+    elif weighted_sampling == "auto":
+        has_cat = bool(modelling_config["output_cat_columns"])
+        has_con = bool(modelling_config["output_con_columns"])
+        return ["all"] if has_cat and not has_con else None
+    else:
+        raise ValueError(
+            f"Invalid weighted_sampling value: {weighted_sampling}. "
+            f"Expected one of: 'auto', 'true', 'false'"
+        )
 
 
 def get_manual_valid_ids_file(
