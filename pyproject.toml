@@ -18,7 +18,7 @@ dependencies = [
     "polars>=1.15.0",
     "eir-dl>=0.23.0",
     "torch>=2.7.1",
-    "plink-pipelines>=0.8.2",
+    "plink-pipelines==0.8.3",
 ]
 
 [dependency-groups]

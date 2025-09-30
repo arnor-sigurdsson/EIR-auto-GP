@@ -759,7 +759,7 @@ requires-dist = [
     { name = "eir-dl", specifier = ">=0.23.0" },
     { name = "networkx", specifier = ">=3.3" },
     { name = "pandas", specifier = ">=2.2.2" },
-    { name = "plink-pipelines", specifier = ">=0.8.2" },
+    { name = "plink-pipelines", specifier = "==0.8.3" },
     { name = "polars", specifier = ">=1.15.0" },
     { name = "psutil", specifier = ">=5.9.8" },
     { name = "qmplot", specifier = ">=0.3.2" },
@@ -2406,7 +2406,7 @@ wheels = [
 
 [[package]]
 name = "plink-pipelines"
-version = "0.8.2"
+version = "0.8.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aislib" },
@@ -2416,9 +2416,9 @@ dependencies = [
     { name = "numpy" },
     { name = "pyarrow" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4b/48/49a8d097be39c3c271d897ab0c8bafbd0b463f37f19abab462229b42dab3/plink_pipelines-0.8.2.tar.gz", hash = "sha256:1dafcdaa08979294123783fa1fe247934836e5684ad92b32537e3bccecff4063", size = 5062, upload-time = "2025-09-29T21:46:13.306Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/39/fdda384d5cd75ba2ac54c8afb0ebcaec747c1eb0050bf58fc1468bf21363/plink_pipelines-0.8.3.tar.gz", hash = "sha256:8e0802734c7e82b2f83205c3fa19066774f30ee1a5886eebbd4cd7a4e9da3ae7", size = 5096, upload-time = "2025-09-30T21:43:31.485Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/0b/7ea48d3cacf4eff9d822097110e44fe1d763649ccee6b481fc2e576605d8/plink_pipelines-0.8.2-py3-none-any.whl", hash = "sha256:3634eed1193327bd99e294c4141a1b05b3bfb063d228573d1275d21e66e71d5c", size = 6260, upload-time = "2025-09-29T21:46:12.16Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/3c/6948b6e00b63de10321744dabe56e7b24191269850383e84ac054e6f56eb/plink_pipelines-0.8.3-py3-none-any.whl", hash = "sha256:5ff075103b9604ee67b7d3aa97ac4440e1fc0da36efa7d2fe06ffab81e8d8fea", size = 6292, upload-time = "2025-09-30T21:43:30.69Z" },
 ]
 
 [[package]]
