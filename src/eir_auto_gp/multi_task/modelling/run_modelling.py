@@ -367,7 +367,7 @@ def build_injection_params(
         weighted_sampling_columns=weighted_sampling_columns,
         modelling_data_format=data_config["modelling_data_format"],
         output_configs=output_configs,
-        batch_size=data_config["batch_size"],
+        batch_size=modelling_config["batch_size"],
     )
 
     return params

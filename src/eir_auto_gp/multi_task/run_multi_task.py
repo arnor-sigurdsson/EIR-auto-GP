@@ -542,7 +542,6 @@ def build_data_config(cl_args: argparse.Namespace) -> dict[str, Any]:
         "genotype_processing_chunk_size",
         "modelling_data_format",
         "data_storage_format",
-        "batch_size",
     ]
 
     base = extract_from_namespace(namespace=cl_args, keys=data_keys)
@@ -566,6 +565,7 @@ def build_modelling_config(cl_args: argparse.Namespace) -> dict[str, Any]:
         "skip_to_every_n_fusion_layers",
         "n_output_layers",
         "output_dim",
+        "batch_size",
         "do_test",
     ]
 
