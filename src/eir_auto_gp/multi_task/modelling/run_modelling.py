@@ -116,6 +116,13 @@ class TestSingleRun(luigi.Task):
             output_cat_columns=self.modelling_config["output_cat_columns"],
             output_con_columns=self.modelling_config["output_con_columns"],
             n_random_groups=self.modelling_config["n_random_output_groups"],
+            n_fusion_layers=self.modelling_config["n_fusion_layers"],
+            fusion_dim=self.modelling_config["fusion_dim"],
+            skip_to_every_n_fusion_layers=self.modelling_config[
+                "skip_to_every_n_fusion_layers"
+            ],
+            n_output_layers=self.modelling_config["n_output_layers"],
+            output_dim=self.modelling_config["output_dim"],
         )
 
         injection_params = build_injection_params(
@@ -245,6 +252,13 @@ class TrainSingleRun(luigi.Task):
             output_cat_columns=self.modelling_config["output_cat_columns"],
             output_con_columns=self.modelling_config["output_con_columns"],
             n_random_groups=self.modelling_config["n_random_output_groups"],
+            n_fusion_layers=self.modelling_config["n_fusion_layers"],
+            fusion_dim=self.modelling_config["fusion_dim"],
+            skip_to_every_n_fusion_layers=self.modelling_config[
+                "skip_to_every_n_fusion_layers"
+            ],
+            n_output_layers=self.modelling_config["n_output_layers"],
+            output_dim=self.modelling_config["output_dim"],
         )
 
         injection_params = build_injection_params(
@@ -311,6 +325,7 @@ class MultiTaskModelInjectionParams:
     weighted_sampling_columns: list[str] | None
     modelling_data_format: str
     output_configs: list[dict[str, Any]]
+    batch_size: int | None
 
 
 def build_injection_params(
@@ -352,6 +367,7 @@ def build_injection_params(
         weighted_sampling_columns=weighted_sampling_columns,
         modelling_data_format=data_config["modelling_data_format"],
         output_configs=output_configs,
+        batch_size=data_config["batch_size"],
     )
 
     return params
@@ -690,7 +706,10 @@ def _get_all_dynamic_injections(
 
     spe = get_samples_per_epoch(model_injection_params=mip)
 
-    batch_size = get_batch_size(samples_per_epoch=spe.samples_per_epoch)
+    if mip.batch_size is not None:
+        batch_size = mip.batch_size
+    else:
+        batch_size = get_batch_size(samples_per_epoch=spe.samples_per_epoch)
 
     valid_size = get_dynamic_valid_size(
         num_samples_per_epoch=spe.samples_per_epoch,
