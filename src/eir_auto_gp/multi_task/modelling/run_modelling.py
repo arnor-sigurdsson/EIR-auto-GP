@@ -9,6 +9,7 @@ from typing import Any, Literal
 import luigi
 import pandas as pd
 import polars as pl
+import torch
 import yaml
 from aislib.misc_utils import ensure_path_exists
 from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_inject
@@ -526,6 +527,15 @@ def get_training_string_from_config_folder(config_folder: Path) -> str:
     return final_string
 
 
+def _get_supported_precision() -> str:
+    if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+        logger.info("Hardware supports bf16-mixed on CUDA.")
+        return "bf16-mixed"
+
+    logger.info("bf16-mixed not supported or optimal on this hardware. Using 32-true.")
+    return "32-true"
+
+
 def _get_global_injections(
     fold: int,
     output_folder: str,
@@ -557,6 +567,7 @@ def _get_global_injections(
     early_stopping_buffer = max(early_stopping_buffer, 1000)
     sample_interval = min(1000, iter_per_epoch)
     lr = _get_learning_rate(n_snps=n_snps)
+    precision = _get_supported_precision()
 
     injections = {
         "basic_experiment": {
@@ -579,6 +590,9 @@ def _get_global_injections(
             "mixing_alpha": cur_mixing,
             "early_stopping_buffer": early_stopping_buffer,
             "weighted_sampling_columns": weighted_sampling_columns,
+        },
+        "accelerator": {
+            "precision": precision,
         },
     }
 
