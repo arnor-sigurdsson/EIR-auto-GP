@@ -638,18 +638,12 @@ def _get_genotype_injections(
 
 
 def get_gln_kernel_parameters(n_snps: int) -> tuple[int, int]:
-    if n_snps < 1_000:
+    if n_snps < 500_000:
         params = 16, -4
-    elif n_snps < 10_000:
-        params = 16, -2
-    elif n_snps < 100_000:
-        params = 16, 1
-    elif n_snps < 500_000:
-        params = 16, 2
     elif n_snps < 2_000_000:
-        params = 16, 4
+        params = 16, 2
     else:
-        params = 16, 8
+        params = 16, 4
 
     logger.info(
         "Setting kernel width to %d and first kernel expansion to %d due to %d SNPs.",
