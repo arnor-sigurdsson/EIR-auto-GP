@@ -536,6 +536,19 @@ def _get_supported_precision() -> str:
     return "32-true"
 
 
+def _get_compile_model() -> bool:
+    if torch.backends.mps.is_available():
+        logger.info("Disabling torch.compile on MPS (experimental/unstable support).")
+        return False
+
+    if torch.cuda.is_available():
+        logger.info("Enabling torch.compile for CUDA.")
+        return True
+
+    logger.info("torch.compile disabled on CPU (experimental for training). ")
+    return False
+
+
 def _get_global_injections(
     fold: int,
     output_folder: str,
@@ -568,6 +581,7 @@ def _get_global_injections(
     sample_interval = min(1000, iter_per_epoch)
     lr = _get_learning_rate(n_snps=n_snps)
     precision = _get_supported_precision()
+    compile_model = _get_compile_model()
 
     injections = {
         "basic_experiment": {
@@ -590,6 +604,9 @@ def _get_global_injections(
             "mixing_alpha": cur_mixing,
             "early_stopping_buffer": early_stopping_buffer,
             "weighted_sampling_columns": weighted_sampling_columns,
+        },
+        "model": {
+            "compile_model": compile_model,
         },
         "accelerator": {
             "precision": precision,
