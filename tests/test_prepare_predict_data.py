@@ -267,9 +267,9 @@ def test_plink_prefilter_disabled() -> None:
         assert np.allclose(arrays.sum(axis=1), 1.0)
 
         plink_filtered_dirs = list(output_dir.glob("plink_filtered_*"))
-        assert (
-            len(plink_filtered_dirs) == 0
-        ), "No PLINK filtered directories should exist when disabled"
+        assert len(plink_filtered_dirs) == 0, (
+            "No PLINK filtered directories should exist when disabled"
+        )
 
 
 def test_high_overlap_skips_prefilter() -> None:
@@ -303,9 +303,9 @@ def test_high_overlap_skips_prefilter() -> None:
         assert np.allclose(arrays.sum(axis=1), 1.0)
 
         plink_filtered_dirs = list(output_dir.glob("plink_filtered_*"))
-        assert (
-            len(plink_filtered_dirs) == 0
-        ), "High overlap should skip PLINK pre-filtering"
+        assert len(plink_filtered_dirs) == 0, (
+            "High overlap should skip PLINK pre-filtering"
+        )
 
 
 if __name__ == "__main__":

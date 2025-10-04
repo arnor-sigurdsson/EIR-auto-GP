@@ -1,5 +1,5 @@
+from collections.abc import Iterable
 from itertools import chain
-from typing import Iterable
 
 from docs.a_using_eir_auto_gp import (
     a_basic_tutorial,

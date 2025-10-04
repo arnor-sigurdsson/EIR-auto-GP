@@ -1,39 +1,27 @@
 default_language_version:
-  python: python3
+  python: python3.13
 repos:
-  - repo: https://github.com/ambv/black
-    rev: 24.3.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.10
     hooks:
-      - id: black
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v6.0.0
     hooks:
       - id: check-added-large-files
-        args: ['--maxkb=1024']
-
-  - repo: https://github.com/pycqa/isort
-    rev: 5.12.0
-    hooks:
-      - id: isort
-        args: ["--profile", "black", "--filter-files"]
-        name: Run isort
-        entry: isort
-        language: system
-        types: [ python ]
-        stages: [ commit ]
-
   - repo: local
     hooks:
-      - id: flake8
-        name: Run flake8
-        entry: flake8
+      - id: type-check
+        name: Type check with ty
+        entry: uvx ty check src/eir_auto_gp
         language: system
-        types: [ python ]
-        stages: [ commit ]
-
+        types: [python]
+        pass_filenames: false
       - id: test
         name: Run tests
-        entry: tox
+        entry: uv run tox
         language: system
-        types: [ python ]
-        stages: [ push ]
+        types: [python]
+        stages: [manual]

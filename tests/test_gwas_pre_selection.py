@@ -79,9 +79,9 @@ def test_run_gwas_pre_selection(command: str, tmp_path: Path) -> None:
     if "--ld_clump" in command:
         gwas_output_folder = output_folder / "gwas_output"
         snps_to_keep_file = gwas_output_folder / "snps_to_keep.txt"
-        assert (
-            snps_to_keep_file.exists()
-        ), "SNPs to keep file should exist when LD clumping is enabled"
+        assert snps_to_keep_file.exists(), (
+            "SNPs to keep file should exist when LD clumping is enabled"
+        )
 
     orig_snps_file = Path("tests/test_data/penncath.bim")
     n_orig_snps = lines_in_file(file_path=orig_snps_file)
@@ -116,16 +116,16 @@ def test_run_gwas_pre_selection(command: str, tmp_path: Path) -> None:
         )
 
         file_names = [f.name for f in gwas_files]
-        assert (
-            "snps_to_keep.txt" in file_names
-        ), "snps_to_keep.txt should be created with LD clumping"
-        assert (
-            "clumped_snps.txt" in file_names
-        ), "clumped_snps.txt should be created with LD clumping"
+        assert "snps_to_keep.txt" in file_names, (
+            "snps_to_keep.txt should be created with LD clumping"
+        )
+        assert "clumped_snps.txt" in file_names, (
+            "clumped_snps.txt should be created with LD clumping"
+        )
     else:
-        assert (
-            len(gwas_files) == 4
-        ), f"Expected 4 files without LD clumping, got {len(gwas_files)}"
+        assert len(gwas_files) == 4, (
+            f"Expected 4 files without LD clumping, got {len(gwas_files)}"
+        )
 
 
 def mocked_read_csv(*args, **kwargs):
@@ -472,7 +472,7 @@ def test_run_ld_clumping_parsing_clumps_file(
         )
 
     assert result.exists()
-    with open(result, "r") as f:
+    with open(result) as f:
         snps = f.read().strip().split("\n")
 
     assert set(snps) == {"rs1", "rs3"}

@@ -77,7 +77,7 @@ def check_average_performances(file_path: Path, threshold: float = 0.5) -> None:
 
 
 def find_numeric_values(input_dict: dict, accumulator: list) -> list[float | int]:
-    for key, value in input_dict.items():
+    for _key, value in input_dict.items():
         match value:
             case dict(value):
                 find_numeric_values(input_dict=value, accumulator=accumulator)

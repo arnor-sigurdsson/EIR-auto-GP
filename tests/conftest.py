@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Dict, List
 
 import bed_reader
 import numpy as np
@@ -42,13 +42,13 @@ def simulate_genetic_data_to_bed(tmp_path: Path) -> Callable[[int, int, str], Pa
         )
 
         ind_ids = [f"ind{i + 1}" for i in range(n_individuals)]
-        properties: Dict[str, List[str]] = {
+        properties: dict[str, list[str]] = {
             "sid": df_snp.columns.tolist(),
             "iid": ind_ids,
             "allele_1": ["A"] * n_snps,  # minor, -> alt -> 2
             "allele_2": ["T"] * n_snps,  # major, -> ref -> 0
             "chromosome": ["1"] * n_snps,
-            "bp_position": [i for i in range(n_snps)],
+            "bp_position": list(range(n_snps)),
         }
 
         file_path = tmp_path / "genetic_data.bed"

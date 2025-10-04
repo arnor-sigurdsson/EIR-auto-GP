@@ -2,9 +2,10 @@ import json
 import random
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from statistics import mean
-from typing import Any, Callable
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -32,7 +33,7 @@ def _get_test_cl_commands(folder_path: Path) -> list[str]:
         "--do_test"
     )
 
-    with_groups = f"{base} " "--output_groups random"
+    with_groups = f"{base} --output_groups random"
 
     return [base, with_groups]
 
@@ -49,7 +50,7 @@ def _build_test_predict_data(
     output_prefix = output_dir / "simulated_subset"
 
     bim_file = input_prefix.with_suffix(".bim")
-    with open(bim_file, "r") as f:
+    with open(bim_file) as f:
         all_snps = [line.split()[1] for line in f]
 
     selected_snps = random.sample(all_snps, min(num_snps, len(all_snps)))
@@ -175,7 +176,7 @@ def check_average_performances(file_path: Path, threshold: float = 0.5) -> None:
 
 
 def find_numeric_values(input_dict: dict, accumulator: list) -> list[float | int]:
-    for key, value in input_dict.items():
+    for _key, value in input_dict.items():
         match value:
             case dict(value):
                 find_numeric_values(input_dict=value, accumulator=accumulator)
@@ -189,7 +190,6 @@ def check_predict_results(
     predict_output_folder: Path,
     actual_data_path: Path,
 ) -> None:
-
     gathered_results = gather_predict_results(
         predict_output_folder=predict_output_folder,
         actual_data_path=actual_data_path,
@@ -198,20 +198,20 @@ def check_predict_results(
 
     for target, metrics in gathered_results.items():
         if target in ["phenotype"]:
-            assert (
-                0 <= metrics["accuracy"] <= 1
-            ), f"Accuracy for {target} should be between 0 and 1"
-            assert (
-                0 <= metrics["auc"] <= 1
-            ), f"AUC for {target} should be between 0 and 1"
-            assert (
-                metrics["auc"] >= 0.55
-            ), f"AUC for {target} should be at least 0.55, got {metrics['auc']}"
+            assert 0 <= metrics["accuracy"] <= 1, (
+                f"Accuracy for {target} should be between 0 and 1"
+            )
+            assert 0 <= metrics["auc"] <= 1, (
+                f"AUC for {target} should be between 0 and 1"
+            )
+            assert metrics["auc"] >= 0.55, (
+                f"AUC for {target} should be at least 0.55, got {metrics['auc']}"
+            )
         else:
             assert metrics["mse"] >= 0, f"MSE for {target} should be non-negative"
-            assert (
-                metrics["pcc"] >= 0.03
-            ), f"PCC for {target} should be at least 0.03, got {metrics['pcc']}"
+            assert metrics["pcc"] >= 0.03, (
+                f"PCC for {target} should be at least 0.03, got {metrics['pcc']}"
+            )
 
 
 def gather_predict_results(

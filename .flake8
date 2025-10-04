@@ -1,9 +1,0 @@
-[flake8]
-ignore = E402, W503
-max-line-length = 88
-max-complexity = 22
-exclude =
-    .tox,
-    data,
-    docs/doc_modules/generate_diagrams.py
-    
