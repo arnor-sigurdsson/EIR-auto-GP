@@ -281,6 +281,13 @@ def get_argument_parser() -> argparse.ArgumentParser:
         help="Whether to run test set prediction.",
     )
 
+    parser.add_argument(
+        "--optimize_model",
+        action="store_true",
+        help="Enable model optimizations including torch.compile and "
+        "mixed precision training.",
+    )
+
     return parser
 
 
@@ -580,6 +587,7 @@ def build_modelling_config(cl_args: argparse.Namespace) -> dict[str, Any]:
         "batch_size",
         "weighted_sampling",
         "do_test",
+        "optimize_model",
     ]
 
     return extract_from_namespace(namespace=cl_args, keys=modelling_keys)
