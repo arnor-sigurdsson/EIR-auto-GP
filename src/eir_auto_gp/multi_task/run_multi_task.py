@@ -206,11 +206,73 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--n_fusion_layers",
+        type=int,
+        required=False,
+        help="Number of fusion layers. Must be used with all other granular parameters "
+        "and cannot be combined with model_size.",
+    )
+
+    parser.add_argument(
+        "--fusion_dim",
+        type=int,
+        required=False,
+        help="Fusion layer dimension. Must be used with all other granular parameters "
+        "and cannot be combined with model_size.",
+    )
+
+    parser.add_argument(
+        "--skip_to_every_n_fusion_layers",
+        type=int,
+        required=False,
+        help="Tensor broker skip connection frequency. Must be used with all other\\n"
+        "granular parameters and cannot be combined with model_size.",
+    )
+
+    parser.add_argument(
+        "--n_output_layers",
+        type=int,
+        required=False,
+        help="Number of output head layers (for shared_mlp_residual only).\\n"
+        "Must be used with all other granular parameters and cannot be combined\\n"
+        "with model_size.",
+    )
+
+    parser.add_argument(
+        "--output_dim",
+        type=int,
+        required=False,
+        help="Output head layer dimension (for shared_mlp_residual only).\\n"
+        "Must be used with all other granular parameters and cannot be combined\\n"
+        "with model_size.",
+    )
+
+    parser.add_argument(
         "--modelling_data_format",
         type=str,
         default="disk",
         help="Which format to store the data in during modelling.",
         choices=["disk", "memory", "auto"],
+    )
+
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        required=False,
+        help="Batch size for training. If not specified, it will be automatically\\n"
+        "determined based on the dataset size.",
+    )
+
+    parser.add_argument(
+        "--weighted_sampling",
+        type=str,
+        default="auto",
+        choices=["auto", "true", "false"],
+        help="Control weighted sampling behavior during training.\\n"
+        "  - 'auto' (default): Enable weighted sampling only when there are\\n"
+        "    categorical targets but no continuous targets.\\n"
+        "  - 'true': Always enable weighted sampling.\\n"
+        "  - 'false': Always disable weighted sampling.",
     )
 
     parser.add_argument(
@@ -303,6 +365,52 @@ def validate_pre_split_folder(pre_split_folder: str | None) -> None:
     assert ids["train_ids.txt"].isdisjoint(ids["test_ids.txt"])
 
 
+def validate_model_architecture_params(
+    model_size: str,
+    n_fusion_layers: int | None,
+    fusion_dim: int | None,
+    skip_to_every_n_fusion_layers: int | None,
+    n_output_layers: int | None,
+    output_dim: int | None,
+) -> None:
+    granular_params = [
+        n_fusion_layers,
+        fusion_dim,
+        skip_to_every_n_fusion_layers,
+        n_output_layers,
+        output_dim,
+    ]
+    granular_param_names = [
+        "n_fusion_layers",
+        "fusion_dim",
+        "skip_to_every_n_fusion_layers",
+        "n_output_layers",
+        "output_dim",
+    ]
+
+    any_granular_specified = any(p is not None for p in granular_params)
+    all_granular_specified = all(p is not None for p in granular_params)
+
+    if any_granular_specified and model_size != "mini":
+        raise ValueError(
+            "Cannot use model_size with granular architecture parameters. "
+            "Either use model_size alone or specify all granular parameters "
+            "(n_fusion_layers, fusion_dim, skip_to_every_n_fusion_layers, "
+            "n_output_layers, output_dim)."
+        )
+
+    if any_granular_specified and not all_granular_specified:
+        missing = [
+            name
+            for name, val in zip(granular_param_names, granular_params, strict=False)
+            if val is None
+        ]
+        raise ValueError(
+            f"When using granular architecture parameters, all must be specified. "
+            f"Missing: {', '.join(missing)}"
+        )
+
+
 def run(cl_args: argparse.Namespace) -> None:
     validate_geno_data_path(geno_data_path=cl_args.genotype_data_path)
     validate_label_file(
@@ -319,6 +427,14 @@ def run(cl_args: argparse.Namespace) -> None:
     )
     validate_plink2_exists_in_path()
     validate_pre_split_folder(pre_split_folder=cl_args.pre_split_folder)
+    validate_model_architecture_params(
+        model_size=cl_args.model_size,
+        n_fusion_layers=cl_args.n_fusion_layers,
+        fusion_dim=cl_args.fusion_dim,
+        skip_to_every_n_fusion_layers=cl_args.skip_to_every_n_fusion_layers,
+        n_output_layers=cl_args.n_output_layers,
+        output_dim=cl_args.output_dim,
+    )
 
     cl_args = parse_output_folders(cl_args=cl_args)
     cl_args = _add_pre_split_folder_if_present(cl_args=cl_args)
@@ -456,6 +572,13 @@ def build_modelling_config(cl_args: argparse.Namespace) -> dict[str, Any]:
         "n_random_output_groups",
         "genotype_feature_selection",
         "model_size",
+        "n_fusion_layers",
+        "fusion_dim",
+        "skip_to_every_n_fusion_layers",
+        "n_output_layers",
+        "output_dim",
+        "batch_size",
+        "weighted_sampling",
         "do_test",
     ]
 

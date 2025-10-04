@@ -125,8 +125,20 @@ def get_base_fusion_config(
     model_type: str = "mlp-residual",
     model_size: "str" = "nano",
     output_head: str = "linear",
+    n_fusion_layers: int | None = None,
+    fusion_dim: int | None = None,
+    skip_to_every_n_fusion_layers: int | None = None,
 ) -> dict[str, Any]:
-    fmsp = get_fusion_model_size_params(model_size=model_size)
+    if n_fusion_layers is not None:
+        assert fusion_dim is not None
+        assert skip_to_every_n_fusion_layers is not None
+        fmsp = FusionModelSizeParams(
+            n_layers=n_fusion_layers,
+            fc_dim=fusion_dim,
+            tb_block_frequency=skip_to_every_n_fusion_layers,
+        )
+    else:
+        fmsp = get_fusion_model_size_params(model_size=model_size)
 
     config_base = {
         "fc_do": 0.0,
@@ -337,8 +349,19 @@ def get_output_configs(
     output_con_columns: list[str],
     model_size: str,
     output_head: str = "mlp",
+    n_output_layers: int | None = None,
+    output_dim: int | None = None,
 ) -> list[dict[str, Any]]:
-    shared_mlp_params = get_shared_mlp_residual_model_size_params(model_size=model_size)
+    if n_output_layers is not None:
+        assert output_dim is not None
+        shared_mlp_params = SharedMLPResidualModelSizeParams(
+            n_layers=n_output_layers,
+            fc_dim=output_dim,
+        )
+    else:
+        shared_mlp_params = get_shared_mlp_residual_model_size_params(
+            model_size=model_size
+        )
 
     head_configs = {
         "mlp": {
@@ -460,6 +483,11 @@ def get_aggregate_config(
     output_groups: str = "random",
     output_head: str = "linear",
     fusion_type: str = "mlp-residual",
+    n_fusion_layers: int | None = None,
+    fusion_dim: int | None = None,
+    skip_to_every_n_fusion_layers: int | None = None,
+    n_output_layers: int | None = None,
+    output_dim: int | None = None,
 ) -> AggregateConfig:
     global_config = get_base_global_config()
     input_genotype_config = get_base_input_genotype_config()
@@ -487,6 +515,9 @@ def get_aggregate_config(
         output_head=output_head,
         target_columns=target_columns,
         output_groups=built_output_groups,
+        n_fusion_layers=n_fusion_layers,
+        fusion_dim=fusion_dim,
+        skip_to_every_n_fusion_layers=skip_to_every_n_fusion_layers,
     )
     output_configs = get_output_configs(
         output_head=output_head,
@@ -494,6 +525,8 @@ def get_aggregate_config(
         output_cat_columns=output_cat_columns,
         output_con_columns=output_con_columns,
         model_size=model_size,
+        n_output_layers=n_output_layers,
+        output_dim=output_dim,
     )
 
     return AggregateConfig(
