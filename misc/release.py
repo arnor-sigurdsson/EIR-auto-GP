@@ -26,7 +26,7 @@ def git_commands(version: str) -> None:
             "git",
             "add",
             "pyproject.toml",
-            "poetry.lock",
+            "uv.lock",
         ],
         ["git", "commit", "-m", f"Bump version to {version}"],
         ["git", "tag", version],
