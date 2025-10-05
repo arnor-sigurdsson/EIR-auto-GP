@@ -1,6 +1,6 @@
 [project]
 name = "EIR-auto-GP"
-version = "0.9.0"
+version = "0.10.0"
 description = ""
 authors = [{name = "Arnor Sigurdsson", email = "arnor-sigurdsson@users.noreply.github.com"}]
 readme = "README.md"
