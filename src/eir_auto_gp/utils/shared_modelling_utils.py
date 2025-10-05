@@ -64,7 +64,7 @@ def get_memory_dataset(n_snps: int, n_samples: int) -> bool:
     available_memory = (
         slurm_memory if slurm_memory is not None else psutil.virtual_memory().available
     )
-    upper_bound = 0.6 * available_memory
+    upper_bound = 0.5 * available_memory
 
     # 4 for one-hot encoding
     total_size = n_snps * n_samples * 4

@@ -9,6 +9,7 @@ from typing import Any, Literal
 import luigi
 import pandas as pd
 import polars as pl
+import torch
 import yaml
 from aislib.misc_utils import ensure_path_exists
 from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_inject
@@ -326,6 +327,7 @@ class MultiTaskModelInjectionParams:
     modelling_data_format: str
     output_configs: list[dict[str, Any]]
     batch_size: int | None
+    optimize_model: bool
 
 
 def build_injection_params(
@@ -368,6 +370,7 @@ def build_injection_params(
         modelling_data_format=data_config["modelling_data_format"],
         output_configs=output_configs,
         batch_size=modelling_config["batch_size"],
+        optimize_model=modelling_config["optimize_model"],
     )
 
     return params
@@ -526,6 +529,36 @@ def get_training_string_from_config_folder(config_folder: Path) -> str:
     return final_string
 
 
+def _get_supported_precision(optimize_model: bool) -> str:
+    if not optimize_model:
+        logger.info("Model optimization disabled. Using 32-true precision.")
+        return "32-true"
+
+    if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+        logger.info("Hardware supports bf16-mixed on CUDA.")
+        return "bf16-mixed"
+
+    logger.info("bf16-mixed not supported or optimal on this hardware. Using 32-true.")
+    return "32-true"
+
+
+def _get_compile_model(optimize_model: bool) -> bool:
+    if not optimize_model:
+        logger.info("Model optimization disabled. torch.compile disabled.")
+        return False
+
+    if torch.backends.mps.is_available():
+        logger.info("Disabling torch.compile on MPS (experimental/unstable support).")
+        return False
+
+    if torch.cuda.is_available():
+        logger.info("Enabling torch.compile for CUDA.")
+        return True
+
+    logger.info("torch.compile disabled on CPU (experimental for training). ")
+    return False
+
+
 def _get_global_injections(
     fold: int,
     output_folder: str,
@@ -537,6 +570,7 @@ def _get_global_injections(
     iter_per_epoch: int,
     weighted_sampling_columns: list[str] | None,
     modelling_data_format: str,
+    optimize_model: bool,
 ) -> dict[str, Any]:
     mixing_candidates = [0.0]
     cur_mixing = mixing_candidates[fold % len(mixing_candidates)]
@@ -557,6 +591,8 @@ def _get_global_injections(
     early_stopping_buffer = max(early_stopping_buffer, 1000)
     sample_interval = min(1000, iter_per_epoch)
     lr = _get_learning_rate(n_snps=n_snps)
+    precision = _get_supported_precision(optimize_model=optimize_model)
+    compile_model = _get_compile_model(optimize_model=optimize_model)
 
     injections = {
         "basic_experiment": {
@@ -579,6 +615,12 @@ def _get_global_injections(
             "mixing_alpha": cur_mixing,
             "early_stopping_buffer": early_stopping_buffer,
             "weighted_sampling_columns": weighted_sampling_columns,
+        },
+        "model": {
+            "compile_model": compile_model,
+        },
+        "accelerator": {
+            "precision": precision,
         },
     }
 
@@ -763,6 +805,7 @@ def _get_all_dynamic_injections(
             n_samples=spe.num_samples_total,
             weighted_sampling_columns=mip.weighted_sampling_columns,
             modelling_data_format=mip.modelling_data_format,
+            optimize_model=mip.optimize_model,
         ),
         "input_genotype_config": _get_genotype_injections(
             input_source=mip.genotype_input_source,
