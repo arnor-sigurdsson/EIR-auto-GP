@@ -715,7 +715,7 @@ wheels = [
 
 [[package]]
 name = "eir-auto-gp"
-version = "0.9.0"
+version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "aislib" },
@@ -756,7 +756,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aislib", specifier = ">=0.3.0" },
-    { name = "eir-dl", specifier = ">=0.23.0" },
+    { name = "eir-dl", git = "https://github.com/arnor-sigurdsson/EIR?branch=update-lcl-tb-layers" },
     { name = "networkx", specifier = ">=3.3" },
     { name = "pandas", specifier = ">=2.2.2" },
     { name = "plink-pipelines", specifier = "==0.8.3" },
@@ -793,7 +793,7 @@ dev = [
 [[package]]
 name = "eir-dl"
 version = "0.23.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/arnor-sigurdsson/EIR?branch=update-lcl-tb-layers#41d09140bb15b1cbe33d9a015ddb984eeb93f3e1" }
 dependencies = [
     { name = "adabelief-pytorch" },
     { name = "aislib" },
@@ -832,10 +832,6 @@ dependencies = [
     { name = "uvicorn" },
     { name = "websocket-client" },
     { name = "websockets" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/a4/be5421bab2934c701570ef012a4e141fced6437d45cf4f6cc72ccfcc1bb0/eir_dl-0.23.0.tar.gz", hash = "sha256:6d3e80f5991b252dc5a84526657fff73b3173ad33d3fca23a8186c53e7f78859", size = 24773198, upload-time = "2025-09-24T21:47:38.036Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/23/05/251cd7df23233f256fcc2ed4195618a7a199ebdde32a8f1244aa78e2b50b/eir_dl-0.23.0-py3-none-any.whl", hash = "sha256:9306141942ea680379206b9d0c14180d83b2da7878e1f077a0489272b2bff2ee", size = 478710, upload-time = "2025-09-24T21:47:34.203Z" },
 ]
 
 [[package]]

@@ -81,3 +81,6 @@ known-first-party = ["eir_auto_gp"]
 [tool.deptry]
 ignore = ["DEP003"]
 exclude = ["misc", "tests", ".venv", ".tox", "docs"]
+
+[tool.uv.sources]
+eir-dl = { git = "https://github.com/arnor-sigurdsson/EIR", branch = "update-lcl-tb-layers" }
