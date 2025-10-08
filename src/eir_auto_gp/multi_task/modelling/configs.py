@@ -31,11 +31,11 @@ def get_base_global_config() -> dict[str, Any]:
             "optimizer": "adabelief",
         },
         "lr_schedule": {
-            "lr_plateau_patience": 6,
+            "lr_plateau_patience": 8,
         },
         "training_control": {
             "early_stopping_buffer": "FILL",
-            "early_stopping_patience": 8,
+            "early_stopping_patience": 10,
             "mixing_alpha": "FILL",
         },
         "attribution_analysis": {
@@ -72,7 +72,8 @@ def get_base_input_genotype_config() -> dict[str, Any]:
         "model_config": {
             "model_type": "genome-local-net",
             "model_init_config": {
-                "rb_do": 0.0,
+                "rb_do": 0.10,
+                "stochastic_depth_p": 0.00,
                 "channel_exp_base": 3,
                 "kernel_width": "FILL",
                 "first_kernel_expansion": "FILL",
@@ -142,11 +143,11 @@ def get_base_fusion_config(
         fmsp = get_fusion_model_size_params(model_size=model_size)
 
     config_base = {
-        "fc_do": 0.0,
+        "fc_do": 0.10,
         "fc_task_dim": fmsp.fc_dim,
         "layers": [fmsp.n_layers],
-        "rb_do": 0.0,
-        "stochastic_depth_p": 0.0,
+        "rb_do": 0.10,
+        "stochastic_depth_p": 0.10,
     }
 
     if model_type == "mlp-residual":
@@ -376,11 +377,11 @@ def get_output_configs(
         "mlp": {
             "model_type": "mlp_residual",
             "model_init_config": {
-                "rb_do": 0.05,
-                "fc_do": 0.05,
+                "rb_do": 0.10,
+                "fc_do": 0.10,
                 "fc_task_dim": 128,
                 "layers": [2],
-                "stochastic_depth_p": 0.0,
+                "stochastic_depth_p": 0.10,
                 "final_layer_type": "linear",
             },
         },
@@ -392,9 +393,9 @@ def get_output_configs(
             "model_init_config": {
                 "layers": [shared_mlp_params.n_layers],
                 "fc_task_dim": shared_mlp_params.fc_dim,
-                "rb_do": 0.00,
-                "fc_do": 0.00,
-                "stochastic_depth_p": 0.0,
+                "rb_do": 0.10,
+                "fc_do": 0.10,
+                "stochastic_depth_p": 0.10,
             },
         },
     }
