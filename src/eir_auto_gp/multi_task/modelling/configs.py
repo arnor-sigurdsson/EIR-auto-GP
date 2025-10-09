@@ -37,11 +37,11 @@ def get_base_global_config() -> dict[str, Any]:
             "optimizer": "adabelief",
         },
         "lr_schedule": {
-            "lr_plateau_patience": 8,
+            "lr_plateau_patience": 6,
         },
         "training_control": {
             "early_stopping_buffer": "FILL",
-            "early_stopping_patience": 10,
+            "early_stopping_patience": 8,
             "mixing_alpha": "FILL",
         },
         "attribution_analysis": {
@@ -266,24 +266,25 @@ def get_fusion_model_size_params(model_size: str) -> FusionModelSizeParams:
     return param_dict[model_size]
 
 
-def _get_staggered_cache_name(
+def _get_staggered_cache_names(
     layer_index: int,
     total_layers: int,
     n_lcl_blocks: int,
-) -> str:
+) -> list[str]:
+    cache_names = ["first_layer_tensor"]
+
     if n_lcl_blocks == 0:
-        return "first_layer_tensor"
+        return cache_names
 
     num_sections = n_lcl_blocks + 1
     section_size = total_layers / num_sections
     section = int(layer_index / section_size)
 
-    if section == 0:
-        return "first_layer_tensor"
-    elif section <= n_lcl_blocks:
-        return f"lcl_block_{section - 1}"
-    else:
-        return f"lcl_block_{n_lcl_blocks - 1}"
+    if section > 0:
+        lcl_block_index = min(section - 1, n_lcl_blocks - 1)
+        cache_names.append(f"lcl_block_{lcl_block_index}")
+
+    return cache_names
 
 
 def generate_tb_base_config(
@@ -294,7 +295,7 @@ def generate_tb_base_config(
     output_groups: dict[str, list[str]] | None,
     n_lcl_blocks: int = 0,
 ) -> dict[str, list[dict[str, Any]]]:
-    base_cache_name = _get_staggered_cache_name(
+    base_cache_names = _get_staggered_cache_names(
         layer_index=0,
         total_layers=num_layers,
         n_lcl_blocks=n_lcl_blocks,
@@ -304,7 +305,7 @@ def generate_tb_base_config(
         {
             "name": "base_fusion_residual_block",
             "layer_path": "fusion_modules.computed.fusion_modules.fusion.0.0",
-            "use_from_cache": [base_cache_name],
+            "use_from_cache": base_cache_names,
             "projection_type": "lcl+mlp_residual",
             "cache_fusion_type": "sum",
             "kernel_width_divisible_by": 4,
@@ -315,7 +316,7 @@ def generate_tb_base_config(
 
     for layer in range(0, num_layers_adjusted + 1):
         if layer % tb_block_frequency == 0:
-            cache_name = _get_staggered_cache_name(
+            cache_names = _get_staggered_cache_names(
                 layer_index=layer + 2,
                 total_layers=num_layers,
                 n_lcl_blocks=n_lcl_blocks,
@@ -325,7 +326,7 @@ def generate_tb_base_config(
                     "name": f"{layer}_fusion_residual_block",
                     "layer_path": f"fusion_modules.computed.fusion_modules"
                     f".fusion.1.{layer}",
-                    "use_from_cache": [cache_name],
+                    "use_from_cache": cache_names,
                     "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
                     "kernel_width_divisible_by": 4,
