@@ -408,9 +408,9 @@ def _predict_with_linear(
 ) -> np.ndarray:
     if target_type == "classification":
         if hasattr(model, "predict_proba") and callable(model.predict_proba):
-            return np.asarray(model.predict_proba(x_eval))
+            return np.asarray(model.predict_proba(x_eval))  # type: ignore
         elif hasattr(model, "_predict_proba_lr") and callable(model._predict_proba_lr):
-            return np.asarray(model._predict_proba_lr(x_eval))
+            return np.asarray(model._predict_proba_lr(x_eval))  # type: ignore
         else:
             raise ValueError()
 

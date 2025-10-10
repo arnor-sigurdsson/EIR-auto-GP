@@ -290,7 +290,7 @@ def build_predict_configs(
     modelling_folder: Path,
     prepared_input_data_folder: Path,
     output_folder: Path,
-) -> dict[str, Path]:
+) -> dict[str, Path | list[Path]]:
     configs_folder = modelling_folder / "serializations/configs_stripped"
 
     subset_folder = modelling_folder / "snp_subset_files"
