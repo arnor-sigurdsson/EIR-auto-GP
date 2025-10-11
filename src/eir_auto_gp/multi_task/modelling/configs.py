@@ -63,10 +63,10 @@ def get_base_global_config() -> dict[str, Any]:
 def get_base_input_genotype_config(n_lcl_blocks: int = 0) -> dict[str, Any]:
     message_configs = [
         {
-            "name": "first_layer_tensor",
+            "name": "fc_0_output",
             "layer_path": "input_modules.genotype.fc_0",
             "cache_tensor": True,
-            "layer_cache_target": "input",
+            "layer_cache_target": "output",
             "kernel_width_divisible_by": 4,
         }
     ]
@@ -291,7 +291,7 @@ def _get_staggered_cache_names(
     total_layers: int,
     n_lcl_blocks: int,
 ) -> list[str]:
-    cache_names = ["first_layer_tensor"]
+    cache_names = ["fc_0_output"]
 
     if n_lcl_blocks == 0:
         return cache_names
@@ -308,7 +308,7 @@ def _get_staggered_cache_names(
 
 
 def _get_output_head_cache_names(n_lcl_blocks: int) -> list[str]:
-    cache_names = ["first_layer_tensor"]
+    cache_names = ["fc_0_output"]
 
     if n_lcl_blocks >= 1:
         cache_names.extend(["lcl_block_0_fc_1", "lcl_block_0_fc_2"])
