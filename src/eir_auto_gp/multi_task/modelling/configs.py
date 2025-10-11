@@ -82,6 +82,26 @@ def get_base_input_genotype_config(n_lcl_blocks: int = 0) -> dict[str, Any]:
             }
         )
 
+    if n_lcl_blocks >= 1:
+        message_configs.extend(
+            [
+                {
+                    "name": "lcl_block_0_fc_1",
+                    "layer_path": "input_modules.genotype.lcl_blocks.0.fc_1",
+                    "cache_tensor": True,
+                    "layer_cache_target": "output",
+                    "kernel_width_divisible_by": 4,
+                },
+                {
+                    "name": "lcl_block_0_fc_2",
+                    "layer_path": "input_modules.genotype.lcl_blocks.0.fc_2",
+                    "cache_tensor": True,
+                    "layer_cache_target": "output",
+                    "kernel_width_divisible_by": 4,
+                },
+            ]
+        )
+
     base = {
         "input_info": {
             "input_source": "FILL",
@@ -287,6 +307,15 @@ def _get_staggered_cache_names(
     return cache_names
 
 
+def _get_output_head_cache_names(n_lcl_blocks: int) -> list[str]:
+    cache_names = ["first_layer_tensor"]
+
+    if n_lcl_blocks >= 1:
+        cache_names.extend(["lcl_block_0_fc_1", "lcl_block_0_fc_2"])
+
+    return cache_names
+
+
 def generate_tb_base_config(
     num_layers: int,
     tb_block_frequency: int,
@@ -333,12 +362,14 @@ def generate_tb_base_config(
                 }
             )
 
+    output_cache_names = _get_output_head_cache_names(n_lcl_blocks=n_lcl_blocks)
+
     if output_head == "linear":
         message_configs.append(
             {
                 "name": "final_layer",
                 "layer_path": "output_modules.eir_auto_gp.linear_layer",
-                "use_from_cache": ["first_layer_tensor"],
+                "use_from_cache": output_cache_names,
                 "projection_type": "lcl+mlp_residual",
                 "cache_fusion_type": "sum",
                 "kernel_width_divisible_by": 4,
@@ -351,7 +382,7 @@ def generate_tb_base_config(
                     "name": f"final_layer_{target_column}",
                     "layer_path": f"output_modules.eir_auto_gp.multi_task_branches."
                     f"{target_column}.0.1",
-                    "use_from_cache": ["first_layer_tensor"],
+                    "use_from_cache": output_cache_names,
                     "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
                     "kernel_width_divisible_by": 4,
@@ -365,7 +396,7 @@ def generate_tb_base_config(
                     "name": f"final_layer_{group_name}",
                     "layer_path": f"output_modules.eir_auto_gp_{group_name}"
                     f".shared_branch",
-                    "use_from_cache": ["first_layer_tensor"],
+                    "use_from_cache": output_cache_names,
                     "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
                     "kernel_width_divisible_by": 4,
@@ -413,12 +444,14 @@ def generate_tb_mgmoe_config(
                     }
                 )
 
+    output_cache_names = _get_output_head_cache_names(n_lcl_blocks=n_lcl_blocks)
+
     if output_head == "linear":
         message_configs.append(
             {
                 "name": "final_layer",
                 "layer_path": "output_modules.eir_auto_gp.linear_layer",
-                "use_from_cache": ["first_layer_tensor"],
+                "use_from_cache": output_cache_names,
                 "projection_type": "lcl+mlp_residual",
                 "cache_fusion_type": "sum",
                 "kernel_width_divisible_by": 4,
