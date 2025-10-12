@@ -149,6 +149,7 @@ class TestSingleRun(luigi.Task):
             n_output_layers=self.modelling_config["n_output_layers"],
             output_dim=self.modelling_config["output_dim"],
             n_lcl_blocks=n_lcl_blocks,
+            use_lcl_block_skips=False,
         )
 
         injection_params = build_injection_params(
@@ -290,6 +291,7 @@ class TrainSingleRun(luigi.Task):
             n_output_layers=self.modelling_config["n_output_layers"],
             output_dim=self.modelling_config["output_dim"],
             n_lcl_blocks=n_lcl_blocks,
+            use_lcl_block_skips=False,
         )
 
         injection_params = build_injection_params(

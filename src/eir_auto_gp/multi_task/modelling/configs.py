@@ -60,7 +60,9 @@ def get_base_global_config() -> dict[str, Any]:
     return base
 
 
-def get_base_input_genotype_config(n_lcl_blocks: int = 0) -> dict[str, Any]:
+def get_base_input_genotype_config(
+    n_lcl_blocks: int = 0, use_lcl_block_skips: bool = False
+) -> dict[str, Any]:
     message_configs = [
         {
             "name": "fc_0_output",
@@ -82,7 +84,7 @@ def get_base_input_genotype_config(n_lcl_blocks: int = 0) -> dict[str, Any]:
             }
         )
 
-    if n_lcl_blocks >= 1:
+    if use_lcl_block_skips and n_lcl_blocks >= 1:
         message_configs.extend(
             [
                 {
@@ -307,9 +309,9 @@ def _get_staggered_cache_names(
     return cache_names
 
 
-def _get_output_head_cache_names(n_lcl_blocks: int) -> list[str]:
-    use_lcl_block_skips = False
-
+def _get_output_head_cache_names(
+    n_lcl_blocks: int, use_lcl_block_skips: bool = False
+) -> list[str]:
     cache_names = ["fc_0_output"]
 
     if use_lcl_block_skips and n_lcl_blocks >= 1:
@@ -325,6 +327,7 @@ def generate_tb_base_config(
     target_columns: list[str],
     output_groups: dict[str, list[str]] | None,
     n_lcl_blocks: int = 0,
+    use_lcl_block_skips: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
     base_cache_names = _get_staggered_cache_names(
         layer_index=0,
@@ -364,7 +367,9 @@ def generate_tb_base_config(
                 }
             )
 
-    output_cache_names = _get_output_head_cache_names(n_lcl_blocks=n_lcl_blocks)
+    output_cache_names = _get_output_head_cache_names(
+        n_lcl_blocks=n_lcl_blocks, use_lcl_block_skips=use_lcl_block_skips
+    )
 
     if output_head == "linear":
         message_configs.append(
@@ -446,7 +451,10 @@ def generate_tb_mgmoe_config(
                     }
                 )
 
-    output_cache_names = _get_output_head_cache_names(n_lcl_blocks=n_lcl_blocks)
+    use_lcl_block_skips = False
+    output_cache_names = _get_output_head_cache_names(
+        n_lcl_blocks=n_lcl_blocks, use_lcl_block_skips=use_lcl_block_skips
+    )
 
     if output_head == "linear":
         message_configs.append(
@@ -630,9 +638,12 @@ def get_aggregate_config(
     n_output_layers: int | None = None,
     output_dim: int | None = None,
     n_lcl_blocks: int = 0,
+    use_lcl_block_skips: bool = False,
 ) -> AggregateConfig:
     global_config = get_base_global_config()
-    input_genotype_config = get_base_input_genotype_config(n_lcl_blocks=n_lcl_blocks)
+    input_genotype_config = get_base_input_genotype_config(
+        n_lcl_blocks=n_lcl_blocks, use_lcl_block_skips=use_lcl_block_skips
+    )
     input_tabular_config = get_base_tabular_input_config()
 
     if output_groups:
