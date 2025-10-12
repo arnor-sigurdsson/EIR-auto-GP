@@ -308,9 +308,11 @@ def _get_staggered_cache_names(
 
 
 def _get_output_head_cache_names(n_lcl_blocks: int) -> list[str]:
+    use_lcl_block_skips = False
+
     cache_names = ["fc_0_output"]
 
-    if n_lcl_blocks >= 1:
+    if use_lcl_block_skips and n_lcl_blocks >= 1:
         cache_names.extend(["lcl_block_0_fc_1", "lcl_block_0_fc_2"])
 
     return cache_names
