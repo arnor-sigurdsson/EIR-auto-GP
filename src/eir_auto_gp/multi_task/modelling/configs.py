@@ -212,6 +212,8 @@ def get_base_fusion_config(
     fusion_dim: int | None = None,
     skip_to_every_n_fusion_layers: int | None = None,
     n_lcl_blocks: int = 0,
+    use_lcl_block_skips: bool = False,
+    use_output_head_skips: bool = True,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
         assert fusion_dim is not None
@@ -240,6 +242,8 @@ def get_base_fusion_config(
             target_columns=target_columns,
             output_groups=output_groups,
             n_lcl_blocks=n_lcl_blocks,
+            use_lcl_block_skips=use_lcl_block_skips,
+            use_output_head_skips=use_output_head_skips,
         )
         base = {
             "model_config": config_base,
@@ -310,8 +314,13 @@ def _get_staggered_cache_names(
 
 
 def _get_output_head_cache_names(
-    n_lcl_blocks: int, use_lcl_block_skips: bool = False
+    n_lcl_blocks: int,
+    use_lcl_block_skips: bool = False,
+    use_output_head_skips: bool = True,
 ) -> list[str]:
+    if not use_output_head_skips:
+        return []
+
     cache_names = ["fc_0_output"]
 
     if use_lcl_block_skips and n_lcl_blocks >= 1:
@@ -328,6 +337,7 @@ def generate_tb_base_config(
     output_groups: dict[str, list[str]] | None,
     n_lcl_blocks: int = 0,
     use_lcl_block_skips: bool = False,
+    use_output_head_skips: bool = True,
 ) -> dict[str, list[dict[str, Any]]]:
     base_cache_names = _get_staggered_cache_names(
         layer_index=0,
@@ -368,7 +378,9 @@ def generate_tb_base_config(
             )
 
     output_cache_names = _get_output_head_cache_names(
-        n_lcl_blocks=n_lcl_blocks, use_lcl_block_skips=use_lcl_block_skips
+        n_lcl_blocks=n_lcl_blocks,
+        use_lcl_block_skips=use_lcl_block_skips,
+        use_output_head_skips=use_output_head_skips,
     )
 
     if output_head == "linear":
@@ -452,8 +464,11 @@ def generate_tb_mgmoe_config(
                 )
 
     use_lcl_block_skips = False
+    use_output_head_skips = False
     output_cache_names = _get_output_head_cache_names(
-        n_lcl_blocks=n_lcl_blocks, use_lcl_block_skips=use_lcl_block_skips
+        n_lcl_blocks=n_lcl_blocks,
+        use_lcl_block_skips=use_lcl_block_skips,
+        use_output_head_skips=use_output_head_skips,
     )
 
     if output_head == "linear":
@@ -639,6 +654,7 @@ def get_aggregate_config(
     output_dim: int | None = None,
     n_lcl_blocks: int = 0,
     use_lcl_block_skips: bool = False,
+    use_output_head_skips: bool = True,
 ) -> AggregateConfig:
     global_config = get_base_global_config()
     input_genotype_config = get_base_input_genotype_config(
@@ -672,6 +688,8 @@ def get_aggregate_config(
         fusion_dim=fusion_dim,
         skip_to_every_n_fusion_layers=skip_to_every_n_fusion_layers,
         n_lcl_blocks=n_lcl_blocks,
+        use_lcl_block_skips=use_lcl_block_skips,
+        use_output_head_skips=use_output_head_skips,
     )
     output_configs = get_output_configs(
         output_head=output_head,
