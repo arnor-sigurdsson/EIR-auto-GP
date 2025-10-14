@@ -292,6 +292,7 @@ class TrainSingleRun(luigi.Task):
             output_dim=self.modelling_config["output_dim"],
             n_lcl_blocks=n_lcl_blocks,
             use_lcl_block_skips=False,
+            fc0_fusion_skip_scope="first_section",
         )
 
         injection_params = build_injection_params(

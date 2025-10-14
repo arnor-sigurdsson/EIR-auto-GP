@@ -213,6 +213,7 @@ def get_base_fusion_config(
     skip_to_every_n_fusion_layers: int | None = None,
     n_lcl_blocks: int = 0,
     use_lcl_block_skips: bool = False,
+    fc0_fusion_skip_scope: str | int = "all",
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
         assert fusion_dim is not None
@@ -242,6 +243,7 @@ def get_base_fusion_config(
             output_groups=output_groups,
             n_lcl_blocks=n_lcl_blocks,
             use_lcl_block_skips=use_lcl_block_skips,
+            fc0_fusion_skip_scope=fc0_fusion_skip_scope,
         )
         base = {
             "model_config": config_base,
@@ -294,19 +296,40 @@ def _get_staggered_cache_names(
     layer_index: int,
     total_layers: int,
     n_lcl_blocks: int,
+    fc0_fusion_skip_scope: str | int = "all",
 ) -> list[str]:
-    cache_names = ["fc_0_output"]
+    active_lcl_blocks = []
+    if n_lcl_blocks > 0:
+        num_sections = n_lcl_blocks + 1
+        section_size = total_layers / num_sections
 
-    if n_lcl_blocks == 0:
-        return cache_names
+        for i in range(n_lcl_blocks):
+            threshold = section_size * (i + 1)
+            if layer_index >= threshold:
+                active_lcl_blocks.append(f"lcl_block_{i}")
 
-    num_sections = n_lcl_blocks + 1
-    section_size = total_layers / num_sections
-    section = int(layer_index / section_size)
+    add_fc0 = False
+    if fc0_fusion_skip_scope == "all":
+        add_fc0 = True
+    elif fc0_fusion_skip_scope == "first_section":
+        if not active_lcl_blocks or n_lcl_blocks == 0:
+            add_fc0 = True
+    elif isinstance(fc0_fusion_skip_scope, int):
+        if layer_index < fc0_fusion_skip_scope:
+            add_fc0 = True
+    elif fc0_fusion_skip_scope == "none":
+        add_fc0 = False
+    else:
+        raise ValueError(
+            f"Invalid fc0_fusion_skip_scope: {fc0_fusion_skip_scope}. "
+            f"Expected 'all', 'first_section', 'none', or int."
+        )
 
-    if section > 0:
-        lcl_block_index = min(section - 1, n_lcl_blocks - 1)
-        cache_names.append(f"lcl_block_{lcl_block_index}")
+    cache_names = []
+    if add_fc0:
+        cache_names.append("fc_0_output")
+
+    cache_names.extend(active_lcl_blocks)
 
     return cache_names
 
@@ -331,11 +354,13 @@ def generate_tb_base_config(
     output_groups: dict[str, list[str]] | None,
     n_lcl_blocks: int = 0,
     use_lcl_block_skips: bool = False,
+    fc0_fusion_skip_scope: str | int = "all",
 ) -> dict[str, list[dict[str, Any]]]:
     base_cache_names = _get_staggered_cache_names(
         layer_index=0,
         total_layers=num_layers,
         n_lcl_blocks=n_lcl_blocks,
+        fc0_fusion_skip_scope=fc0_fusion_skip_scope,
     )
 
     message_configs: list[dict[str, Any]] = [
@@ -357,6 +382,7 @@ def generate_tb_base_config(
                 layer_index=layer + 2,
                 total_layers=num_layers,
                 n_lcl_blocks=n_lcl_blocks,
+                fc0_fusion_skip_scope=fc0_fusion_skip_scope,
             )
             message_configs.append(
                 {
@@ -644,6 +670,7 @@ def get_aggregate_config(
     output_dim: int | None = None,
     n_lcl_blocks: int = 0,
     use_lcl_block_skips: bool = False,
+    fc0_fusion_skip_scope: str | int = "all",
 ) -> AggregateConfig:
     global_config = get_base_global_config()
     input_genotype_config = get_base_input_genotype_config(
@@ -678,6 +705,7 @@ def get_aggregate_config(
         skip_to_every_n_fusion_layers=skip_to_every_n_fusion_layers,
         n_lcl_blocks=n_lcl_blocks,
         use_lcl_block_skips=use_lcl_block_skips,
+        fc0_fusion_skip_scope=fc0_fusion_skip_scope,
     )
     output_configs = get_output_configs(
         output_head=output_head,
