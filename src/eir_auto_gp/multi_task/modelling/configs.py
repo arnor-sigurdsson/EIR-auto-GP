@@ -61,18 +61,13 @@ def get_base_global_config() -> dict[str, Any]:
 
 
 def get_base_input_genotype_config(
-    n_lcl_blocks: int = 0, use_lcl_block_skips: bool = False
+    n_lcl_blocks: int = 0,
+    use_lcl_block_skips: bool = False,
+    use_lcl_fusion_skips: bool = True,
 ) -> dict[str, Any]:
     message_configs = [
         {
-            "name": "fc_0_output_path_1",
-            "layer_path": "input_modules.genotype.fc_0",
-            "cache_tensor": True,
-            "layer_cache_target": "output",
-            "kernel_width_divisible_by": 4,
-        },
-        {
-            "name": "fc_0_output_path_2",
+            "name": "fc_0_output",
             "layer_path": "input_modules.genotype.fc_0",
             "cache_tensor": True,
             "layer_cache_target": "output",
@@ -80,16 +75,17 @@ def get_base_input_genotype_config(
         },
     ]
 
-    for i in range(n_lcl_blocks):
-        message_configs.append(
-            {
-                "name": f"lcl_block_{i}",
-                "layer_path": f"input_modules.genotype.lcl_blocks.{i}",
-                "cache_tensor": True,
-                "layer_cache_target": "output",
-                "kernel_width_divisible_by": 4,
-            }
-        )
+    if use_lcl_fusion_skips:
+        for i in range(n_lcl_blocks):
+            message_configs.append(
+                {
+                    "name": f"lcl_block_{i}",
+                    "layer_path": f"input_modules.genotype.lcl_blocks.{i}",
+                    "cache_tensor": True,
+                    "layer_cache_target": "output",
+                    "kernel_width_divisible_by": 4,
+                }
+            )
 
     if use_lcl_block_skips and n_lcl_blocks >= 1:
         message_configs.extend(
@@ -220,6 +216,7 @@ def get_base_fusion_config(
     skip_to_every_n_fusion_layers: int | None = None,
     n_lcl_blocks: int = 0,
     use_lcl_block_skips: bool = False,
+    use_lcl_fusion_skips: bool = True,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
         assert fusion_dim is not None
@@ -249,6 +246,7 @@ def get_base_fusion_config(
             output_groups=output_groups,
             n_lcl_blocks=n_lcl_blocks,
             use_lcl_block_skips=use_lcl_block_skips,
+            use_lcl_fusion_skips=use_lcl_fusion_skips,
         )
         base = {
             "model_config": config_base,
@@ -301,10 +299,11 @@ def _get_staggered_cache_names(
     layer_index: int,
     total_layers: int,
     n_lcl_blocks: int,
+    use_lcl_fusion_skips: bool = True,
 ) -> list[str]:
-    cache_names = ["fc_0_output_path_1", "fc_0_output_path_2"]
+    cache_names = ["fc_0_output"]
 
-    if n_lcl_blocks == 0:
+    if n_lcl_blocks == 0 or not use_lcl_fusion_skips:
         return cache_names
 
     num_sections = n_lcl_blocks + 1
@@ -319,7 +318,7 @@ def _get_staggered_cache_names(
 
 
 def _get_output_head_cache_names() -> list[str]:
-    cache_names = ["fc_0_output_path_1", "fc_0_output_path_2"]
+    cache_names = ["fc_0_output"]
     return cache_names
 
 
@@ -331,11 +330,13 @@ def generate_tb_base_config(
     output_groups: dict[str, list[str]] | None,
     n_lcl_blocks: int = 0,
     use_lcl_block_skips: bool = False,
+    use_lcl_fusion_skips: bool = True,
 ) -> dict[str, list[dict[str, Any]]]:
     base_cache_names = _get_staggered_cache_names(
         layer_index=0,
         total_layers=num_layers,
         n_lcl_blocks=n_lcl_blocks,
+        use_lcl_fusion_skips=use_lcl_fusion_skips,
     )
     message_configs: list[dict[str, Any]] = [
         {
@@ -356,6 +357,7 @@ def generate_tb_base_config(
                 layer_index=layer + 2,
                 total_layers=num_layers,
                 n_lcl_blocks=n_lcl_blocks,
+                use_lcl_fusion_skips=use_lcl_fusion_skips,
             )
             message_configs.append(
                 {
@@ -636,10 +638,13 @@ def get_aggregate_config(
     output_dim: int | None = None,
     n_lcl_blocks: int = 0,
     use_lcl_block_skips: bool = False,
+    use_lcl_fusion_skips: bool = True,
 ) -> AggregateConfig:
     global_config = get_base_global_config()
     input_genotype_config = get_base_input_genotype_config(
-        n_lcl_blocks=n_lcl_blocks, use_lcl_block_skips=use_lcl_block_skips
+        n_lcl_blocks=n_lcl_blocks,
+        use_lcl_block_skips=use_lcl_block_skips,
+        use_lcl_fusion_skips=use_lcl_fusion_skips,
     )
     input_tabular_config = get_base_tabular_input_config()
 
@@ -670,6 +675,7 @@ def get_aggregate_config(
         skip_to_every_n_fusion_layers=skip_to_every_n_fusion_layers,
         n_lcl_blocks=n_lcl_blocks,
         use_lcl_block_skips=use_lcl_block_skips,
+        use_lcl_fusion_skips=use_lcl_fusion_skips,
     )
     output_configs = get_output_configs(
         output_head=output_head,
