@@ -776,7 +776,7 @@ def _get_output_injections(
             "target_cat_columns": output_cat_columns,
             "target_con_columns": output_con_columns,
             "cat_loss_name": cat_loss,
-            "uncertainty_weighted_mt_loss": True,
+            "uncertainty_weighted_mt_loss": False,
         },
     }
 
