@@ -34,7 +34,7 @@ def get_base_global_config() -> dict[str, Any]:
         "optimization": {
             "lr": "FILL",
             "gradient_clipping": 1.0,
-            "optimizer": "muonadamw",
+            "optimizer": "adabelief",
         },
         "lr_schedule": {
             "lr_plateau_patience": 6,
