@@ -474,7 +474,7 @@ def generate_tb_mgmoe_config(
                     }
                 )
 
-    use_lcl_to_output_skips = "fc_1_only"
+    use_lcl_to_output_skips = True
     output_cache_names = _get_output_head_cache_names(
         use_lcl_to_output_skips=use_lcl_to_output_skips
     )

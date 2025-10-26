@@ -292,7 +292,7 @@ class TrainSingleRun(luigi.Task):
             n_output_layers=self.modelling_config["n_output_layers"],
             output_dim=self.modelling_config["output_dim"],
             n_lcl_blocks=n_lcl_blocks,
-            use_lcl_to_output_skips="fc_1_only",
+            use_lcl_to_output_skips=True,
             use_lcl_fusion_skips=False,
         )
 
