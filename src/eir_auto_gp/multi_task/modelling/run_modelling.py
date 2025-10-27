@@ -40,6 +40,40 @@ from eir_auto_gp.utils.utils import get_logger
 logger = get_logger(name=__name__)
 
 
+def validate_architecture_config(modelling_config: dict[str, Any]) -> None:
+    required_arch_flags = ["use_lcl_to_output_skips", "use_lcl_fusion_skips"]
+
+    for flag in required_arch_flags:
+        if flag not in modelling_config:
+            raise ValueError(
+                f"Architecture flag '{flag}' is missing from modelling_config. "
+                f"This flag controls model architecture and must be set explicitly. "
+                f"Available keys: {list(modelling_config.keys())}"
+            )
+
+    valid_lcl_output_values = [True, False, "fc_1_only"]
+    if modelling_config["use_lcl_to_output_skips"] not in valid_lcl_output_values:
+        raise ValueError(
+            f"Invalid value for 'use_lcl_to_output_skips': "
+            f"{modelling_config['use_lcl_to_output_skips']}. "
+            f"Must be one of: {valid_lcl_output_values}"
+        )
+
+    if not isinstance(modelling_config["use_lcl_fusion_skips"], bool):
+        raise ValueError(
+            f"Invalid value for 'use_lcl_fusion_skips': "
+            f"{modelling_config['use_lcl_fusion_skips']}. "
+            f"Must be a boolean (True/False)."
+        )
+
+    logger.info(
+        "Architecture configuration validated: "
+        "use_lcl_to_output_skips=%s, use_lcl_fusion_skips=%s",
+        modelling_config["use_lcl_to_output_skips"],
+        modelling_config["use_lcl_fusion_skips"],
+    )
+
+
 class RunModellingWrapper(luigi.Task):
     folds = luigi.Parameter()
     data_config = luigi.DictParameter()
@@ -124,6 +158,8 @@ class TestSingleRun(luigi.Task):
         output_root = Path(self.output().path).parent
         ensure_path_exists(output_root, is_folder=True)
 
+        validate_architecture_config(modelling_config=self.modelling_config)
+
         all_target_columns = (
             self.modelling_config["output_cat_columns"]
             + self.modelling_config["output_con_columns"]
@@ -149,8 +185,8 @@ class TestSingleRun(luigi.Task):
             n_output_layers=self.modelling_config["n_output_layers"],
             output_dim=self.modelling_config["output_dim"],
             n_lcl_blocks=n_lcl_blocks,
-            use_lcl_to_output_skips=False,
-            use_lcl_fusion_skips=False,
+            use_lcl_to_output_skips=self.modelling_config["use_lcl_to_output_skips"],
+            use_lcl_fusion_skips=self.modelling_config["use_lcl_fusion_skips"],
         )
 
         injection_params = build_injection_params(
@@ -267,6 +303,8 @@ class TrainSingleRun(luigi.Task):
         output_root = Path(self.output().path).parent
         ensure_path_exists(output_root, is_folder=True)
 
+        validate_architecture_config(modelling_config=self.modelling_config)
+
         all_target_columns = (
             self.modelling_config["output_cat_columns"]
             + self.modelling_config["output_con_columns"]
@@ -292,8 +330,8 @@ class TrainSingleRun(luigi.Task):
             n_output_layers=self.modelling_config["n_output_layers"],
             output_dim=self.modelling_config["output_dim"],
             n_lcl_blocks=n_lcl_blocks,
-            use_lcl_to_output_skips=True,
-            use_lcl_fusion_skips=False,
+            use_lcl_to_output_skips=self.modelling_config["use_lcl_to_output_skips"],
+            use_lcl_fusion_skips=self.modelling_config["use_lcl_fusion_skips"],
         )
 
         injection_params = build_injection_params(
