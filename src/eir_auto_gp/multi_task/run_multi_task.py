@@ -301,6 +301,15 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--genotype_only_test",
+        action="store_true",
+        help="When testing (--do_test), predict using only genotype data,\n"
+        "excluding tabular covariates. This simulates deployment to new cohorts\n"
+        "where covariates may not be available. Useful for validating that the\n"
+        "dropout strategy enables robust genotype-only predictions.",
+    )
+
+    parser.add_argument(
         "--optimize_model",
         action="store_true",
         help="Enable model optimizations including torch.compile and "
@@ -608,6 +617,7 @@ def build_modelling_config(cl_args: argparse.Namespace) -> dict[str, Any]:
         "batch_size",
         "weighted_sampling",
         "do_test",
+        "genotype_only_test",
         "optimize_model",
     ]
 

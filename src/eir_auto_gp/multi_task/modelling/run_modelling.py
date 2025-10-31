@@ -269,6 +269,7 @@ def get_testing_string_from_config_folder(
     assert len(saved_models) == 1, "Expected only one saved model."
 
     final_string += f" --model_path {saved_models[0]}"
+    final_string += " --no-strict"
     if with_labels:
         final_string += " --evaluate"
 
@@ -401,6 +402,7 @@ class MultiTaskModelInjectionParams:
     output_configs: list[dict[str, Any]]
     batch_size: int | None
     optimize_model: bool
+    genotype_only_test: bool = False
 
 
 def build_injection_params(
@@ -427,6 +429,10 @@ def build_injection_params(
         base_output_folder=base_output_folder,
     )
 
+    genotype_only_test = task == "test" and modelling_config.get(
+        "genotype_only_test", False
+    )
+
     params = MultiTaskModelInjectionParams(
         fold=fold,
         output_folder=cur_run_output_folder,
@@ -444,6 +450,7 @@ def build_injection_params(
         output_configs=output_configs,
         batch_size=modelling_config["batch_size"],
         optimize_model=modelling_config["optimize_model"],
+        genotype_only_test=genotype_only_test,
     )
 
     return params
@@ -935,7 +942,7 @@ def _get_all_dynamic_injections(
 
         injections["output_config"][cur_config_name] = cur_injections
 
-    if mip.input_cat_columns or mip.input_con_columns:
+    if (mip.input_cat_columns or mip.input_con_columns) and not mip.genotype_only_test:
         injections["input_tabular_config"] = _get_tabular_injections(
             input_source=mip.label_file_path,
             input_cat_columns=list(mip.input_cat_columns),
