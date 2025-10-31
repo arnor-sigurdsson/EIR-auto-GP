@@ -1,3 +1,4 @@
+import math
 import os
 import subprocess
 from collections.abc import Iterable
@@ -631,6 +632,29 @@ def _get_compile_model(optimize_model: bool) -> bool:
     return False
 
 
+def _get_checkpoint_interval(
+    iter_per_epoch: int,
+    evaluations_per_epoch: int = 4,
+    min_interval: int = 50,
+    max_interval: int = 1000,
+) -> int:
+    if iter_per_epoch <= min_interval:
+        return iter_per_epoch
+
+    target_interval = iter_per_epoch / evaluations_per_epoch
+    if target_interval <= min_interval:
+        return min_interval
+
+    power = 10 ** math.floor(math.log10(target_interval))
+    rounding_base = power / 2
+    nice_interval = round(target_interval / rounding_base) * rounding_base
+
+    final_interval = max(min_interval, int(nice_interval))
+    final_interval = min(final_interval, iter_per_epoch, max_interval)
+
+    return final_interval
+
+
 def _get_global_injections(
     fold: int,
     output_folder: str,
@@ -661,7 +685,16 @@ def _get_global_injections(
     n_workers = get_dataloader_workers(memory_dataset=memory_dataset, device=device)
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
     early_stopping_buffer = max(early_stopping_buffer, 1000)
-    sample_interval = min(1000, iter_per_epoch)
+
+    sample_interval = _get_checkpoint_interval(iter_per_epoch=iter_per_epoch)
+    logger.info(
+        "Evaluation interval set to %d iterations (%.1f evaluations/epoch) "
+        "for %d iterations/epoch.",
+        sample_interval,
+        iter_per_epoch / sample_interval,
+        iter_per_epoch,
+    )
+
     lr = _get_learning_rate(n_snps=n_snps)
     precision = _get_supported_precision(optimize_model=optimize_model)
     compile_model = _get_compile_model(optimize_model=optimize_model)
