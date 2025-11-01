@@ -1,11 +1,9 @@
 import json
-import subprocess
 from pathlib import Path
 from statistics import mean
 
 import pandas as pd
 import pytest
-import yaml
 from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 
 from eir_auto_gp.multi_task.run_multi_task import get_argument_parser, run
@@ -158,6 +156,8 @@ def test_train_with_tabular_predict_without(tmp_path: Path) -> None:
         "--model_size nano "
         "--modelling_data_format auto "
         "--data_storage_format disk "
+        "--do_test "
+        "--genotype_only_test "
     )
 
     parser = get_argument_parser()
@@ -175,76 +175,13 @@ def test_train_with_tabular_predict_without(tmp_path: Path) -> None:
     assert run_folder is not None
     assert (run_folder / "completed_train.txt").exists()
 
-    config_folder = run_folder / "serializations" / "configs_stripped"
-    assert config_folder.exists()
+    test_folder = run_folder / "test_set_predictions"
+    assert (test_folder / "test_complete.txt").exists()
 
-    predict_config_folder = tmp_path / "predict_configs"
-    predict_config_folder.mkdir(parents=True, exist_ok=True)
+    metrics_file = test_folder / "calculated_metrics.json"
+    assert metrics_file.exists()
 
-    for config_file in config_folder.iterdir():
-        if config_file.suffix != ".yaml":
-            continue
-
-        if config_file.stem == "input_configs":
-            configs = yaml.safe_load(config_file.read_text())
-            genotype_only_configs = [
-                c for c in configs if c["input_info"]["input_name"] != "eir_tabular"
-            ]
-
-            if len(genotype_only_configs) == len(configs):
-                pytest.skip("No tabular input found in training config")
-
-            for _idx, config in enumerate(genotype_only_configs):
-                input_name = config["input_info"]["input_name"]
-                output_path = predict_config_folder / f"{input_name}_input_config.yaml"
-                output_path.write_text(yaml.dump(config))
-        else:
-            output_path = predict_config_folder / config_file.name
-            output_path.write_text(config_file.read_text())
-
-    saved_models = list((run_folder / "saved_models").iterdir())
-    assert len(saved_models) == 1
-
-    predict_output = tmp_path / "genotype_only_predictions"
-    predict_output.mkdir(parents=True, exist_ok=True)
-
-    command_parts = ["eirpredict"]
-
-    for config_file in predict_config_folder.iterdir():
-        if config_file.suffix != ".yaml":
-            continue
-        if "global" in config_file.stem:
-            command_parts.extend(["--global_configs", str(config_file)])
-        elif "input" in config_file.stem:
-            command_parts.extend(["--input_configs", str(config_file)])
-        elif "fusion" in config_file.stem:
-            command_parts.extend(["--fusion_configs", str(config_file)])
-        elif "output" in config_file.stem:
-            command_parts.extend(["--output_configs", str(config_file)])
-
-    command_parts.extend(
-        [
-            "--model_path",
-            str(saved_models[0]),
-            "--no-strict",
-            "--output_folder",
-            str(predict_output),
-        ]
-    )
-
-    result = subprocess.run(
-        command_parts,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, f"Prediction failed: {result.stderr}"
-
-    assert (predict_output / "predictions_complete.txt").exists()
-
-    prediction_files = list(predict_output.rglob("*.csv"))
-    assert len(prediction_files) > 0, "No prediction files generated"
-
-    for pred_file in prediction_files:
-        df = pd.read_csv(pred_file)
-        assert len(df) > 0, f"Empty predictions in {pred_file}"
+    metrics = json.loads(metrics_file.read_text())
+    metric_values = find_numeric_values(input_dict=metrics, accumulator=[])
+    avg = mean(metric_values)
+    assert avg >= 0.1

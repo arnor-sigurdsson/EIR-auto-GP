@@ -375,6 +375,13 @@ def _filter_tabular_from_fusion_config(config: dict) -> dict:
             logger.info(f"Filtering tabular TB message: {msg.get('name')}")
             continue
 
+        if msg.get("from") == "tabular_output":
+            logger.info(
+                f"Filtering TB message with tabular origin: {msg.get('name')} "
+                f"(from: {msg.get('from')})"
+            )
+            continue
+
         if "use_from_cache" in msg:
             original_cache = msg["use_from_cache"]
             filtered_cache = [c for c in original_cache if c != "tabular_output"]
