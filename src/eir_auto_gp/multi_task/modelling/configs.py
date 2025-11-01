@@ -728,7 +728,7 @@ def get_aggregate_config(
     n_lcl_blocks: int = 0,
     use_lcl_to_output_skips: bool | str = False,
     use_lcl_fusion_skips: bool = True,
-    include_tabular: bool = True,
+    tabular_to_output_skips: bool = True,
     tabular_drop_prob: float = 0.5,
     tabular_cache_dropout_p: float = 0.25,
 ) -> AggregateConfig:
@@ -739,7 +739,7 @@ def get_aggregate_config(
         use_lcl_fusion_skips=use_lcl_fusion_skips,
     )
     input_tabular_config = get_base_tabular_input_config(
-        cache_for_output_heads=include_tabular,
+        cache_for_output_heads=tabular_to_output_skips,
         drop_prob=tabular_drop_prob,
     )
 
@@ -771,7 +771,7 @@ def get_aggregate_config(
         n_lcl_blocks=n_lcl_blocks,
         use_lcl_to_output_skips=use_lcl_to_output_skips,
         use_lcl_fusion_skips=use_lcl_fusion_skips,
-        include_tabular=include_tabular,
+        include_tabular=tabular_to_output_skips,
         tabular_cache_dropout_p=tabular_cache_dropout_p,
     )
     output_configs = get_output_configs(

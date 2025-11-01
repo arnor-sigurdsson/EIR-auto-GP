@@ -294,7 +294,7 @@ class TestSingleRun(luigi.Task):
             n_lcl_blocks=n_lcl_blocks,
             use_lcl_to_output_skips=self.modelling_config["use_lcl_to_output_skips"],
             use_lcl_fusion_skips=self.modelling_config["use_lcl_fusion_skips"],
-            include_tabular=not self.modelling_config.get("genotype_only_test", False),
+            tabular_to_output_skips=False,
         )
 
         injection_params = build_injection_params(
@@ -451,6 +451,7 @@ class TrainSingleRun(luigi.Task):
             n_lcl_blocks=n_lcl_blocks,
             use_lcl_to_output_skips=self.modelling_config["use_lcl_to_output_skips"],
             use_lcl_fusion_skips=self.modelling_config["use_lcl_fusion_skips"],
+            tabular_to_output_skips=False,
         )
 
         injection_params = build_injection_params(
