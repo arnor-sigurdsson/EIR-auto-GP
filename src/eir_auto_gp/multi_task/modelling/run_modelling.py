@@ -276,6 +276,14 @@ class TestSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"]
         )
 
+        has_tabular_columns = bool(
+            self.modelling_config["input_cat_columns"]
+            or self.modelling_config["input_con_columns"]
+        )
+        tabular_to_output_skips = has_tabular_columns and not self.modelling_config.get(
+            "genotype_only_test", False
+        )
+
         base_aggregate_config = get_aggregate_config(
             output_head="linear",
             output_groups=self.modelling_config["output_groups"],
@@ -294,7 +302,7 @@ class TestSingleRun(luigi.Task):
             n_lcl_blocks=n_lcl_blocks,
             use_lcl_to_output_skips=self.modelling_config["use_lcl_to_output_skips"],
             use_lcl_fusion_skips=self.modelling_config["use_lcl_fusion_skips"],
-            tabular_to_output_skips=False,
+            tabular_to_output_skips=tabular_to_output_skips,
         )
 
         injection_params = build_injection_params(
@@ -433,6 +441,11 @@ class TrainSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"]
         )
 
+        has_tabular_columns = bool(
+            self.modelling_config["input_cat_columns"]
+            or self.modelling_config["input_con_columns"]
+        )
+
         base_aggregate_config = get_aggregate_config(
             output_head="linear",
             output_groups=self.modelling_config["output_groups"],
@@ -451,7 +464,7 @@ class TrainSingleRun(luigi.Task):
             n_lcl_blocks=n_lcl_blocks,
             use_lcl_to_output_skips=self.modelling_config["use_lcl_to_output_skips"],
             use_lcl_fusion_skips=self.modelling_config["use_lcl_fusion_skips"],
-            tabular_to_output_skips=False,
+            tabular_to_output_skips=has_tabular_columns,
         )
 
         injection_params = build_injection_params(

@@ -222,7 +222,7 @@ def get_base_tabular_input_config(
             "message_configs": [
                 {
                     "name": "tabular_output",
-                    "layer_path": "input_modules.eir_tabular.layer",
+                    "layer_path": "input_modules.eir_tabular.mlp_blocks",
                     "cache_tensor": True,
                     "layer_cache_target": "output",
                 }
@@ -245,7 +245,7 @@ def get_base_fusion_config(
     use_lcl_to_output_skips: bool | str = False,
     use_lcl_fusion_skips: bool = True,
     include_tabular: bool = True,
-    tabular_cache_dropout_p: float = 0.25,
+    tabular_cache_dropout_p: float = 0.00,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
         assert fusion_dim is not None
@@ -375,7 +375,7 @@ def generate_tb_base_config(
     use_lcl_to_output_skips: bool | str = False,
     use_lcl_fusion_skips: bool = True,
     include_tabular: bool = True,
-    tabular_cache_dropout_p: float = 0.25,
+    tabular_cache_dropout_p: float = 0.00,
 ) -> dict[str, list[dict[str, Any]]]:
     base_cache_names = _get_staggered_cache_names(
         layer_index=0,
@@ -438,9 +438,8 @@ def generate_tb_base_config(
                     "name": "tabular_to_output",
                     "layer_path": "output_modules.eir_auto_gp.linear_layer",
                     "use_from_cache": ["tabular_output"],
-                    "projection_type": "lcl+mlp_residual",
-                    "cache_fusion_type": "sum",
-                    "kernel_width_divisible_by": 4,
+                    "projection_type": "mlp_residual",
+                    "cache_fusion_type": "additive",
                     "cache_dropout_p": tabular_cache_dropout_p,
                 }
             )
@@ -464,9 +463,8 @@ def generate_tb_base_config(
                         "layer_path": f"output_modules.eir_auto_gp.multi_task_branches."
                         f"{target_column}.0.1",
                         "use_from_cache": ["tabular_output"],
-                        "projection_type": "lcl+mlp_residual",
-                        "cache_fusion_type": "sum",
-                        "kernel_width_divisible_by": 4,
+                        "projection_type": "mlp_residual",
+                        "cache_fusion_type": "additive",
                         "cache_dropout_p": tabular_cache_dropout_p,
                     }
                 )
@@ -489,11 +487,10 @@ def generate_tb_base_config(
                     {
                         "name": f"tabular_to_{group_name}",
                         "layer_path": f"output_modules.eir_auto_gp_{group_name}"
-                        f".shared_branch",
+                        f".output_identity",
                         "use_from_cache": ["tabular_output"],
-                        "projection_type": "lcl+mlp_residual",
-                        "cache_fusion_type": "sum",
-                        "kernel_width_divisible_by": 4,
+                        "projection_type": "mlp_residual",
+                        "cache_fusion_type": "additive",
                         "cache_dropout_p": tabular_cache_dropout_p,
                     }
                 )
@@ -729,8 +726,8 @@ def get_aggregate_config(
     use_lcl_to_output_skips: bool | str = False,
     use_lcl_fusion_skips: bool = True,
     tabular_to_output_skips: bool = True,
-    tabular_drop_prob: float = 0.5,
-    tabular_cache_dropout_p: float = 0.25,
+    tabular_drop_prob: float = 0.20,
+    tabular_cache_dropout_p: float = 0.00,
 ) -> AggregateConfig:
     global_config = get_base_global_config()
     input_genotype_config = get_base_input_genotype_config(
