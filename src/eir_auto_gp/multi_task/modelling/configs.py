@@ -16,7 +16,13 @@ from eir_auto_gp.utils.utils import get_logger
 logger = get_logger(name=__name__)
 
 
-def get_base_global_config() -> dict[str, Any]:
+def get_base_global_config(
+    include_adversarial: bool = False,
+    adversarial_lambda: float = 0.1,
+    adversarial_embedding_layer: str | None = None,
+    adversarial_hidden_dim: int = 256,
+    adversarial_layers: list[int] | None = None,
+) -> dict[str, Any]:
     base = {
         "basic_experiment": {
             "output_folder": "FILL",
@@ -57,6 +63,43 @@ def get_base_global_config() -> dict[str, Any]:
             "con_averaging_metrics": ["pcc", "r2"],
         },
     }
+
+    if include_adversarial:
+        if adversarial_embedding_layer is None:
+            adversarial_embedding_layer = (
+                "fusion_modules.computed.fusion_modules.fusion"
+            )
+
+        if adversarial_layers is None:
+            adversarial_layers = [2]
+
+        base["adversarial_training"] = {
+            "adversarial_configs": [
+                {
+                    "name": "fusion_vs_covariates",
+                    "enabled": True,
+                    "embedding_layer_path": adversarial_embedding_layer,
+                    "target_layer_path": "input_modules.eir_tabular.mlp_blocks",
+                    "lambda_adv": adversarial_lambda,
+                    "fc_dim": adversarial_hidden_dim,
+                    "layers": adversarial_layers,
+                    "projection_type": "mlp_residual",
+                    "dropout_p": 0.1,
+                },
+                {
+                    "name": "fc_0_vs_covariates",
+                    "enabled": True,
+                    "embedding_layer_path": "input_modules.genotype.fc_0",
+                    "target_layer_path": "input_modules.eir_tabular.mlp_blocks",
+                    "lambda_adv": adversarial_lambda,
+                    "fc_dim": adversarial_hidden_dim,
+                    "layers": adversarial_layers,
+                    "projection_type": "lcl+mlp_residual",
+                    "dropout_p": 0.1,
+                },
+            ]
+        }
+
     return base
 
 
@@ -730,8 +773,19 @@ def get_aggregate_config(
     tabular_to_output_skips: bool = True,
     tabular_drop_prob: float = 0.20,
     tabular_cache_dropout_p: float = 0.00,
+    use_adversarial_disentanglement: bool = True,
+    adversarial_lambda: float = 0.1,
+    adversarial_embedding_layer: str | None = None,
+    adversarial_hidden_dim: int = 256,
+    adversarial_layers: list[int] | None = None,
 ) -> AggregateConfig:
-    global_config = get_base_global_config()
+    global_config = get_base_global_config(
+        include_adversarial=tabular_to_output_skips and use_adversarial_disentanglement,
+        adversarial_lambda=adversarial_lambda,
+        adversarial_embedding_layer=adversarial_embedding_layer,
+        adversarial_hidden_dim=adversarial_hidden_dim,
+        adversarial_layers=adversarial_layers,
+    )
     input_genotype_config = get_base_input_genotype_config(
         n_lcl_blocks=n_lcl_blocks,
         use_lcl_to_output_skips=use_lcl_to_output_skips,
