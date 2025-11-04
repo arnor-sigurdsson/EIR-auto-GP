@@ -213,6 +213,8 @@ def get_base_tabular_input_config(
             "model_init_config": {
                 "fc_layer": True,
                 "drop_prob": drop_prob,
+                "layers": [2],
+                "fc_dim": "auto",
             },
         },
     }
