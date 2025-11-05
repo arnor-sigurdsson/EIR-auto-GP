@@ -847,7 +847,7 @@ dev = [
 [[package]]
 name = "eir-dl"
 version = "0.23.0"
-source = { git = "https://github.com/arnor-sigurdsson/EIR?branch=add-prototype-adversarial-disentanglement-support#e9cf6b8002e48871279c75fba5e264950cb72432" }
+source = { git = "https://github.com/arnor-sigurdsson/EIR?branch=add-prototype-adversarial-disentanglement-support#f03e85976d8a5c8d1d1ec23a418a93eaec48503c" }
 dependencies = [
     { name = "adabelief-pytorch" },
     { name = "aislib" },
