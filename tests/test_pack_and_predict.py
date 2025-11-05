@@ -54,7 +54,7 @@ def _get_test_cl_commands_with_tabular(folder_path: Path) -> list[str]:
 
     with_groups = f"{base} --output_groups random"
 
-    return [base, with_groups]
+    return [with_groups, base]
 
 
 def _build_test_predict_data(

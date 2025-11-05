@@ -17,11 +17,7 @@ logger = get_logger(name=__name__)
 
 
 def get_base_global_config(
-    include_adversarial: bool = False,
-    adversarial_lambda: float = 0.1,
-    adversarial_embedding_layer: str | None = None,
-    adversarial_hidden_dim: int = 256,
-    adversarial_layers: list[int] | None = None,
+    adversarial_configs: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     base = {
         "basic_experiment": {
@@ -64,41 +60,8 @@ def get_base_global_config(
         },
     }
 
-    if include_adversarial:
-        if adversarial_embedding_layer is None:
-            adversarial_embedding_layer = (
-                "fusion_modules.computed.fusion_modules.fusion"
-            )
-
-        if adversarial_layers is None:
-            adversarial_layers = [2]
-
-        base["adversarial_training"] = {
-            "adversarial_configs": [
-                {
-                    "name": "fusion_vs_covariates",
-                    "enabled": True,
-                    "embedding_layer_path": adversarial_embedding_layer,
-                    "target_layer_path": "input_modules.eir_tabular.mlp_blocks",
-                    "lambda_adv": adversarial_lambda,
-                    "fc_dim": adversarial_hidden_dim,
-                    "layers": adversarial_layers,
-                    "projection_type": "mlp_residual",
-                    "dropout_p": 0.1,
-                },
-                {
-                    "name": "fc_0_vs_covariates",
-                    "enabled": True,
-                    "embedding_layer_path": "input_modules.genotype.fc_0",
-                    "target_layer_path": "input_modules.eir_tabular.mlp_blocks",
-                    "lambda_adv": adversarial_lambda,
-                    "fc_dim": adversarial_hidden_dim,
-                    "layers": adversarial_layers,
-                    "projection_type": "lcl+mlp_residual",
-                    "dropout_p": 0.1,
-                },
-            ]
-        }
+    if adversarial_configs:
+        base["adversarial_training"] = {"adversarial_configs": adversarial_configs}
 
     return base
 
@@ -744,6 +707,52 @@ def create_shared_mlp_configs(
     return parsed_configs
 
 
+def _get_adversarial_configs(
+    output_groups: dict[str, list[str]],
+    adversarial_lambda: float = 0.1,
+    adversarial_hidden_dim: int = 256,
+    adversarial_layers: list[int] | None = None,
+) -> list[dict[str, Any]]:
+    if adversarial_layers is None:
+        adversarial_layers = [2]
+
+    adversarial_configs = []
+
+    adversarial_configs.append(
+        {
+            "name": "fusion_vs_covariates",
+            "enabled": True,
+            "embedding_layer_path": "fusion_modules.computed.fusion_modules.fusion",
+            "target_layer_path": "input_modules.eir_tabular.layer",
+            "lambda_adv": adversarial_lambda,
+            "fc_dim": adversarial_hidden_dim,
+            "layers": adversarial_layers,
+            "projection_type": "mlp_residual",
+            "dropout_p": 0.1,
+            "target_cache_target": "input",
+        }
+    )
+
+    for group_name in output_groups.keys():
+        adversarial_configs.append(
+            {
+                "name": f"{group_name}_vs_covariates",
+                "enabled": True,
+                "embedding_layer_path": f"output_modules."
+                f"eir_auto_gp_{group_name}.shared_branch.1",
+                "target_layer_path": "input_modules.eir_tabular.layer",
+                "lambda_adv": adversarial_lambda,
+                "fc_dim": adversarial_hidden_dim,
+                "layers": adversarial_layers,
+                "projection_type": "mlp_residual",
+                "dropout_p": 0.1,
+                "target_cache_target": "input",
+            }
+        )
+
+    return adversarial_configs
+
+
 @dataclass(frozen=True)
 class AggregateConfig:
     global_config: dict[str, Any]
@@ -771,31 +780,13 @@ def get_aggregate_config(
     use_lcl_to_output_skips: bool | str = False,
     use_lcl_fusion_skips: bool = True,
     tabular_to_output_skips: bool = True,
-    tabular_drop_prob: float = 0.20,
+    tabular_drop_prob: float = 1.00,
     tabular_cache_dropout_p: float = 0.00,
     use_adversarial_disentanglement: bool = True,
     adversarial_lambda: float = 0.1,
-    adversarial_embedding_layer: str | None = None,
-    adversarial_hidden_dim: int = 256,
+    adversarial_hidden_dim: int = 64,
     adversarial_layers: list[int] | None = None,
 ) -> AggregateConfig:
-    global_config = get_base_global_config(
-        include_adversarial=tabular_to_output_skips and use_adversarial_disentanglement,
-        adversarial_lambda=adversarial_lambda,
-        adversarial_embedding_layer=adversarial_embedding_layer,
-        adversarial_hidden_dim=adversarial_hidden_dim,
-        adversarial_layers=adversarial_layers,
-    )
-    input_genotype_config = get_base_input_genotype_config(
-        n_lcl_blocks=n_lcl_blocks,
-        use_lcl_to_output_skips=use_lcl_to_output_skips,
-        use_lcl_fusion_skips=use_lcl_fusion_skips,
-    )
-    input_tabular_config = get_base_tabular_input_config(
-        cache_for_output_heads=tabular_to_output_skips,
-        drop_prob=tabular_drop_prob,
-    )
-
     if output_groups:
         logger.info(
             "Output groups detected. Using output groups and setting output"
@@ -811,6 +802,30 @@ def get_aggregate_config(
         )
     else:
         built_output_groups = None
+
+    adversarial_configs = None
+    if (
+        tabular_to_output_skips
+        and use_adversarial_disentanglement
+        and built_output_groups is not None
+    ):
+        adversarial_configs = _get_adversarial_configs(
+            output_groups=built_output_groups,
+            adversarial_lambda=adversarial_lambda,
+            adversarial_hidden_dim=adversarial_hidden_dim,
+            adversarial_layers=adversarial_layers,
+        )
+
+    global_config = get_base_global_config(adversarial_configs=adversarial_configs)
+    input_genotype_config = get_base_input_genotype_config(
+        n_lcl_blocks=n_lcl_blocks,
+        use_lcl_to_output_skips=use_lcl_to_output_skips,
+        use_lcl_fusion_skips=use_lcl_fusion_skips,
+    )
+    input_tabular_config = get_base_tabular_input_config(
+        cache_for_output_heads=tabular_to_output_skips,
+        drop_prob=tabular_drop_prob,
+    )
 
     fusion_config = get_base_fusion_config(
         model_type=fusion_type,
