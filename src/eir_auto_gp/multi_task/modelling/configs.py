@@ -782,10 +782,10 @@ def get_aggregate_config(
     use_lcl_to_output_skips: bool | str = False,
     use_lcl_fusion_skips: bool = True,
     tabular_to_output_skips: bool = True,
-    tabular_drop_prob: float = 0.20,
-    tabular_cache_dropout_p: float = 0.00,
+    tabular_drop_prob: float = 1.00,
+    tabular_cache_dropout_p: float = 0.20,
     use_adversarial_disentanglement: bool = True,
-    adversarial_lambda: float = 1.0,
+    adversarial_lambda: float = 0.1,
     adversarial_hidden_dim: int = 64,
     adversarial_layers: list[int] | None = None,
 ) -> AggregateConfig:
