@@ -769,7 +769,7 @@ def get_aggregate_config(
     tabular_drop_prob: float = 1.00,
     tabular_cache_dropout_p: float = 0.20,
     use_adversarial_disentanglement: bool = True,
-    adversarial_lambda: float = 0.1,
+    adversarial_lambda: float = 0.5,
     adversarial_hidden_dim: int = 64,
     adversarial_layers: list[int] | None = None,
 ) -> AggregateConfig:
