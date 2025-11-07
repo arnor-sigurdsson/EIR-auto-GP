@@ -806,7 +806,7 @@ def _get_global_injections(
     modelling_data_format: str,
     optimize_model: bool,
 ) -> dict[str, Any]:
-    mixing_candidates = [0.0]
+    mixing_candidates = [0.2]
     cur_mixing = mixing_candidates[fold % len(mixing_candidates)]
 
     device = get_device()
