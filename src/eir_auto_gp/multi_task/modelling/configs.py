@@ -718,22 +718,6 @@ def _get_adversarial_configs(
 
     adversarial_configs = []
 
-    adversarial_configs.append(
-        {
-            "name": "fusion_vs_covariates",
-            "enabled": True,
-            "embedding_layer_path": "fusion_modules.computed.fusion_modules.fusion",
-            "target_layer_path": "input_modules.eir_tabular.layer",
-            "lambda_adv": adversarial_lambda,
-            "warmup_steps": 5000,
-            "fc_dim": adversarial_hidden_dim,
-            "layers": adversarial_layers,
-            "projection_type": "mlp_residual",
-            "dropout_p": 0.1,
-            "target_cache_target": "input",
-        }
-    )
-
     for group_name in output_groups.keys():
         adversarial_configs.append(
             {
