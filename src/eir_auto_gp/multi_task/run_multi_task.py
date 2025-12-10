@@ -325,6 +325,45 @@ def get_cl_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     return cl_args
 
 
+def validate_column_duplicates(
+    input_cat_columns: list[str],
+    input_con_columns: list[str],
+    output_cat_columns: list[str],
+    output_con_columns: list[str],
+) -> None:
+    def _check_duplicates_within(columns: list[str], category: str) -> None:
+        seen = set()
+        duplicates = set()
+        for col in columns:
+            if col in seen:
+                duplicates.add(col)
+            seen.add(col)
+        if duplicates:
+            raise ValueError(
+                f"Duplicate column names found in {category}: {sorted(duplicates)}"
+            )
+
+    _check_duplicates_within(input_cat_columns, "input categorical columns")
+    _check_duplicates_within(input_con_columns, "input continuous columns")
+    _check_duplicates_within(output_cat_columns, "output categorical columns")
+    _check_duplicates_within(output_con_columns, "output continuous columns")
+
+    all_columns = (
+        input_cat_columns + input_con_columns + output_cat_columns + output_con_columns
+    )
+    seen_global = set()
+    duplicates_global = set()
+    for col in all_columns:
+        if col in seen_global:
+            duplicates_global.add(col)
+        seen_global.add(col)
+    if duplicates_global:
+        raise ValueError(
+            f"Column names must be unique across all input and output columns. "
+            f"Found duplicates: {sorted(duplicates_global)}"
+        )
+
+
 def validate_label_file(
     label_file_path: str,
     input_cat_columns: list[str],
@@ -448,6 +487,12 @@ def validate_model_architecture_params(
 
 def run(cl_args: argparse.Namespace) -> None:
     validate_geno_data_path(geno_data_path=cl_args.genotype_data_path)
+    validate_column_duplicates(
+        input_cat_columns=cl_args.input_cat_columns,
+        input_con_columns=cl_args.input_con_columns,
+        output_cat_columns=cl_args.output_cat_columns,
+        output_con_columns=cl_args.output_con_columns,
+    )
     validate_label_file(
         label_file_path=cl_args.label_file_path,
         input_cat_columns=cl_args.input_cat_columns,

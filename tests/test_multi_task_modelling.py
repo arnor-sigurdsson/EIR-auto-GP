@@ -6,7 +6,11 @@ import pandas as pd
 import pytest
 from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 
-from eir_auto_gp.multi_task.run_multi_task import get_argument_parser, run
+from eir_auto_gp.multi_task.run_multi_task import (
+    get_argument_parser,
+    run,
+    validate_column_duplicates,
+)
 
 
 def _get_test_cl_commands() -> list[str]:
@@ -185,3 +189,74 @@ def test_train_with_tabular_predict_without(tmp_path: Path) -> None:
     metric_values = find_numeric_values(input_dict=metrics, accumulator=[])
     avg = mean(metric_values)
     assert avg >= 0.1
+
+
+def test_duplicate_column_validation() -> None:
+    with pytest.raises(
+        ValueError, match="Duplicate column names found in input categorical columns"
+    ):
+        validate_column_duplicates(
+            input_cat_columns=["age", "sex", "age"],
+            input_con_columns=["height"],
+            output_cat_columns=["disease"],
+            output_con_columns=["weight"],
+        )
+
+    with pytest.raises(
+        ValueError, match="Duplicate column names found in input continuous columns"
+    ):
+        validate_column_duplicates(
+            input_cat_columns=["age"],
+            input_con_columns=["height", "bmi", "height"],
+            output_cat_columns=["disease"],
+            output_con_columns=["weight"],
+        )
+
+    with pytest.raises(
+        ValueError, match="Duplicate column names found in output categorical columns"
+    ):
+        validate_column_duplicates(
+            input_cat_columns=["age"],
+            input_con_columns=["height"],
+            output_cat_columns=["disease", "cancer", "disease"],
+            output_con_columns=["weight"],
+        )
+
+    with pytest.raises(
+        ValueError, match="Duplicate column names found in output continuous columns"
+    ):
+        validate_column_duplicates(
+            input_cat_columns=["age"],
+            input_con_columns=["height"],
+            output_cat_columns=["disease"],
+            output_con_columns=["weight", "bmi", "weight"],
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="Column names must be unique across all input and output columns",
+    ):
+        validate_column_duplicates(
+            input_cat_columns=["age"],
+            input_con_columns=["height"],
+            output_cat_columns=["age"],
+            output_con_columns=["weight"],
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="Column names must be unique across all input and output columns",
+    ):
+        validate_column_duplicates(
+            input_cat_columns=["age"],
+            input_con_columns=["height"],
+            output_cat_columns=["disease"],
+            output_con_columns=["height"],
+        )
+
+    validate_column_duplicates(
+        input_cat_columns=["age", "sex"],
+        input_con_columns=["height", "bmi"],
+        output_cat_columns=["disease", "cancer"],
+        output_con_columns=["weight", "cholesterol"],
+    )
