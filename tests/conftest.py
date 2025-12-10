@@ -46,7 +46,7 @@ def simulate_genetic_data_to_bed(tmp_path: Path) -> Callable[[int, int, str], Pa
             "sid": df_snp.columns.tolist(),
             "iid": ind_ids,
             "allele_1": ["A"] * n_snps,  # minor, -> alt -> 2
-            "allele_2": ["T"] * n_snps,  # major, -> ref -> 0
+            "allele_2": ["G"] * n_snps,  # major, -> ref -> 0
             "chromosome": ["1"] * n_snps,
             "bp_position": list(range(n_snps)),
         }
