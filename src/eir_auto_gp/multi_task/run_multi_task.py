@@ -332,16 +332,15 @@ def validate_column_duplicates(
     output_con_columns: list[str],
 ) -> None:
     def _check_duplicates_within(columns: list[str], category: str) -> None:
-        seen = set()
-        duplicates = set()
+        seen_lower = {}
         for col in columns:
-            if col in seen:
-                duplicates.add(col)
-            seen.add(col)
-        if duplicates:
-            raise ValueError(
-                f"Duplicate column names found in {category}: {sorted(duplicates)}"
-            )
+            col_lower = col.lower()
+            if col_lower in seen_lower:
+                raise ValueError(
+                    f"Duplicate column names found in {category} "
+                    f"(case-insensitive): {sorted([seen_lower[col_lower], col])}"
+                )
+            seen_lower[col_lower] = col
 
     _check_duplicates_within(input_cat_columns, "input categorical columns")
     _check_duplicates_within(input_con_columns, "input continuous columns")
@@ -351,17 +350,16 @@ def validate_column_duplicates(
     all_columns = (
         input_cat_columns + input_con_columns + output_cat_columns + output_con_columns
     )
-    seen_global = set()
-    duplicates_global = set()
+    seen_global_lower = {}
     for col in all_columns:
-        if col in seen_global:
-            duplicates_global.add(col)
-        seen_global.add(col)
-    if duplicates_global:
-        raise ValueError(
-            f"Column names must be unique across all input and output columns. "
-            f"Found duplicates: {sorted(duplicates_global)}"
-        )
+        col_lower = col.lower()
+        if col_lower in seen_global_lower:
+            raise ValueError(
+                f"Column names must be unique across all input and output columns "
+                f"(case-insensitive). Found duplicates: "
+                f"{sorted([seen_global_lower[col_lower], col])}"
+            )
+        seen_global_lower[col_lower] = col
 
 
 def validate_label_file(

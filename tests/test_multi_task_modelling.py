@@ -254,6 +254,30 @@ def test_duplicate_column_validation() -> None:
             output_con_columns=["height"],
         )
 
+    with pytest.raises(
+        ValueError,
+        match=r"Duplicate column names found in input categorical "
+        r"columns.*case-insensitive",
+    ):
+        validate_column_duplicates(
+            input_cat_columns=["HDL cholesterol", "HDL Cholesterol"],
+            input_con_columns=["height"],
+            output_cat_columns=["disease"],
+            output_con_columns=["weight"],
+        )
+
+    with pytest.raises(
+        ValueError,
+        match=r"Column names must be unique across all input and "
+        r"output columns.*case-insensitive",
+    ):
+        validate_column_duplicates(
+            input_cat_columns=["age"],
+            input_con_columns=["HDL cholesterol"],
+            output_cat_columns=["disease"],
+            output_con_columns=["hdl cholesterol"],
+        )
+
     validate_column_duplicates(
         input_cat_columns=["age", "sex"],
         input_con_columns=["height", "bmi"],
