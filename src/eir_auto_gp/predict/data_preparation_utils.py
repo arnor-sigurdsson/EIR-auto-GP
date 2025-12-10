@@ -14,41 +14,72 @@ def log_overlap(
     df_bim_exp: pd.DataFrame,
     output_path: str | Path | None = None,
 ) -> None:
-    logger.info("Analyzing SNP overlap between original training data and new cohort.")
+    logger.info("Analyzing SNP overlap including strand/ambiguity checks...")
 
     console = Console()
 
-    exact_overlap = df_bim_prd.merge(
-        df_bim_exp, on=["CHR_CODE", "BP_COORD", "ALT", "REF"]
+    def get_comp(s):
+        return s.astype(str).str.translate(str.maketrans("ATGC", "TACG"))
+
+    df_prd = df_bim_prd.copy()
+    df_exp = df_bim_exp.copy()
+
+    on_cols = ["CHR_CODE", "BP_COORD"]
+    merged = pd.merge(df_prd, df_exp, on=on_cols, suffixes=("_new", "_ref"))
+
+    is_palindromic = (
+        ((merged["REF_new"] == "A") & (merged["ALT_new"] == "T"))
+        | ((merged["REF_new"] == "T") & (merged["ALT_new"] == "A"))
+        | ((merged["REF_new"] == "C") & (merged["ALT_new"] == "G"))
+        | ((merged["REF_new"] == "G") & (merged["ALT_new"] == "C"))
     )
 
-    flipped_overlap = df_bim_prd.merge(
-        df_bim_exp,
-        left_on=["CHR_CODE", "BP_COORD", "REF", "ALT"],
-        right_on=["CHR_CODE", "BP_COORD", "ALT", "REF"],
+    ref_ref_comp = get_comp(merged["REF_ref"])
+    alt_ref_comp = get_comp(merged["ALT_ref"])
+
+    is_exact = (merged["REF_new"] == merged["REF_ref"]) & (
+        merged["ALT_new"] == merged["ALT_ref"]
     )
 
-    total_overlap = pd.concat([exact_overlap, flipped_overlap]).drop_duplicates(
-        subset=["CHR_CODE", "BP_COORD"]
+    is_reversal = (merged["REF_new"] == merged["ALT_ref"]) & (
+        merged["ALT_new"] == merged["REF_ref"]
     )
 
-    orig_count = len(df_bim_exp)
-    new_count = len(df_bim_prd)
-    exact_match_count = len(exact_overlap)
-    flipped_match_count = len(flipped_overlap)
-    total_match_count = len(total_overlap)
-
-    orig_coverage = (total_match_count / orig_count * 100) if orig_count > 0 else 0
-    new_coverage = (total_match_count / new_count * 100) if new_count > 0 else 0
-    exact_ratio = (
-        (exact_match_count / total_match_count * 100) if total_match_count > 0 else 0
-    )
-    flipped_ratio = (
-        (flipped_match_count / total_match_count * 100) if total_match_count > 0 else 0
+    is_strand = (merged["REF_new"] == ref_ref_comp) & (
+        merged["ALT_new"] == alt_ref_comp
     )
 
-    missing_orig_snps = orig_count - total_match_count
-    unused_new_snps = new_count - total_match_count
+    is_strand_rev = (merged["REF_new"] == alt_ref_comp) & (
+        merged["ALT_new"] == ref_ref_comp
+    )
+
+    valid_mask = ~is_palindromic
+
+    count_exact = (is_exact & valid_mask).sum()
+    count_reversal = (is_reversal & valid_mask).sum()
+    count_strand = (is_strand & valid_mask).sum()
+    count_strand_rev = (is_strand_rev & valid_mask).sum()
+    count_ambiguous = is_palindromic.sum()
+
+    total_matches = count_exact + count_reversal + count_strand + count_strand_rev
+
+    matched_mask = is_exact | is_reversal | is_strand | is_strand_rev
+    count_mismatch = (valid_mask & ~matched_mask).sum()
+
+    orig_count = len(df_exp)
+    new_count = len(df_prd)
+
+    orig_coverage = (total_matches / orig_count * 100) if orig_count > 0 else 0
+    new_coverage = (total_matches / new_count * 100) if new_count > 0 else 0
+    exact_ratio = (count_exact / total_matches * 100) if total_matches > 0 else 0
+    reversal_ratio = (count_reversal / total_matches * 100) if total_matches > 0 else 0
+    strand_ratio = (count_strand / total_matches * 100) if total_matches > 0 else 0
+    strand_rev_ratio = (
+        (count_strand_rev / total_matches * 100) if total_matches > 0 else 0
+    )
+
+    missing_orig_snps = orig_count - total_matches
+    unused_new_snps = new_count - total_matches
     missing_orig_percent = (
         (missing_orig_snps / orig_count * 100) if orig_count > 0 else 0
     )
@@ -84,14 +115,22 @@ def log_overlap(
             "New Cohort SNPs Usable (of total)": f"{new_coverage:.1f}%*",
         },
         "matching_details": {
-            "Exact REF/ALT Matches": f"{exact_match_count:,} ({exact_ratio:.1f}%)",
-            "Flipped REF/ALT Matches": f"{flipped_match_count:,} "
-            f"({flipped_ratio:.1f}%)",
-            "Total Matching SNPs": f"{total_match_count:,}",
+            "Total Matching SNPs": f"{total_matches:,}",
+            "  - Exact Matches (A/G -> A/G)": f"{count_exact:,} ({exact_ratio:.1f}%)",
+            "  - Allele Reversals (A/G -> G/A)": f"{count_reversal:,} "
+            f"({reversal_ratio:.1f}%)",
+            "  - Strand Flips (A/G -> T/C)": f"{count_strand:,} ({strand_ratio:.1f}%)",
+            "  - Strand Flip + Reversal (A/G -> C/T)": f"{count_strand_rev:,} "
+            f"({strand_rev_ratio:.1f}%)",
         },
         "dataset_info": {
             "Original Training SNPs": f"{orig_count:,}",
             "New Cohort SNPs": f"{new_count:,}",
+            "Positional Overlaps (before filtering)": f"{len(merged):,}",
+        },
+        "excluded_snps": {
+            "Ambiguous/Palindromic SNPs (A/T, C/G)": f"[red]{count_ambiguous:,}[/]",
+            "Allele Mismatches (different variants)": f"[red]{count_mismatch:,}[/]",
         },
         "gap_analysis": {
             "Missing Original SNPs": f"{missing_orig_snps:,} "
@@ -133,22 +172,31 @@ def log_overlap(
                 f"- New Cohort SNPs Usable: {new_coverage:.1f}%",
                 "  * Percentage of new cohort SNPs that match the training set\n",
                 "Matching Details:",
-                f"- Total Matching SNPs: {total_match_count:,}",
-                f"  * Exact REF/ALT Matches: {exact_match_count:,} "
-                f"({exact_ratio:.1f}%)",
-                f"  * Flipped REF/ALT Matches: {flipped_match_count:,} "
-                f"({flipped_ratio:.1f}%)\n",
+                f"- Total Matching SNPs: {total_matches:,}",
+                f"  * Exact Matches (A/G -> A/G): {count_exact:,} ({exact_ratio:.1f}%)",
+                f"  * Allele Reversals (A/G -> G/A): {count_reversal:,} "
+                f"({reversal_ratio:.1f}%)",
+                f"  * Strand Flips (A/G -> T/C): "
+                f"{count_strand:,} ({strand_ratio:.1f}%)",
+                f"  * Strand Flip + Reversal (A/G -> C/T): {count_strand_rev:,} "
+                f"({strand_rev_ratio:.1f}%)\n",
                 "Dataset Information:",
                 f"- Original Training SNPs: {orig_count:,}",
-                f"- New Cohort SNPs: {new_count:,}\n",
+                f"- New Cohort SNPs: {new_count:,}",
+                f"- Positional Overlaps (before filtering): {len(merged):,}\n",
+                "Excluded SNPs:",
+                f"- Ambiguous/Palindromic SNPs (A/T, C/G): {count_ambiguous:,}",
+                f"- Allele Mismatches (different variants): {count_mismatch:,}\n",
                 "Gap Analysis:",
-                f"- Missing Original SNPs: {missing_orig_snps:,}"
+                f"- Missing Original SNPs: {missing_orig_snps:,} "
                 f"({missing_orig_percent:.1f}%)",
                 f"- Unused New Cohort SNPs: {unused_new_snps:,}\n",
                 "Quality Assessment:",
                 f"- Coverage Quality: {coverage_quality}",
                 f"- Match Type Quality: {match_quality}",
-                "\nNote: Percentages are relative to the original training SNP set",
+                "\nNote: Percentages in matching details are"
+                " relative to total matches.",
+                "Coverage percentages are relative to the original training SNP set",
                 "unless otherwise noted.",
             ]
 

@@ -208,15 +208,15 @@ def get_plink_fileset_from_folder(folder_path: Path) -> PlinkFileSet:
 
     if len(bed_files) != 1:
         raise ValueError(
-            f"Expected one .bed file in {folder_path}, butfound {bed_files}."
+            f"Expected one .bed file in {folder_path}, but found {bed_files}."
         )
     if len(bim_files) != 1:
         raise ValueError(
-            f"Expected one .bim file in {folder_path}, butfound {bim_files}."
+            f"Expected one .bim file in {folder_path}, but found {bim_files}."
         )
     if len(fam_files) != 1:
         raise ValueError(
-            f"Expected one .fam file in {folder_path}, butfound {fam_files}."
+            f"Expected one .fam file in {folder_path}, but found {fam_files}."
         )
 
     return PlinkFileSet(
@@ -306,14 +306,21 @@ class SNPMapping:
     n_target_snps: int
 
 
+def get_complement_series(series: pd.Series) -> pd.Series:
+    return series.astype(str).str.translate(str.maketrans("ATGC", "TACG"))
+
+
 def create_snp_mapping(
     from_bim: pd.DataFrame,
     to_reference_bim: pd.DataFrame,
 ) -> SNPMapping:
     """
-    from_bim: DataFrame with SNPs from the dataset we want to project
-    to_reference_bim: DataFrame with SNPs in the reference space we want to
-    project into
+    Creates a mapping between source and target SNPs, handling:
+        1. Exact matches (A/G -> A/G)
+        2. Allele Reversals (A/G -> G/A)
+        3. Strand Flips (A/G -> T/C)
+        4. Flip + Reversals (A/G -> C/T)
+        5. Ambiguous (Palindromic) SNPs (Removed)
     """
     from_df = from_bim.reset_index().rename(columns={"index": "source_idx"})
     to_df = to_reference_bim.reset_index().rename(columns={"index": "target_idx"})
@@ -328,31 +335,64 @@ def create_snp_mapping(
         suffixes=("_source", "_target"),
     )
 
-    direct_mask = (matches["REF_source"] == matches["REF_target"]) & (
+    is_ambiguous = (
+        ((matches["REF_source"] == "A") & (matches["ALT_source"] == "T"))
+        | ((matches["REF_source"] == "T") & (matches["ALT_source"] == "A"))
+        | ((matches["REF_source"] == "C") & (matches["ALT_source"] == "G"))
+        | ((matches["REF_source"] == "G") & (matches["ALT_source"] == "C"))
+    )
+
+    n_ambiguous = is_ambiguous.sum()
+    if n_ambiguous > 0:
+        logger.warning(f"Dropping {n_ambiguous} ambiguous (palindromic) SNPs.")
+        matches = matches[~is_ambiguous]
+
+    target_ref_comp = get_complement_series(matches["REF_target"])
+    target_alt_comp = get_complement_series(matches["ALT_target"])
+
+    mask_exact = (matches["REF_source"] == matches["REF_target"]) & (
         matches["ALT_source"] == matches["ALT_target"]
     )
-    flip_mask = (matches["REF_source"] == matches["ALT_target"]) & (
+
+    mask_rev = (matches["REF_source"] == matches["ALT_target"]) & (
         matches["ALT_source"] == matches["REF_target"]
     )
+
+    mask_strand = (matches["REF_source"] == target_ref_comp) & (
+        matches["ALT_source"] == target_alt_comp
+    )
+
+    mask_strand_rev = (matches["REF_source"] == target_alt_comp) & (
+        matches["ALT_source"] == target_ref_comp
+    )
+
+    direct_mask = mask_exact | mask_strand
+
+    swap_mask = mask_rev | mask_strand_rev
 
     direct_matches = matches[direct_mask]
     direct_source_indices = direct_matches["source_idx"].to_numpy()
     direct_target_indices = direct_matches["target_idx"].to_numpy()
 
-    flip_matches = matches[flip_mask]
-    flip_source_indices = flip_matches["source_idx"].to_numpy()
-    flip_target_indices = flip_matches["target_idx"].to_numpy()
+    swap_matches = matches[swap_mask]
+    swap_source_indices = swap_matches["source_idx"].to_numpy()
+    swap_target_indices = swap_matches["target_idx"].to_numpy()
 
-    all_matched_targets = set(direct_target_indices) | set(flip_target_indices)
+    all_matched_targets = set(direct_target_indices) | set(swap_target_indices)
     missing_target_indices = np.array(
         [i for i in range(len(to_reference_bim)) if i not in all_matched_targets]
+    )
+
+    logger.info(
+        f"Matching Stats: Exact={mask_exact.sum()}, Reversal={mask_rev.sum()}, "
+        f"StrandFlip={mask_strand.sum()}, Flip+Rev={mask_strand_rev.sum()}"
     )
 
     return SNPMapping(
         direct_match_source_indices=direct_source_indices,
         direct_match_target_indices=direct_target_indices,
-        flip_match_source_indices=flip_source_indices,
-        flip_match_target_indices=flip_target_indices,
+        flip_match_source_indices=swap_source_indices,
+        flip_match_target_indices=swap_target_indices,
         missing_target_indices=missing_target_indices,
         n_source_snps=len(from_bim),
         n_target_snps=len(to_reference_bim),
@@ -376,7 +416,6 @@ def get_projected_snp_stream(
             flipped_data[[0, 2]] = flipped_data[[2, 0]]
             projected_array[:, snp_mapping.flip_match_target_indices] = flipped_data
 
-        # assert all columns sum to exactly 1
         assert np.allclose(projected_array.sum(axis=0), 1.0)
         yield sample_id, projected_array
 

@@ -308,9 +308,238 @@ def test_high_overlap_skips_prefilter() -> None:
         )
 
 
+def test_strand_flip_logic() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        ref_dir = tmpdir / "ref"
+        target_dir = tmpdir / "target"
+        ref_dir.mkdir()
+        target_dir.mkdir()
+
+        ref_path = ref_dir / "ref"
+        target_path = target_dir / "target"
+
+        create_test_genotype_data(ref_path, n_samples=50, n_snps=1)
+        create_test_genotype_data(target_path, n_samples=50, n_snps=1)
+
+        modify_bim_file(
+            ref_path.with_suffix(".bim"), {0: {"A1": "A", "A2": "G", "POS": 100}}
+        )
+        modify_bim_file(
+            target_path.with_suffix(".bim"), {0: {"A1": "T", "A2": "C", "POS": 100}}
+        )
+
+        output_dir = tmpdir / "output"
+        output_dir.mkdir()
+
+        prepared_data = run_prepare_data(
+            genotype_data_path=target_dir,
+            array_chunk_size=100,
+            reference_bim_to_project_to=ref_path.with_suffix(".bim"),
+            output_folder=output_dir,
+            enable_plink_prefilter=False,
+        )
+
+        arrays, _ = read_encoded_arrays(prepared_data.array_folder)
+
+        assert arrays.shape[2] == 1, "Strand flip SNP was not matched!"
+        assert np.allclose(arrays.sum(axis=1), 1.0), "Arrays not one-hot encoded"
+
+
+def test_strand_flip_and_reversal_logic() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        ref_dir = tmpdir / "ref"
+        target_dir = tmpdir / "target"
+        ref_dir.mkdir()
+        target_dir.mkdir()
+
+        ref_path = ref_dir / "ref"
+        target_path = target_dir / "target"
+
+        create_test_genotype_data(ref_path, n_samples=50, n_snps=1)
+        create_test_genotype_data(target_path, n_samples=50, n_snps=1)
+
+        modify_bim_file(
+            ref_path.with_suffix(".bim"), {0: {"A1": "A", "A2": "G", "POS": 100}}
+        )
+        modify_bim_file(
+            target_path.with_suffix(".bim"), {0: {"A1": "C", "A2": "T", "POS": 100}}
+        )
+
+        output_dir = tmpdir / "output"
+        output_dir.mkdir()
+
+        prepared_data = run_prepare_data(
+            genotype_data_path=target_dir,
+            array_chunk_size=100,
+            reference_bim_to_project_to=ref_path.with_suffix(".bim"),
+            output_folder=output_dir,
+            enable_plink_prefilter=False,
+        )
+
+        arrays, _ = read_encoded_arrays(prepared_data.array_folder)
+
+        assert arrays.shape[2] == 1, "Strand flip + reversal SNP was not matched!"
+        assert np.allclose(arrays.sum(axis=1), 1.0), "Arrays not one-hot encoded"
+
+
+def test_ambiguous_snps_are_dropped() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        ref_dir = tmpdir / "ref"
+        target_dir = tmpdir / "target"
+        ref_dir.mkdir()
+        target_dir.mkdir()
+
+        ref_path = ref_dir / "ref"
+        target_path = target_dir / "target"
+
+        create_test_genotype_data(ref_path, n_samples=50, n_snps=2)
+        create_test_genotype_data(target_path, n_samples=50, n_snps=2)
+
+        changes = {
+            0: {"A1": "A", "A2": "T", "POS": 100},
+            1: {"A1": "C", "A2": "G", "POS": 200},
+        }
+        modify_bim_file(ref_path.with_suffix(".bim"), changes)
+        modify_bim_file(target_path.with_suffix(".bim"), changes)
+
+        output_dir = tmpdir / "output"
+        output_dir.mkdir()
+
+        prepared_data = run_prepare_data(
+            genotype_data_path=target_dir,
+            array_chunk_size=100,
+            reference_bim_to_project_to=ref_path.with_suffix(".bim"),
+            output_folder=output_dir,
+            enable_plink_prefilter=False,
+        )
+
+        arrays, _ = read_encoded_arrays(prepared_data.array_folder)
+
+        assert arrays.shape[2] == 2, "Output should have 2 SNPs in reference space"
+        assert np.allclose(arrays[:, 3, :], 1.0), (
+            "Ambiguous SNPs should all be marked as missing (channel 3)"
+        )
+
+
+def test_mismatched_snps_are_dropped() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        ref_dir = tmpdir / "ref"
+        target_dir = tmpdir / "target"
+        ref_dir.mkdir()
+        target_dir.mkdir()
+
+        ref_path = ref_dir / "ref"
+        target_path = target_dir / "target"
+
+        create_test_genotype_data(ref_path, n_samples=50, n_snps=1)
+        create_test_genotype_data(target_path, n_samples=50, n_snps=1)
+
+        modify_bim_file(
+            ref_path.with_suffix(".bim"), {0: {"A1": "A", "A2": "G", "POS": 100}}
+        )
+        modify_bim_file(
+            target_path.with_suffix(".bim"), {0: {"A1": "A", "A2": "T", "POS": 100}}
+        )
+
+        output_dir = tmpdir / "output"
+        output_dir.mkdir()
+
+        prepared_data = run_prepare_data(
+            genotype_data_path=target_dir,
+            array_chunk_size=100,
+            reference_bim_to_project_to=ref_path.with_suffix(".bim"),
+            output_folder=output_dir,
+            enable_plink_prefilter=False,
+        )
+
+        arrays, _ = read_encoded_arrays(prepared_data.array_folder)
+
+        assert arrays.shape[2] == 1, "Output should have 1 SNP in reference space"
+        assert np.allclose(arrays[:, 3, :], 1.0), (
+            "Mismatched SNP should be marked as missing"
+        )
+
+
+def test_comprehensive_matching_scenarios() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        ref_dir = tmpdir / "ref"
+        target_dir = tmpdir / "target"
+        ref_dir.mkdir()
+        target_dir.mkdir()
+
+        ref_path = ref_dir / "ref"
+        target_path = target_dir / "target"
+
+        create_test_genotype_data(ref_path, n_samples=50, n_snps=6)
+        create_test_genotype_data(target_path, n_samples=50, n_snps=6)
+
+        ref_changes = {
+            0: {"A1": "A", "A2": "G", "POS": 100},
+            1: {"A1": "A", "A2": "G", "POS": 200},
+            2: {"A1": "A", "A2": "G", "POS": 300},
+            3: {"A1": "A", "A2": "G", "POS": 400},
+            4: {"A1": "A", "A2": "T", "POS": 500},
+            5: {"A1": "A", "A2": "G", "POS": 600},
+        }
+
+        target_changes = {
+            0: {"A1": "A", "A2": "G", "POS": 100},
+            1: {"A1": "G", "A2": "A", "POS": 200},
+            2: {"A1": "T", "A2": "C", "POS": 300},
+            3: {"A1": "C", "A2": "T", "POS": 400},
+            4: {"A1": "A", "A2": "T", "POS": 500},
+            5: {"A1": "C", "A2": "G", "POS": 600},
+        }
+
+        modify_bim_file(ref_path.with_suffix(".bim"), ref_changes)
+        modify_bim_file(target_path.with_suffix(".bim"), target_changes)
+
+        output_dir = tmpdir / "output"
+        output_dir.mkdir()
+
+        prepared_data = run_prepare_data(
+            genotype_data_path=target_dir,
+            array_chunk_size=100,
+            reference_bim_to_project_to=ref_path.with_suffix(".bim"),
+            output_folder=output_dir,
+            enable_plink_prefilter=False,
+        )
+
+        arrays, _ = read_encoded_arrays(prepared_data.array_folder)
+
+        assert arrays.shape[2] == 6, "Output should have 6 SNPs in reference space"
+
+        n_valid_matches = 4
+
+        valid_snps = arrays[:, :, :n_valid_matches]
+        invalid_snps = arrays[:, :, n_valid_matches:]
+
+        assert not np.allclose(valid_snps[:, 3, :], 1.0), (
+            "Valid matches should NOT all be missing"
+        )
+        assert np.allclose(invalid_snps[:, 3, :], 1.0), (
+            "Invalid SNPs (ambiguous + mismatch) should be missing"
+        )
+
+
 if __name__ == "__main__":
     test_prepare_module()
     test_prepare_flipped_data()
     test_plink_prefilter_optimization()
     test_plink_prefilter_disabled()
     test_high_overlap_skips_prefilter()
+    test_strand_flip_logic()
+    test_strand_flip_and_reversal_logic()
+    test_ambiguous_snps_are_dropped()
+    test_mismatched_snps_are_dropped()
+    test_comprehensive_matching_scenarios()
