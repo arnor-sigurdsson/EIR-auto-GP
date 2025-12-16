@@ -4,6 +4,12 @@ from dataclasses import dataclass
 from typing import Any
 
 import yaml
+from eir.models.input.array.models_locally_connected import (
+    LCLResidualBlock,
+    LCParameterSpec,
+    calc_value_after_expansion,
+    generate_lcl_residual_blocks_auto,
+)
 
 from eir_auto_gp.utils.utils import get_logger
 
@@ -54,7 +60,48 @@ def get_base_global_config() -> dict[str, Any]:
     return base
 
 
-def get_base_input_genotype_config() -> dict[str, Any]:
+def get_base_input_genotype_config(n_lcl_blocks: int = 0) -> dict[str, Any]:
+    message_configs = [
+        {
+            "name": "first_layer_tensor",
+            "layer_path": "input_modules.genotype.fc_0",
+            "cache_tensor": True,
+            "layer_cache_target": "input",
+            "kernel_width_divisible_by": 4,
+        }
+    ]
+
+    for i in range(n_lcl_blocks):
+        message_configs.append(
+            {
+                "name": f"lcl_block_{i}",
+                "layer_path": f"input_modules.genotype.lcl_blocks.{i}",
+                "cache_tensor": True,
+                "layer_cache_target": "output",
+                "kernel_width_divisible_by": 4,
+            }
+        )
+
+    if n_lcl_blocks >= 1:
+        message_configs.extend(
+            [
+                {
+                    "name": "lcl_block_0_fc_1",
+                    "layer_path": "input_modules.genotype.lcl_blocks.0.fc_1",
+                    "cache_tensor": True,
+                    "layer_cache_target": "output",
+                    "kernel_width_divisible_by": 4,
+                },
+                {
+                    "name": "lcl_block_0_fc_2",
+                    "layer_path": "input_modules.genotype.lcl_blocks.0.fc_2",
+                    "cache_tensor": True,
+                    "layer_cache_target": "output",
+                    "kernel_width_divisible_by": 4,
+                },
+            ]
+        )
+
     base = {
         "input_info": {
             "input_source": "FILL",
@@ -72,7 +119,8 @@ def get_base_input_genotype_config() -> dict[str, Any]:
         "model_config": {
             "model_type": "genome-local-net",
             "model_init_config": {
-                "rb_do": 0.0,
+                "rb_do": 0.10,
+                "stochastic_depth_p": 0.00,
                 "channel_exp_base": 3,
                 "kernel_width": "FILL",
                 "first_kernel_expansion": "FILL",
@@ -82,18 +130,51 @@ def get_base_input_genotype_config() -> dict[str, Any]:
             },
         },
         "tensor_broker_config": {
-            "message_configs": [
-                {
-                    "name": "first_layer_tensor",
-                    "layer_path": "input_modules.genotype.fc_0",
-                    "cache_tensor": True,
-                    "layer_cache_target": "input",
-                }
-            ]
+            "message_configs": message_configs,
         },
     }
 
     return base
+
+
+def get_num_lcl_blocks(
+    n_snps: int,
+    kernel_width: int,
+    first_kernel_expansion: int,
+    channel_exp_base: int = 3,
+    rb_do: float = 0.10,
+    stochastic_depth_p: float = 0.00,
+    cutoff: int = 4096,
+) -> int:
+    in_features = n_snps * 4
+
+    fc_0_kernel_size = calc_value_after_expansion(
+        base=kernel_width,
+        expansion=first_kernel_expansion,
+    )
+    fc_0_out_feature_sets = calc_value_after_expansion(
+        base=2**channel_exp_base,
+        expansion=1,
+    )
+
+    num_chunks = in_features // fc_0_kernel_size
+    fc_0_out_features = num_chunks * fc_0_out_feature_sets
+
+    spec = LCParameterSpec(
+        in_features=fc_0_out_features,
+        kernel_width=kernel_width,
+        channel_exp_base=channel_exp_base,
+        dropout_p=rb_do,
+        stochastic_depth_p=stochastic_depth_p,
+        cutoff=cutoff,
+        attention_inclusion_cutoff=0,
+        direction="down",
+    )
+
+    blocks = generate_lcl_residual_blocks_auto(lcl_parameter_spec=spec)
+
+    num_blocks = sum(1 for m in blocks if isinstance(m, LCLResidualBlock))
+    return num_blocks
 
 
 def get_base_tabular_input_config() -> dict[str, Any]:
@@ -128,6 +209,7 @@ def get_base_fusion_config(
     n_fusion_layers: int | None = None,
     fusion_dim: int | None = None,
     skip_to_every_n_fusion_layers: int | None = None,
+    n_lcl_blocks: int = 0,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
         assert fusion_dim is not None
@@ -141,11 +223,11 @@ def get_base_fusion_config(
         fmsp = get_fusion_model_size_params(model_size=model_size)
 
     config_base = {
-        "fc_do": 0.0,
+        "fc_do": 0.10,
         "fc_task_dim": fmsp.fc_dim,
         "layers": [fmsp.n_layers],
-        "rb_do": 0.0,
-        "stochastic_depth_p": 0.0,
+        "rb_do": 0.10,
+        "stochastic_depth_p": 0.10,
     }
 
     if model_type == "mlp-residual":
@@ -155,6 +237,7 @@ def get_base_fusion_config(
             output_head=output_head,
             target_columns=target_columns,
             output_groups=output_groups,
+            n_lcl_blocks=n_lcl_blocks,
         )
         base = {
             "model_config": config_base,
@@ -170,6 +253,7 @@ def get_base_fusion_config(
             tb_block_frequency=fmsp.tb_block_frequency,
             num_experts=8,
             output_head=output_head,
+            n_lcl_blocks=n_lcl_blocks,
         )
         base = {
             "model_config": config_base,
@@ -202,20 +286,58 @@ def get_fusion_model_size_params(model_size: str) -> FusionModelSizeParams:
     return param_dict[model_size]
 
 
+def _get_staggered_cache_names(
+    layer_index: int,
+    total_layers: int,
+    n_lcl_blocks: int,
+) -> list[str]:
+    cache_names = ["first_layer_tensor"]
+
+    if n_lcl_blocks == 0:
+        return cache_names
+
+    num_sections = n_lcl_blocks + 1
+    section_size = total_layers / num_sections
+    section = int(layer_index / section_size)
+
+    if section > 0:
+        lcl_block_index = min(section - 1, n_lcl_blocks - 1)
+        cache_names.append(f"lcl_block_{lcl_block_index}")
+
+    return cache_names
+
+
+def _get_output_head_cache_names(n_lcl_blocks: int) -> list[str]:
+    cache_names = ["first_layer_tensor"]
+
+    if n_lcl_blocks >= 1:
+        cache_names.extend(["lcl_block_0_fc_1", "lcl_block_0_fc_2"])
+
+    return cache_names
+
+
 def generate_tb_base_config(
     num_layers: int,
     tb_block_frequency: int,
     output_head: str,
     target_columns: list[str],
     output_groups: dict[str, list[str]] | None,
+    n_lcl_blocks: int = 0,
 ) -> dict[str, list[dict[str, Any]]]:
+    base_cache_names = _get_staggered_cache_names(
+        layer_index=0,
+        total_layers=num_layers,
+        n_lcl_blocks=n_lcl_blocks,
+    )
+
     message_configs: list[dict[str, Any]] = [
         {
             "name": "base_fusion_residual_block",
             "layer_path": "fusion_modules.computed.fusion_modules.fusion.0.0",
-            "use_from_cache": ["first_layer_tensor"],
+            "use_from_cache": base_cache_names,
             "projection_type": "lcl+mlp_residual",
             "cache_fusion_type": "sum",
+            "kernel_width_divisible_by": 4,
         }
     ]
 
@@ -223,25 +345,34 @@ def generate_tb_base_config(
 
     for layer in range(0, num_layers_adjusted + 1):
         if layer % tb_block_frequency == 0:
+            cache_names = _get_staggered_cache_names(
+                layer_index=layer + 2,
+                total_layers=num_layers,
+                n_lcl_blocks=n_lcl_blocks,
+            )
             message_configs.append(
                 {
                     "name": f"{layer}_fusion_residual_block",
                     "layer_path": f"fusion_modules.computed.fusion_modules"
                     f".fusion.1.{layer}",
-                    "use_from_cache": ["first_layer_tensor"],
+                    "use_from_cache": cache_names,
                     "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
+                    "kernel_width_divisible_by": 4,
                 }
             )
+
+    output_cache_names = _get_output_head_cache_names(n_lcl_blocks=n_lcl_blocks)
 
     if output_head == "linear":
         message_configs.append(
             {
                 "name": "final_layer",
                 "layer_path": "output_modules.eir_auto_gp.linear_layer",
-                "use_from_cache": ["first_layer_tensor"],
+                "use_from_cache": output_cache_names,
                 "projection_type": "lcl+mlp_residual",
                 "cache_fusion_type": "sum",
+                "kernel_width_divisible_by": 4,
             }
         )
     elif output_head == "mlp":
@@ -251,9 +382,10 @@ def generate_tb_base_config(
                     "name": f"final_layer_{target_column}",
                     "layer_path": f"output_modules.eir_auto_gp.multi_task_branches."
                     f"{target_column}.0.1",
-                    "use_from_cache": ["first_layer_tensor"],
+                    "use_from_cache": output_cache_names,
                     "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
+                    "kernel_width_divisible_by": 4,
                 }
             )
     elif output_head == "shared_mlp_residual":
@@ -264,9 +396,10 @@ def generate_tb_base_config(
                     "name": f"final_layer_{group_name}",
                     "layer_path": f"output_modules.eir_auto_gp_{group_name}"
                     f".shared_branch",
-                    "use_from_cache": ["first_layer_tensor"],
+                    "use_from_cache": output_cache_names,
                     "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
+                    "kernel_width_divisible_by": 4,
                 }
             )
 
@@ -278,6 +411,7 @@ def generate_tb_mgmoe_config(
     tb_block_frequency: int,
     num_experts: int,
     output_head: str,
+    n_lcl_blocks: int = 0,
 ) -> dict[str, list[dict[str, Any]]]:
     message_configs: list[dict[str, Any]] = []
 
@@ -290,6 +424,7 @@ def generate_tb_mgmoe_config(
                 "use_from_cache": ["first_layer_tensor"],
                 "projection_type": "lcl+mlp_residual",
                 "cache_fusion_type": "sum",
+                "kernel_width_divisible_by": 4,
             }
         )
 
@@ -305,17 +440,21 @@ def generate_tb_mgmoe_config(
                         "use_from_cache": ["first_layer_tensor"],
                         "projection_type": "lcl+mlp_residual",
                         "cache_fusion_type": "sum",
+                        "kernel_width_divisible_by": 4,
                     }
                 )
+
+    output_cache_names = _get_output_head_cache_names(n_lcl_blocks=n_lcl_blocks)
 
     if output_head == "linear":
         message_configs.append(
             {
                 "name": "final_layer",
                 "layer_path": "output_modules.eir_auto_gp.linear_layer",
-                "use_from_cache": ["first_layer_tensor"],
+                "use_from_cache": output_cache_names,
                 "projection_type": "lcl+mlp_residual",
                 "cache_fusion_type": "sum",
+                "kernel_width_divisible_by": 4,
             }
         )
 
@@ -367,11 +506,11 @@ def get_output_configs(
         "mlp": {
             "model_type": "mlp_residual",
             "model_init_config": {
-                "rb_do": 0.05,
-                "fc_do": 0.05,
+                "rb_do": 0.10,
+                "fc_do": 0.10,
                 "fc_task_dim": 128,
                 "layers": [2],
-                "stochastic_depth_p": 0.0,
+                "stochastic_depth_p": 0.10,
                 "final_layer_type": "linear",
             },
         },
@@ -383,9 +522,9 @@ def get_output_configs(
             "model_init_config": {
                 "layers": [shared_mlp_params.n_layers],
                 "fc_task_dim": shared_mlp_params.fc_dim,
-                "rb_do": 0.00,
-                "fc_do": 0.00,
-                "stochastic_depth_p": 0.0,
+                "rb_do": 0.10,
+                "fc_do": 0.10,
+                "stochastic_depth_p": 0.10,
             },
         },
     }
@@ -488,9 +627,10 @@ def get_aggregate_config(
     skip_to_every_n_fusion_layers: int | None = None,
     n_output_layers: int | None = None,
     output_dim: int | None = None,
+    n_lcl_blocks: int = 0,
 ) -> AggregateConfig:
     global_config = get_base_global_config()
-    input_genotype_config = get_base_input_genotype_config()
+    input_genotype_config = get_base_input_genotype_config(n_lcl_blocks=n_lcl_blocks)
     input_tabular_config = get_base_tabular_input_config()
 
     if output_groups:
@@ -518,6 +658,7 @@ def get_aggregate_config(
         n_fusion_layers=n_fusion_layers,
         fusion_dim=fusion_dim,
         skip_to_every_n_fusion_layers=skip_to_every_n_fusion_layers,
+        n_lcl_blocks=n_lcl_blocks,
     )
     output_configs = get_output_configs(
         output_head=output_head,

@@ -18,6 +18,7 @@ from eir.setup.input_setup_modules.setup_omics import read_bim
 from eir_auto_gp.multi_task.modelling.configs import (
     AggregateConfig,
     get_aggregate_config,
+    get_num_lcl_blocks,
 )
 from eir_auto_gp.preprocess.converge import (
     ParseDataWrapper,
@@ -79,6 +80,25 @@ def _get_fold_iterator(folds: str) -> Iterable:
         return range(int(folds))
 
 
+def calculate_n_lcl_blocks(genotype_data_path: str) -> int:
+    bim_path = get_bim_path(genotype_data_path=genotype_data_path)
+    n_snps = lines_in_file(file_path=bim_path)
+
+    kernel_width, first_kernel_expansion = get_gln_kernel_parameters(n_snps=n_snps)
+
+    n_lcl_blocks = get_num_lcl_blocks(
+        n_snps=n_snps,
+        kernel_width=kernel_width,
+        first_kernel_expansion=first_kernel_expansion,
+        channel_exp_base=3,
+        rb_do=0.10,
+        stochastic_depth_p=0.00,
+        cutoff=4096,
+    )
+
+    return n_lcl_blocks
+
+
 class TestSingleRun(luigi.Task):
     fold = luigi.IntParameter()
 
@@ -109,6 +129,10 @@ class TestSingleRun(luigi.Task):
             + self.modelling_config["output_con_columns"]
         )
 
+        n_lcl_blocks = calculate_n_lcl_blocks(
+            genotype_data_path=self.data_config["genotype_data_path"]
+        )
+
         base_aggregate_config = get_aggregate_config(
             output_head="linear",
             output_groups=self.modelling_config["output_groups"],
@@ -124,6 +148,7 @@ class TestSingleRun(luigi.Task):
             ],
             n_output_layers=self.modelling_config["n_output_layers"],
             output_dim=self.modelling_config["output_dim"],
+            n_lcl_blocks=n_lcl_blocks,
         )
 
         injection_params = build_injection_params(
@@ -245,6 +270,10 @@ class TrainSingleRun(luigi.Task):
             + self.modelling_config["output_con_columns"]
         )
 
+        n_lcl_blocks = calculate_n_lcl_blocks(
+            genotype_data_path=self.data_config["genotype_data_path"]
+        )
+
         base_aggregate_config = get_aggregate_config(
             output_head="linear",
             output_groups=self.modelling_config["output_groups"],
@@ -260,6 +289,7 @@ class TrainSingleRun(luigi.Task):
             ],
             n_output_layers=self.modelling_config["n_output_layers"],
             output_dim=self.modelling_config["output_dim"],
+            n_lcl_blocks=n_lcl_blocks,
         )
 
         injection_params = build_injection_params(

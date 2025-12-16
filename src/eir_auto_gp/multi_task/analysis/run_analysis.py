@@ -169,6 +169,7 @@ def gather_test_predictions(
 
         cur_output_name = target_name_to_output_name[target_name]
 
+        assert metric_funcs is not None, "metric_funcs should be loaded from folds"
         ensemble_metrics = compute_metrics(
             df=df_ensemble,
             metrics=metric_funcs,

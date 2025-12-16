@@ -279,6 +279,7 @@ def gather_test_predictions(
         target_type = get_target_type(
             target_name=target_name, cat_targets=cat_targets, con_targets=con_targets
         )
+        assert metric_funcs is not None, "metric_funcs should be loaded from folds"
         ensemble_metrics = compute_metrics(
             df=df_ensemble,
             metrics=metric_funcs,
