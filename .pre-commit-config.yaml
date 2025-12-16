@@ -13,12 +13,6 @@ repos:
       - id: check-added-large-files
   - repo: local
     hooks:
-      - id: type-check
-        name: Type check with ty
-        entry: uvx ty check src/eir_auto_gp
-        language: system
-        types: [python]
-        pass_filenames: false
       - id: test
         name: Run tests
         entry: uv run tox

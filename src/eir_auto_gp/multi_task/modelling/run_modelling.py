@@ -1,3 +1,4 @@
+import math
 import os
 import subprocess
 from collections.abc import Iterable
@@ -38,6 +39,40 @@ from eir_auto_gp.utils.shared_modelling_utils import (
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
+
+
+def validate_architecture_config(modelling_config: dict[str, Any]) -> None:
+    required_arch_flags = ["use_lcl_to_output_skips", "use_lcl_fusion_skips"]
+
+    for flag in required_arch_flags:
+        if flag not in modelling_config:
+            raise ValueError(
+                f"Architecture flag '{flag}' is missing from modelling_config. "
+                f"This flag controls model architecture and must be set explicitly. "
+                f"Available keys: {list(modelling_config.keys())}"
+            )
+
+    valid_lcl_output_values = [True, False, "fc_1_only"]
+    if modelling_config["use_lcl_to_output_skips"] not in valid_lcl_output_values:
+        raise ValueError(
+            f"Invalid value for 'use_lcl_to_output_skips': "
+            f"{modelling_config['use_lcl_to_output_skips']}. "
+            f"Must be one of: {valid_lcl_output_values}"
+        )
+
+    if not isinstance(modelling_config["use_lcl_fusion_skips"], bool):
+        raise ValueError(
+            f"Invalid value for 'use_lcl_fusion_skips': "
+            f"{modelling_config['use_lcl_fusion_skips']}. "
+            f"Must be a boolean (True/False)."
+        )
+
+    logger.info(
+        "Architecture configuration validated: "
+        "use_lcl_to_output_skips=%s, use_lcl_fusion_skips=%s",
+        modelling_config["use_lcl_to_output_skips"],
+        modelling_config["use_lcl_fusion_skips"],
+    )
 
 
 class RunModellingWrapper(luigi.Task):
@@ -124,6 +159,8 @@ class TestSingleRun(luigi.Task):
         output_root = Path(self.output().path).parent
         ensure_path_exists(output_root, is_folder=True)
 
+        validate_architecture_config(modelling_config=self.modelling_config)
+
         all_target_columns = (
             self.modelling_config["output_cat_columns"]
             + self.modelling_config["output_con_columns"]
@@ -149,6 +186,8 @@ class TestSingleRun(luigi.Task):
             n_output_layers=self.modelling_config["n_output_layers"],
             output_dim=self.modelling_config["output_dim"],
             n_lcl_blocks=n_lcl_blocks,
+            use_lcl_to_output_skips=self.modelling_config["use_lcl_to_output_skips"],
+            use_lcl_fusion_skips=self.modelling_config["use_lcl_fusion_skips"],
         )
 
         injection_params = build_injection_params(
@@ -265,6 +304,8 @@ class TrainSingleRun(luigi.Task):
         output_root = Path(self.output().path).parent
         ensure_path_exists(output_root, is_folder=True)
 
+        validate_architecture_config(modelling_config=self.modelling_config)
+
         all_target_columns = (
             self.modelling_config["output_cat_columns"]
             + self.modelling_config["output_con_columns"]
@@ -290,6 +331,8 @@ class TrainSingleRun(luigi.Task):
             n_output_layers=self.modelling_config["n_output_layers"],
             output_dim=self.modelling_config["output_dim"],
             n_lcl_blocks=n_lcl_blocks,
+            use_lcl_to_output_skips=self.modelling_config["use_lcl_to_output_skips"],
+            use_lcl_fusion_skips=self.modelling_config["use_lcl_fusion_skips"],
         )
 
         injection_params = build_injection_params(
@@ -589,6 +632,29 @@ def _get_compile_model(optimize_model: bool) -> bool:
     return False
 
 
+def _get_checkpoint_interval(
+    iter_per_epoch: int,
+    evaluations_per_epoch: int = 4,
+    min_interval: int = 50,
+    max_interval: int = 1000,
+) -> int:
+    if iter_per_epoch <= min_interval:
+        return iter_per_epoch
+
+    target_interval = iter_per_epoch / evaluations_per_epoch
+    if target_interval <= min_interval:
+        return min_interval
+
+    power = 10 ** math.floor(math.log10(target_interval))
+    rounding_base = power / 2
+    nice_interval = round(target_interval / rounding_base) * rounding_base
+
+    final_interval = max(min_interval, int(nice_interval))
+    final_interval = min(final_interval, iter_per_epoch, max_interval)
+
+    return final_interval
+
+
 def _get_global_injections(
     fold: int,
     output_folder: str,
@@ -619,7 +685,16 @@ def _get_global_injections(
     n_workers = get_dataloader_workers(memory_dataset=memory_dataset, device=device)
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
     early_stopping_buffer = max(early_stopping_buffer, 1000)
-    sample_interval = min(1000, iter_per_epoch)
+
+    sample_interval = _get_checkpoint_interval(iter_per_epoch=iter_per_epoch)
+    logger.info(
+        "Evaluation interval set to %d iterations (%.1f evaluations/epoch) "
+        "for %d iterations/epoch.",
+        sample_interval,
+        iter_per_epoch / sample_interval,
+        iter_per_epoch,
+    )
+
     lr = _get_learning_rate(n_snps=n_snps)
     precision = _get_supported_precision(optimize_model=optimize_model)
     compile_model = _get_compile_model(optimize_model=optimize_model)
@@ -772,7 +847,7 @@ def _get_output_injections(
             "target_cat_columns": output_cat_columns,
             "target_con_columns": output_con_columns,
             "cat_loss_name": cat_loss,
-            "uncertainty_weighted_mt_loss": True,
+            "uncertainty_weighted_mt_loss": False,
         },
     }
 

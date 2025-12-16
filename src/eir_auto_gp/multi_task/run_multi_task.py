@@ -248,6 +248,25 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--use_lcl_to_output_skips",
+        type=str,
+        default="True",
+        choices=["True", "False", "fc_1_only"],
+        help="Controls LCL block skip connections to output heads.\\n"
+        "  - 'True': Use fc_1 and fc_2 skips\\n"
+        "  - 'fc_1_only': Use only fc_1 skip (more parameter-efficient)\\n"
+        "  - 'False': No LCL block skips to output heads (fc_0_output only)\\n",
+    )
+
+    parser.add_argument(
+        "--use_lcl_fusion_skips",
+        action="store_true",
+        help="Enable LCL block skip connections to fusion layers.\\n"
+        "When enabled, fusion layers receive 'multi-scale' LCL block outputs\\n"
+        "in addition to fc_0_output. Recent experiments show minimal benefit.\\n",
+    )
+
+    parser.add_argument(
         "--modelling_data_format",
         type=str,
         default="disk",
@@ -584,13 +603,22 @@ def build_modelling_config(cl_args: argparse.Namespace) -> dict[str, Any]:
         "skip_to_every_n_fusion_layers",
         "n_output_layers",
         "output_dim",
+        "use_lcl_to_output_skips",
+        "use_lcl_fusion_skips",
         "batch_size",
         "weighted_sampling",
         "do_test",
         "optimize_model",
     ]
 
-    return extract_from_namespace(namespace=cl_args, keys=modelling_keys)
+    config = extract_from_namespace(namespace=cl_args, keys=modelling_keys)
+
+    if config["use_lcl_to_output_skips"] == "True":
+        config["use_lcl_to_output_skips"] = True
+    elif config["use_lcl_to_output_skips"] == "False":
+        config["use_lcl_to_output_skips"] = False
+
+    return config
 
 
 def build_analysis_config(cl_args: argparse.Namespace) -> dict[str, Any]:
