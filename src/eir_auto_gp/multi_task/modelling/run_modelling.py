@@ -144,6 +144,14 @@ def _filter_input_configs(configs: list[dict]) -> list[dict]:
     return filtered
 
 
+def _filter_adversarial_from_global_config(config: dict) -> dict:
+    if "adversarial_training" in config:
+        filtered_config = config.copy()
+        del filtered_config["adversarial_training"]
+        return filtered_config
+    return config
+
+
 def _filter_tabular_from_fusion_config(config: dict) -> dict:
     if "tensor_broker_config" not in config:
         return config
@@ -224,6 +232,16 @@ def _filter_serialized_configs_for_genotype_only(train_run_folder: Path):
                 config = yaml.safe_load(config_file.read_text())
                 filtered_config = _filter_tabular_from_fusion_config(config=config)
                 config_file.write_text(yaml.dump(filtered_config))
+
+            elif config_file.stem == "global_config":
+                config = yaml.safe_load(config_file.read_text())
+                filtered_config = _filter_adversarial_from_global_config(config=config)
+                if filtered_config != config:
+                    logger.info(
+                        "Removed adversarial_training from global_config for "
+                        "genotype-only prediction"
+                    )
+                    config_file.write_text(yaml.dump(filtered_config))
 
         yield
 
