@@ -132,8 +132,8 @@ def get_base_input_genotype_config(
         },
         "input_type_info": {
             "mixing_subtype": "mixup",
-            "na_augment_alpha": 0.6,
-            "na_augment_beta": 2.0,
+            "na_augment_alpha": 1.0,
+            "na_augment_beta": 1.0,
             "shuffle_augment_alpha": 1.0,
             "shuffle_augment_beta": 49.0,
             "snp_file": "FILL",
