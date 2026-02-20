@@ -35,6 +35,7 @@ def get_output_configs(
     output_head: str = "mlp",
     n_output_layers: int | None = None,
     output_dim: int | None = None,
+    output_num_experts: int | None = None,
 ) -> list[dict[str, Any]]:
     if n_output_layers is not None:
         assert output_dim is not None
@@ -70,6 +71,7 @@ def get_output_configs(
                 "rb_do": 0.10,
                 "fc_do": 0.10,
                 "stochastic_depth_p": 0.10,
+                **({"num_experts": output_num_experts} if output_num_experts else {}),
             },
         },
     }

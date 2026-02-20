@@ -36,6 +36,7 @@ class ArchitectureParams:
     use_lcl_fusion_skips: bool
     fusion_model_type: str
     mgmoe_num_experts: int
+    output_num_experts: int | None
 
     @classmethod
     def from_modelling_config(cls, config: dict[str, Any]) -> "ArchitectureParams":
@@ -53,6 +54,7 @@ class ArchitectureParams:
             use_lcl_fusion_skips=config["use_lcl_fusion_skips"],
             fusion_model_type=config["fusion_model_type"],
             mgmoe_num_experts=config["mgmoe_num_experts"],
+            output_num_experts=config.get("output_num_experts"),
         )
 
 
@@ -517,6 +519,7 @@ def get_aggregate_config(
         model_size=arch_params.model_size,
         n_output_layers=arch_params.n_output_layers,
         output_dim=arch_params.output_dim,
+        output_num_experts=arch_params.output_num_experts,
     )
 
     return AggregateConfig(

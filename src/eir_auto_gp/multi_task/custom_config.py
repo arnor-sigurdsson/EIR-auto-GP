@@ -80,6 +80,14 @@ class CustomConfig:
         Number of experts when ``fusion_model_type`` is ``"mgmoe"``.
         Ignored for other fusion model types.
 
+    :param output_num_experts:
+        If set, splits the shared branch in ``shared_mlp_residual`` output
+        heads into this many expert sub-branches (each with
+        ``output_dim // num_experts`` width). Each target learns a static
+        gating weight over the experts. Only used when output groups are
+        enabled (i.e. ``shared_mlp_residual`` output head). If ``None``,
+        uses a single shared branch (original behavior).
+
     :param adversarial_enabled:
         Enables adversarial disentanglement training when tabular inputs
         and output groups are both present. The adversarial head encourages
@@ -105,6 +113,7 @@ class CustomConfig:
     batch_size: int | None = None
     fusion_model_type: str = "mlp-residual-sum"
     mgmoe_num_experts: int = 8
+    output_num_experts: int | None = None
     adversarial_enabled: bool = True
     adversarial_lambda: float = 0.5
 
@@ -140,6 +149,12 @@ class CustomConfig:
         if self.mgmoe_num_experts < 1:
             raise ValueError(
                 f"mgmoe_num_experts must be >= 1, got {self.mgmoe_num_experts}"
+            )
+
+        if self.output_num_experts is not None and self.output_num_experts < 1:
+            raise ValueError(
+                f"output_num_experts must be >= 1 or None, "
+                f"got {self.output_num_experts}"
             )
 
         if self.adversarial_lambda < 0:
