@@ -847,7 +847,7 @@ dev = [
 [[package]]
 name = "eir-dl"
 version = "0.23.0"
-source = { git = "https://github.com/arnor-sigurdsson/EIR?branch=update-gln-model#67aa62aacc669be718992891d2a8574fb3e13db7" }
+source = { git = "https://github.com/arnor-sigurdsson/EIR?branch=update-gln-model#613940f4d9080ab88d5d1cfe5d7403d149ed1880" }
 dependencies = [
     { name = "adabelief-pytorch" },
     { name = "aislib" },
