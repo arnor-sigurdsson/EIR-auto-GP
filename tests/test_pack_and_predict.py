@@ -12,6 +12,7 @@ import pytest
 from eir.train_utils.metrics import calc_pcc
 from sklearn.metrics import accuracy_score, mean_squared_error, roc_auc_score
 
+from eir_auto_gp.multi_task.custom_config import CustomConfig
 from eir_auto_gp.multi_task.run_multi_task import (
     get_argument_parser,
     run,
@@ -124,9 +125,10 @@ def test_modelling_pack_and_predict(
     parser = get_argument_parser()
     cl_args = parser.parse_args(command.split())
     cl_args.global_output_folder = str(tmp_path)
+    custom_config = CustomConfig()
 
-    store_experiment_config(cl_args=cl_args)
-    run(cl_args=cl_args)
+    store_experiment_config(cl_args=cl_args, custom_config=custom_config)
+    run(cl_args=cl_args, custom_config=custom_config)
 
     model_folder = tmp_path / "modelling"
     check_test = True if "--do_test" in command else False
@@ -298,9 +300,10 @@ def test_pack_predict_with_tabular_train_genotype_predict(
     parser = get_argument_parser()
     cl_args = parser.parse_args(command.split())
     cl_args.global_output_folder = str(tmp_path)
+    custom_config = CustomConfig()
 
-    store_experiment_config(cl_args=cl_args)
-    run(cl_args=cl_args)
+    store_experiment_config(cl_args=cl_args, custom_config=custom_config)
+    run(cl_args=cl_args, custom_config=custom_config)
 
     model_folder = tmp_path / "modelling"
     check_test = True if "--do_test" in command else False

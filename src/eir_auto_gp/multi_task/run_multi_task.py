@@ -13,6 +13,7 @@ import pandas as pd
 from aislib.misc_utils import ensure_path_exists
 
 from eir_auto_gp.multi_task.analysis.run_analysis import RunAnalysisWrapper
+from eir_auto_gp.multi_task.custom_config import CustomConfig
 from eir_auto_gp.preprocess.converge import ParseDataWrapper
 from eir_auto_gp.preprocess.gwas_pre_selection import validate_geno_data_path
 from eir_auto_gp.utils.utils import get_logger
@@ -206,95 +207,6 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--n_fusion_layers",
-        type=int,
-        required=False,
-        help="Number of fusion layers. Must be used with all other granular parameters "
-        "and cannot be combined with model_size.",
-    )
-
-    parser.add_argument(
-        "--fusion_dim",
-        type=int,
-        required=False,
-        help="Fusion layer dimension. Must be used with all other granular parameters "
-        "and cannot be combined with model_size.",
-    )
-
-    parser.add_argument(
-        "--skip_to_every_n_fusion_layers",
-        type=int,
-        required=False,
-        help="Tensor broker skip connection frequency. Must be used with all other\\n"
-        "granular parameters and cannot be combined with model_size.",
-    )
-
-    parser.add_argument(
-        "--n_output_layers",
-        type=int,
-        required=False,
-        help="Number of output head layers (for shared_mlp_residual only).\\n"
-        "Must be used with all other granular parameters and cannot be combined\\n"
-        "with model_size.",
-    )
-
-    parser.add_argument(
-        "--output_dim",
-        type=int,
-        required=False,
-        help="Output head layer dimension (for shared_mlp_residual only).\\n"
-        "Must be used with all other granular parameters and cannot be combined\\n"
-        "with model_size.",
-    )
-
-    parser.add_argument(
-        "--use_lcl_to_output_skips",
-        type=str,
-        default="True",
-        choices=["True", "False", "fc_1_only"],
-        help="Controls LCL block skip connections to output heads.\\n"
-        "  - 'True': Use fc_1 and fc_2 skips\\n"
-        "  - 'fc_1_only': Use only fc_1 skip (more parameter-efficient)\\n"
-        "  - 'False': No LCL block skips to output heads (fc_0_output only)\\n",
-    )
-
-    parser.add_argument(
-        "--use_lcl_fusion_skips",
-        action="store_true",
-        help="Enable LCL block skip connections to fusion layers.\\n"
-        "When enabled, fusion layers receive 'multi-scale' LCL block outputs\\n"
-        "in addition to fc_0_output. Recent experiments show minimal benefit.\\n",
-    )
-
-    parser.add_argument(
-        "--modelling_data_format",
-        type=str,
-        default="disk",
-        help="Which format to store the data in during modelling.",
-        choices=["disk", "memory", "auto"],
-    )
-
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        required=False,
-        help="Batch size for training. If not specified, it will be automatically\\n"
-        "determined based on the dataset size.",
-    )
-
-    parser.add_argument(
-        "--weighted_sampling",
-        type=str,
-        default="auto",
-        choices=["auto", "true", "false"],
-        help="Control weighted sampling behavior during training.\\n"
-        "  - 'auto' (default): Enable weighted sampling only when there are\\n"
-        "    categorical targets but no continuous targets.\\n"
-        "  - 'true': Always enable weighted sampling.\\n"
-        "  - 'false': Always disable weighted sampling.",
-    )
-
-    parser.add_argument(
         "--do_test",
         action="store_true",
         help="Whether to run test set prediction.",
@@ -310,10 +222,11 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--optimize_model",
-        action="store_true",
-        help="Enable model optimizations including torch.compile and "
-        "mixed precision training.",
+        "--custom_config",
+        type=str,
+        required=False,
+        help="Path to a YAML file with advanced model and training configuration.\n"
+        "See CustomConfig class documentation for available keys and defaults.",
     )
 
     return parser
@@ -323,6 +236,12 @@ def get_cl_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     cl_args = parser.parse_args()
 
     return cl_args
+
+
+def load_custom_config(cl_args: argparse.Namespace) -> CustomConfig:
+    if cl_args.custom_config:
+        return CustomConfig.from_yaml(path=cl_args.custom_config)
+    return CustomConfig()
 
 
 def validate_column_duplicates(
@@ -439,19 +358,8 @@ def validate_pre_split_folder(pre_split_folder: str | None) -> None:
 
 def validate_model_architecture_params(
     model_size: str,
-    n_fusion_layers: int | None,
-    fusion_dim: int | None,
-    skip_to_every_n_fusion_layers: int | None,
-    n_output_layers: int | None,
-    output_dim: int | None,
+    custom_config: CustomConfig,
 ) -> None:
-    granular_params = [
-        n_fusion_layers,
-        fusion_dim,
-        skip_to_every_n_fusion_layers,
-        n_output_layers,
-        output_dim,
-    ]
     granular_param_names = [
         "n_fusion_layers",
         "fusion_dim",
@@ -459,6 +367,7 @@ def validate_model_architecture_params(
         "n_output_layers",
         "output_dim",
     ]
+    granular_params = [getattr(custom_config, name) for name in granular_param_names]
 
     any_granular_specified = any(p is not None for p in granular_params)
     all_granular_specified = all(p is not None for p in granular_params)
@@ -467,6 +376,7 @@ def validate_model_architecture_params(
         raise ValueError(
             "Cannot use model_size with granular architecture parameters. "
             "Either use model_size alone or specify all granular parameters "
+            "in the custom config file "
             "(n_fusion_layers, fusion_dim, skip_to_every_n_fusion_layers, "
             "n_output_layers, output_dim)."
         )
@@ -483,7 +393,7 @@ def validate_model_architecture_params(
         )
 
 
-def run(cl_args: argparse.Namespace) -> None:
+def run(cl_args: argparse.Namespace, custom_config: CustomConfig) -> None:
     validate_geno_data_path(geno_data_path=cl_args.genotype_data_path)
     validate_column_duplicates(
         input_cat_columns=cl_args.input_cat_columns,
@@ -507,18 +417,16 @@ def run(cl_args: argparse.Namespace) -> None:
     validate_pre_split_folder(pre_split_folder=cl_args.pre_split_folder)
     validate_model_architecture_params(
         model_size=cl_args.model_size,
-        n_fusion_layers=cl_args.n_fusion_layers,
-        fusion_dim=cl_args.fusion_dim,
-        skip_to_every_n_fusion_layers=cl_args.skip_to_every_n_fusion_layers,
-        n_output_layers=cl_args.n_output_layers,
-        output_dim=cl_args.output_dim,
+        custom_config=custom_config,
     )
 
     cl_args = parse_output_folders(cl_args=cl_args)
     cl_args = _add_pre_split_folder_if_present(cl_args=cl_args)
 
-    data_config = build_data_config(cl_args=cl_args)
-    modelling_config = build_modelling_config(cl_args=cl_args)
+    data_config = build_data_config(cl_args=cl_args, custom_config=custom_config)
+    modelling_config = build_modelling_config(
+        cl_args=cl_args, custom_config=custom_config
+    )
     analysis_config = build_analysis_config(cl_args=cl_args)
     root_task = get_root_task(
         folds=cl_args.folds,
@@ -557,19 +465,25 @@ def get_root_task(
 def main():
     parser = get_argument_parser()
     cl_args = get_cl_args(parser=parser)
-    store_experiment_config(cl_args=cl_args)
+    custom_config = load_custom_config(cl_args=cl_args)
+    store_experiment_config(cl_args=cl_args, custom_config=custom_config)
 
-    run(cl_args=cl_args)
+    run(cl_args=cl_args, custom_config=custom_config)
 
 
 def store_experiment_config(
     cl_args: argparse.Namespace,
+    custom_config: CustomConfig,
 ) -> None:
-    config_dict = vars(cl_args)
-
     output_folder = Path(cl_args.global_output_folder)
-
     ensure_path_exists(path=output_folder, is_folder=True)
+
+    if cl_args.custom_config:
+        custom_config_copy = output_folder / "custom_config.yaml"
+        shutil.copy2(src=cl_args.custom_config, dst=custom_config_copy)
+        logger.info("Copied custom config to %s", custom_config_copy)
+
+    config_dict = {**vars(cl_args), **custom_config.to_dict()}
     output_path = output_folder / "config.json"
 
     if output_path.exists():
@@ -620,7 +534,10 @@ def _add_pre_split_folder_if_present(cl_args: argparse.Namespace) -> argparse.Na
     return cl_args_copy
 
 
-def build_data_config(cl_args: argparse.Namespace) -> dict[str, Any]:
+def build_data_config(
+    cl_args: argparse.Namespace,
+    custom_config: CustomConfig,
+) -> dict[str, Any]:
     data_keys = [
         "genotype_data_path",
         "label_file_path",
@@ -630,16 +547,19 @@ def build_data_config(cl_args: argparse.Namespace) -> dict[str, Any]:
         "pre_split_folder",
         "freeze_validation_set",
         "genotype_processing_chunk_size",
-        "modelling_data_format",
         "data_storage_format",
     ]
 
     base = extract_from_namespace(namespace=cl_args, keys=data_keys)
+    base["modelling_data_format"] = custom_config.modelling_data_format
 
     return base
 
 
-def build_modelling_config(cl_args: argparse.Namespace) -> dict[str, Any]:
+def build_modelling_config(
+    cl_args: argparse.Namespace,
+    custom_config: CustomConfig,
+) -> dict[str, Any]:
     modelling_keys = [
         "modelling_output_folder",
         "input_cat_columns",
@@ -650,26 +570,12 @@ def build_modelling_config(cl_args: argparse.Namespace) -> dict[str, Any]:
         "n_random_output_groups",
         "genotype_feature_selection",
         "model_size",
-        "n_fusion_layers",
-        "fusion_dim",
-        "skip_to_every_n_fusion_layers",
-        "n_output_layers",
-        "output_dim",
-        "use_lcl_to_output_skips",
-        "use_lcl_fusion_skips",
-        "batch_size",
-        "weighted_sampling",
         "do_test",
         "genotype_only_test",
-        "optimize_model",
     ]
 
     config = extract_from_namespace(namespace=cl_args, keys=modelling_keys)
-
-    if config["use_lcl_to_output_skips"] == "True":
-        config["use_lcl_to_output_skips"] = True
-    elif config["use_lcl_to_output_skips"] == "False":
-        config["use_lcl_to_output_skips"] = False
+    config.update(custom_config.to_dict())
 
     return config
 
