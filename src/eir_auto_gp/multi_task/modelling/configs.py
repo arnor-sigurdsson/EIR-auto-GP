@@ -317,6 +317,7 @@ def get_base_fusion_config(
     include_tabular: bool = True,
     tabular_cache_dropout_p: float = 0.00,
     mgmoe_num_experts: int = 8,
+    output_num_experts: int | None = None,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
         assert fusion_dim is not None
@@ -349,6 +350,7 @@ def get_base_fusion_config(
         "use_lcl_fusion_skips": use_lcl_fusion_skips,
         "include_tabular": include_tabular,
         "tabular_cache_dropout_p": tabular_cache_dropout_p,
+        "output_num_experts": output_num_experts,
     }
 
     if model_type in ("mlp-residual", "mlp-residual-sum"):
@@ -510,6 +512,7 @@ def get_aggregate_config(
         include_tabular=tabular_params.enabled,
         tabular_cache_dropout_p=tabular_params.cache_dropout_p,
         mgmoe_num_experts=arch_params.mgmoe_num_experts,
+        output_num_experts=arch_params.output_num_experts,
     )
     output_configs = get_output_configs(
         output_head=output_head,

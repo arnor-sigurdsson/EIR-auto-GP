@@ -60,6 +60,7 @@ def generate_tb_base_config(
     use_lcl_fusion_skips: bool = True,
     include_tabular: bool = True,
     tabular_cache_dropout_p: float = 0.00,
+    output_num_experts: int | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     base_cache_names = _get_staggered_cache_names(
         layer_index=0,
@@ -165,17 +166,31 @@ def generate_tb_base_config(
         assert output_groups is not None
         for group_name, _group_columns in output_groups.items():
             if genotype_cache_names:
-                message_configs.append(
-                    {
-                        "name": f"final_layer_{group_name}",
-                        "layer_path": f"output_modules.eir_auto_gp_{group_name}"
-                        f".shared_branch",
-                        "use_from_cache": genotype_cache_names,
-                        "projection_type": "lcl+mlp_residual",
-                        "cache_fusion_type": "sum",
-                        "kernel_width_divisible_by": 4,
-                    }
-                )
+                if output_num_experts is not None:
+                    for expert in range(output_num_experts):
+                        message_configs.append(
+                            {
+                                "name": f"final_layer_{group_name}_expert_{expert}",
+                                "layer_path": f"output_modules.eir_auto_gp_{group_name}"
+                                f".expert_branches.expert_{expert}",
+                                "use_from_cache": genotype_cache_names,
+                                "projection_type": "lcl+mlp_residual",
+                                "cache_fusion_type": "sum",
+                                "kernel_width_divisible_by": 4,
+                            }
+                        )
+                else:
+                    message_configs.append(
+                        {
+                            "name": f"final_layer_{group_name}",
+                            "layer_path": f"output_modules.eir_auto_gp_{group_name}"
+                            f".shared_branch",
+                            "use_from_cache": genotype_cache_names,
+                            "projection_type": "lcl+mlp_residual",
+                            "cache_fusion_type": "sum",
+                            "kernel_width_divisible_by": 4,
+                        }
+                    )
             if include_tabular:
                 message_configs.append(
                     {
@@ -205,6 +220,7 @@ def generate_tb_mgmoe_config(
     use_lcl_fusion_skips: bool = True,
     include_tabular: bool = True,
     tabular_cache_dropout_p: float = 0.00,
+    output_num_experts: int | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     message_configs: list[dict[str, Any]] = []
 
@@ -287,17 +303,31 @@ def generate_tb_mgmoe_config(
         assert output_groups is not None
         for group_name, _group_columns in output_groups.items():
             if genotype_cache_names:
-                message_configs.append(
-                    {
-                        "name": f"final_layer_{group_name}",
-                        "layer_path": f"output_modules.eir_auto_gp_{group_name}"
-                        f".shared_branch",
-                        "use_from_cache": genotype_cache_names,
-                        "projection_type": "lcl+mlp_residual",
-                        "cache_fusion_type": "sum",
-                        "kernel_width_divisible_by": 4,
-                    }
-                )
+                if output_num_experts is not None:
+                    for expert in range(output_num_experts):
+                        message_configs.append(
+                            {
+                                "name": f"final_layer_{group_name}_expert_{expert}",
+                                "layer_path": f"output_modules.eir_auto_gp_{group_name}"
+                                f".expert_branches.expert_{expert}",
+                                "use_from_cache": genotype_cache_names,
+                                "projection_type": "lcl+mlp_residual",
+                                "cache_fusion_type": "sum",
+                                "kernel_width_divisible_by": 4,
+                            }
+                        )
+                else:
+                    message_configs.append(
+                        {
+                            "name": f"final_layer_{group_name}",
+                            "layer_path": f"output_modules.eir_auto_gp_{group_name}"
+                            f".shared_branch",
+                            "use_from_cache": genotype_cache_names,
+                            "projection_type": "lcl+mlp_residual",
+                            "cache_fusion_type": "sum",
+                            "kernel_width_divisible_by": 4,
+                        }
+                    )
             if include_tabular:
                 message_configs.append(
                     {
