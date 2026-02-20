@@ -16,6 +16,7 @@ from aislib.misc_utils import ensure_path_exists
 from eir.setup.config_setup_modules.config_setup_utils import recursive_dict_inject
 
 from eir_auto_gp.multi_task.modelling.configs import (
+    AdversarialParams,
     AggregateConfig,
     ArchitectureParams,
     TabularSkipParams,
@@ -303,6 +304,10 @@ class TestSingleRun(luigi.Task):
             config=self.modelling_config,
         )
         tabular_params = TabularSkipParams(enabled=tabular_to_output_skips)
+        adversarial_params = AdversarialParams(
+            enabled=self.modelling_config.get("adversarial_enabled", True),
+            lambda_=self.modelling_config.get("adversarial_lambda", 0.5),
+        )
 
         base_aggregate_config = get_aggregate_config(
             arch_params=arch_params,
@@ -311,6 +316,7 @@ class TestSingleRun(luigi.Task):
             output_con_columns=self.modelling_config["output_con_columns"],
             n_lcl_blocks=n_lcl_blocks,
             tabular_params=tabular_params,
+            adversarial_params=adversarial_params,
         )
 
         injection_params = build_injection_params(
@@ -458,6 +464,10 @@ class TrainSingleRun(luigi.Task):
             config=self.modelling_config,
         )
         tabular_params = TabularSkipParams(enabled=has_tabular_columns)
+        adversarial_params = AdversarialParams(
+            enabled=self.modelling_config.get("adversarial_enabled", True),
+            lambda_=self.modelling_config.get("adversarial_lambda", 0.5),
+        )
 
         base_aggregate_config = get_aggregate_config(
             arch_params=arch_params,
@@ -466,6 +476,7 @@ class TrainSingleRun(luigi.Task):
             output_con_columns=self.modelling_config["output_con_columns"],
             n_lcl_blocks=n_lcl_blocks,
             tabular_params=tabular_params,
+            adversarial_params=adversarial_params,
         )
 
         injection_params = build_injection_params(

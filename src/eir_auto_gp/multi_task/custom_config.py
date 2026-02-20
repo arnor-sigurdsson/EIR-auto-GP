@@ -79,6 +79,16 @@ class CustomConfig:
     :param mgmoe_num_experts:
         Number of experts when ``fusion_model_type`` is ``"mgmoe"``.
         Ignored for other fusion model types.
+
+    :param adversarial_enabled:
+        Enables adversarial disentanglement training when tabular inputs
+        and output groups are both present. The adversarial head encourages
+        the genotype encoder to learn features that are independent of
+        tabular covariates.
+
+    :param adversarial_lambda:
+        Weight of the adversarial loss term. Higher values enforce stronger
+        disentanglement between genotype and tabular features.
     """
 
     use_lcl_to_output_skips: bool | str = True
@@ -95,6 +105,8 @@ class CustomConfig:
     batch_size: int | None = None
     fusion_model_type: str = "mlp-residual-sum"
     mgmoe_num_experts: int = 8
+    adversarial_enabled: bool = True
+    adversarial_lambda: float = 0.5
 
     def __post_init__(self) -> None:
         valid_skip_values = (True, False, "fc_1_only")
@@ -128,6 +140,11 @@ class CustomConfig:
         if self.mgmoe_num_experts < 1:
             raise ValueError(
                 f"mgmoe_num_experts must be >= 1, got {self.mgmoe_num_experts}"
+            )
+
+        if self.adversarial_lambda < 0:
+            raise ValueError(
+                f"adversarial_lambda must be >= 0, got {self.adversarial_lambda}"
             )
 
     @classmethod
