@@ -220,7 +220,7 @@ def generate_tb_mgmoe_config(
         for expert in range(num_experts):
             message_configs.append(
                 {
-                    "name": f"expert_{expert}_0_fusion_residual_block",
+                    "name": f"expert_{expert}_base_fusion_residual_block",
                     "layer_path": f"fusion_modules.computed.expert_branches"
                     f".expert_{expert}.0.0",
                     "use_from_cache": base_cache_names,
