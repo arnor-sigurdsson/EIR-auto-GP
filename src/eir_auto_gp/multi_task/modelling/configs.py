@@ -37,6 +37,7 @@ class ArchitectureParams:
     fusion_model_type: str
     mgmoe_num_experts: int
     output_num_experts: int | None
+    output_skip_intermediate_factor: int | None = None
 
     @classmethod
     def from_modelling_config(cls, config: dict[str, Any]) -> "ArchitectureParams":
@@ -55,6 +56,7 @@ class ArchitectureParams:
             fusion_model_type=config["fusion_model_type"],
             mgmoe_num_experts=config["mgmoe_num_experts"],
             output_num_experts=config.get("output_num_experts"),
+            output_skip_intermediate_factor=config["output_skip_intermediate_factor"],
         )
 
 
@@ -318,6 +320,7 @@ def get_base_fusion_config(
     tabular_cache_dropout_p: float = 0.00,
     mgmoe_num_experts: int = 8,
     output_num_experts: int | None = None,
+    output_skip_intermediate_factor: int | None = None,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
         assert fusion_dim is not None
@@ -351,6 +354,7 @@ def get_base_fusion_config(
         "include_tabular": include_tabular,
         "tabular_cache_dropout_p": tabular_cache_dropout_p,
         "output_num_experts": output_num_experts,
+        "output_skip_intermediate_factor": output_skip_intermediate_factor,
     }
 
     if model_type in ("mlp-residual", "mlp-residual-sum"):
@@ -513,6 +517,7 @@ def get_aggregate_config(
         tabular_cache_dropout_p=tabular_params.cache_dropout_p,
         mgmoe_num_experts=arch_params.mgmoe_num_experts,
         output_num_experts=arch_params.output_num_experts,
+        output_skip_intermediate_factor=arch_params.output_skip_intermediate_factor,
     )
     output_configs = get_output_configs(
         output_head=output_head,
