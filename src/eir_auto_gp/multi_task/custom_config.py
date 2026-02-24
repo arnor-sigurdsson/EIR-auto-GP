@@ -109,9 +109,9 @@ class CustomConfig:
         disentanglement between genotype and tabular features.
     """
 
-    use_lcl_to_output_skips: bool | str = True
-    use_lcl_fusion_skips: bool = True
-    use_fc0_skips: bool = True
+    use_lcl_to_output_skips: bool | str = False
+    use_lcl_fusion_skips: bool = False
+    use_fc0_skips: bool = False
     weighted_sampling: str = "auto"
     optimize_model: bool = False
     modelling_data_format: str = "disk"
@@ -121,7 +121,7 @@ class CustomConfig:
     n_output_layers: int | None = None
     output_dim: int | None = None
     batch_size: int | None = None
-    fusion_model_type: str = "mlp-residual-sum"
+    fusion_model_type: str = "mgmoe"
     mgmoe_num_experts: int = 8
     output_num_experts: int | None = None
     output_skip_intermediate_factor: int | None = None

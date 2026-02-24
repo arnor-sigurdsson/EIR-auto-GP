@@ -37,10 +37,8 @@ def _get_output_head_cache_names(
     if use_fc0_skips:
         cache_names.append("fc_0_output")
 
-    if use_lcl_to_output_skips == "fc_1_only":
-        cache_names.append("lcl_block_0_fc_1")
-    elif use_lcl_to_output_skips is True:
-        cache_names.extend(["lcl_block_0_fc_1", "lcl_block_0_fc_2"])
+    if use_lcl_to_output_skips:
+        cache_names.append("lcl_block_0_output")
 
     if include_tabular:
         cache_names.append("tabular_output")

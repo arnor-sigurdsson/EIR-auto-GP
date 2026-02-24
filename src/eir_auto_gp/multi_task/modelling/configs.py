@@ -131,13 +131,14 @@ def get_base_input_genotype_config(
     use_lcl_to_output_skips: bool | str = False,
     use_lcl_fusion_skips: bool = True,
 ) -> dict[str, Any]:
+    aggregator_base = "input_modules.genotype.aggregator.checkpoints"
     message_configs = []
 
     if use_fc0_skips:
         message_configs.append(
             {
                 "name": "fc_0_output",
-                "layer_path": "input_modules.genotype.fc_0",
+                "layer_path": f"{aggregator_base}.after_fc_0",
                 "cache_tensor": True,
                 "layer_cache_target": "output",
                 "kernel_width_divisible_by": 4,
@@ -149,7 +150,7 @@ def get_base_input_genotype_config(
             message_configs.append(
                 {
                     "name": f"lcl_block_{i}",
-                    "layer_path": f"input_modules.genotype.lcl_blocks.{i}",
+                    "layer_path": f"{aggregator_base}.after_lcl_block_{i}",
                     "cache_tensor": True,
                     "layer_cache_target": "output",
                     "kernel_width_divisible_by": 4,
@@ -157,35 +158,15 @@ def get_base_input_genotype_config(
             )
 
     if use_lcl_to_output_skips and n_lcl_blocks >= 1:
-        if use_lcl_to_output_skips == "fc_1_only":
-            message_configs.append(
-                {
-                    "name": "lcl_block_0_fc_1",
-                    "layer_path": "input_modules.genotype.lcl_blocks.0.fc_1",
-                    "cache_tensor": True,
-                    "layer_cache_target": "output",
-                    "kernel_width_divisible_by": 4,
-                }
-            )
-        elif use_lcl_to_output_skips is True:
-            message_configs.extend(
-                [
-                    {
-                        "name": "lcl_block_0_fc_1",
-                        "layer_path": "input_modules.genotype.lcl_blocks.0.fc_1",
-                        "cache_tensor": True,
-                        "layer_cache_target": "output",
-                        "kernel_width_divisible_by": 4,
-                    },
-                    {
-                        "name": "lcl_block_0_fc_2",
-                        "layer_path": "input_modules.genotype.lcl_blocks.0.fc_2",
-                        "cache_tensor": True,
-                        "layer_cache_target": "output",
-                        "kernel_width_divisible_by": 4,
-                    },
-                ]
-            )
+        message_configs.append(
+            {
+                "name": "lcl_block_0_output",
+                "layer_path": f"{aggregator_base}.after_lcl_block_0",
+                "cache_tensor": True,
+                "layer_cache_target": "output",
+                "kernel_width_divisible_by": 4,
+            }
+        )
 
     base = {
         "input_info": {
@@ -202,16 +183,17 @@ def get_base_input_genotype_config(
             "snp_file": "FILL",
         },
         "model_config": {
-            "model_type": "genome-local-net",
+            "model_type": "genome-local-net-moe",
             "model_init_config": {
                 "rb_do": 0.10,
                 "stochastic_depth_p": 0.00,
-                "channel_exp_base": 3,
+                "channel_exp_base": 0,
                 "kernel_width": "FILL",
                 "first_kernel_expansion": "FILL",
                 "l1": 0.0,
                 "cutoff": 4096,
                 "attention_inclusion_cutoff": 0,
+                "num_experts": 8,
             },
         },
         "tensor_broker_config": {
