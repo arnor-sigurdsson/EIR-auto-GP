@@ -187,7 +187,7 @@ def get_base_input_genotype_config(
             "model_init_config": {
                 "rb_do": 0.10,
                 "stochastic_depth_p": 0.00,
-                "channel_exp_base": 0,
+                "channel_exp_base": 1,
                 "kernel_width": "FILL",
                 "first_kernel_expansion": "FILL",
                 "l1": 0.0,
