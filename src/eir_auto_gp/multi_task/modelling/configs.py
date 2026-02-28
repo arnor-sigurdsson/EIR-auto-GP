@@ -98,11 +98,11 @@ def get_base_global_config(
             "optimizer": "adabelief",
         },
         "lr_schedule": {
-            "lr_plateau_patience": 8,
+            "lr_plateau_patience": 16,
         },
         "training_control": {
             "early_stopping_buffer": "FILL",
-            "early_stopping_patience": 12,
+            "early_stopping_patience": 24,
             "mixing_alpha": "FILL",
         },
         "attribution_analysis": {
