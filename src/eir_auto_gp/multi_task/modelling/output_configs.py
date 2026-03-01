@@ -128,11 +128,24 @@ def create_shared_mlp_configs(
     if output_groups is None:
         raise ValueError("output_groups must be provided for shared_mlp_residual")
 
+    all_output_columns = set(output_cat_columns) | set(output_con_columns)
     parsed_configs = []
 
     for group_name, group_columns in output_groups.items():
         cur_cat_columns = [col for col in output_cat_columns if col in group_columns]
         cur_con_columns = [col for col in output_con_columns if col in group_columns]
+
+        if not cur_cat_columns and not cur_con_columns:
+            unmodelled = [c for c in group_columns if c not in all_output_columns]
+            raise ValueError(
+                f"Output group '{group_name}' has no matching output columns. "
+                f"Group defines {len(group_columns)} traits but none appear in "
+                f"output_cat_columns or output_con_columns. "
+                f"Unmatched traits (first 5): {unmodelled[:5]}. "
+                f"Either remove this group from the output groups file or "
+                f"add its traits to the model outputs."
+            )
+
         parsed_configs.append(
             {
                 "output_info": {
