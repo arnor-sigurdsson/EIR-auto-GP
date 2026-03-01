@@ -340,3 +340,52 @@ def generate_tb_mgmoe_config(
                 )
 
     return {"message_configs": message_configs}
+
+
+def generate_tb_informed_moe_config(
+    expert_names: list[str],
+    include_tabular: bool = True,
+    tabular_cache_dropout_p: float = 0.00,
+    output_num_experts: int | None = None,
+    output_skip_intermediate_factor: int | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    message_configs: list[dict[str, Any]] = []
+
+    output_skip_config: dict[str, Any] = {}
+    if output_skip_intermediate_factor is not None:
+        output_skip_config["projection_intermediate_factor"] = (
+            output_skip_intermediate_factor
+        )
+
+    for name in expert_names:
+        if output_num_experts is not None:
+            layer_target = "input_identity"
+        else:
+            layer_target = "shared_branch"
+
+        message_configs.append(
+            {
+                "name": f"expert_{name}_to_output",
+                "layer_path": f"output_modules.eir_auto_gp_{name}.{layer_target}",
+                "use_from_cache": [f"expert_{name}_fc_0"],
+                "projection_type": "lcl+mlp_residual",
+                "projection_lcl_residual_blocks": True,
+                "cache_fusion_type": "sum",
+                "kernel_width_divisible_by": 4,
+                **output_skip_config,
+            }
+        )
+
+        if include_tabular:
+            message_configs.append(
+                {
+                    "name": f"tabular_to_{name}",
+                    "layer_path": f"output_modules.eir_auto_gp_{name}.output_identity",
+                    "use_from_cache": ["tabular_output"],
+                    "projection_type": "mlp_residual",
+                    "cache_fusion_type": "additive",
+                    "cache_dropout_p": tabular_cache_dropout_p,
+                }
+            )
+
+    return {"message_configs": message_configs}

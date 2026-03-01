@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
+import yaml
 from eir.models.input.array.models_locally_connected import (
     LCLResidualBlock,
     LCParameterSpec,
@@ -14,6 +16,7 @@ from eir_auto_gp.multi_task.modelling.output_configs import (
 )
 from eir_auto_gp.multi_task.modelling.tensor_broker import (
     generate_tb_base_config,
+    generate_tb_informed_moe_config,
     generate_tb_mgmoe_config,
 )
 from eir_auto_gp.utils.utils import get_logger
@@ -38,6 +41,7 @@ class ArchitectureParams:
     mgmoe_num_experts: int
     output_num_experts: int | None
     output_skip_intermediate_factor: int | None = None
+    expert_groups_file: str | None = None
 
     @classmethod
     def from_modelling_config(cls, config: dict[str, Any]) -> "ArchitectureParams":
@@ -57,6 +61,7 @@ class ArchitectureParams:
             mgmoe_num_experts=config["mgmoe_num_experts"],
             output_num_experts=config.get("output_num_experts"),
             output_skip_intermediate_factor=config["output_skip_intermediate_factor"],
+            expert_groups_file=config.get("expert_groups_file"),
         )
 
 
@@ -125,12 +130,37 @@ def get_base_global_config(
     return base
 
 
+def _parse_expert_groups_file(
+    path: str,
+) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    with open(path) as f:
+        data = yaml.safe_load(f)
+
+    snp_groups = {name: group["snps"] for name, group in data.items()}
+    output_groups = {name: group["traits"] for name, group in data.items()}
+    return snp_groups, output_groups
+
+
+def _write_snps_only_yaml(
+    snp_groups: dict[str, list[str]],
+    output_path: Path,
+) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        yaml.dump(snp_groups, f)
+    return output_path
+
+
 def get_base_input_genotype_config(
     n_lcl_blocks: int = 0,
     use_fc0_skips: bool = True,
     use_lcl_to_output_skips: bool | str = False,
     use_lcl_fusion_skips: bool = True,
+    expert_names: list[str] | None = None,
 ) -> dict[str, Any]:
+    if expert_names is not None:
+        return _get_informed_moe_input_genotype_config(expert_names=expert_names)
+
     aggregator_base = "input_modules.genotype.aggregator.checkpoints"
     message_configs = []
 
@@ -202,6 +232,54 @@ def get_base_input_genotype_config(
     }
 
     return base
+
+
+def _get_informed_moe_input_genotype_config(
+    expert_names: list[str],
+) -> dict[str, Any]:
+    message_configs = []
+    for name in expert_names:
+        message_configs.append(
+            {
+                "name": f"expert_{name}_fc_0",
+                "layer_path": f"input_modules.genotype.expert_branches.{name}.fc_0",
+                "cache_tensor": True,
+                "layer_cache_target": "output",
+                "kernel_width_divisible_by": 4,
+            }
+        )
+
+    return {
+        "input_info": {
+            "input_source": "FILL",
+            "input_name": "genotype",
+            "input_type": "omics",
+        },
+        "input_type_info": {
+            "mixing_subtype": "mixup",
+            "na_augment_alpha": 0.5,
+            "na_augment_beta": 1.0,
+            "shuffle_augment_alpha": 1.0,
+            "shuffle_augment_beta": 49.0,
+            "snp_file": "FILL",
+        },
+        "model_config": {
+            "model_type": "genome-local-net-informed-moe",
+            "model_init_config": {
+                "rb_do": 0.10,
+                "stochastic_depth_p": 0.00,
+                "channel_exp_base": 1,
+                "kernel_width": "FILL",
+                "first_kernel_expansion": "FILL",
+                "l1": 0.0,
+                "cutoff": 4096,
+                "attention_inclusion_cutoff": 0,
+            },
+        },
+        "tensor_broker_config": {
+            "message_configs": message_configs,
+        },
+    }
 
 
 def get_num_lcl_blocks(
@@ -303,6 +381,7 @@ def get_base_fusion_config(
     mgmoe_num_experts: int = 8,
     output_num_experts: int | None = None,
     output_skip_intermediate_factor: int | None = None,
+    expert_names: list[str] | None = None,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
         assert fusion_dim is not None
@@ -322,6 +401,25 @@ def get_base_fusion_config(
         "rb_do": 0.10,
         "stochastic_depth_p": 0.10,
     }
+
+    if expert_names is not None:
+        tb_config = generate_tb_informed_moe_config(
+            expert_names=expert_names,
+            include_tabular=include_tabular,
+            tabular_cache_dropout_p=tabular_cache_dropout_p,
+            output_num_experts=output_num_experts,
+            output_skip_intermediate_factor=output_skip_intermediate_factor,
+        )
+
+        if model_type == "mgmoe":
+            config_base["mg_num_experts"] = mgmoe_num_experts
+            config_base["fc_task_dim"] = fmsp.fc_dim // 4
+
+        return {
+            "model_config": config_base,
+            "model_type": model_type,
+            "tensor_broker_config": tb_config,
+        }
 
     tb_kwargs = {
         "num_layers": fmsp.n_layers,
@@ -424,6 +522,7 @@ class AggregateConfig:
     input_tabular_config: dict[str, Any]
     fusion_config: dict[str, Any]
     output_config: list[dict[str, Any]]
+    expert_snp_groups_file: str | None = None
 
 
 def get_aggregate_config(
@@ -440,8 +539,33 @@ def get_aggregate_config(
     if adversarial_params is None:
         adversarial_params = AdversarialParams()
 
-    output_head = "linear"
-    if arch_params.output_groups:
+    expert_names: list[str] | None = None
+    expert_snp_groups_file: str | None = None
+
+    if arch_params.expert_groups_file:
+        snp_groups, expert_output_groups = _parse_expert_groups_file(
+            path=arch_params.expert_groups_file,
+        )
+        expert_names = list(snp_groups.keys())
+
+        snps_only_path = (
+            Path(arch_params.expert_groups_file).parent / "expert_snps_only.yaml"
+        )
+        _write_snps_only_yaml(
+            snp_groups=snp_groups,
+            output_path=snps_only_path,
+        )
+        expert_snp_groups_file = str(snps_only_path)
+
+        output_head = "shared_mlp_residual"
+        built_output_groups = expert_output_groups
+        logger.info(
+            "Expert groups file detected with %d groups: %s. "
+            "Using informed MoE encoder and shared_mlp_residual output head.",
+            len(expert_names),
+            expert_names,
+        )
+    elif arch_params.output_groups:
         logger.info(
             "Output groups detected. Using output groups and setting output"
             "head to shared residual MLP."
@@ -455,6 +579,7 @@ def get_aggregate_config(
             con_columns=output_con_columns,
         )
     else:
+        output_head = "linear"
         built_output_groups = None
 
     adversarial_configs = None
@@ -476,6 +601,7 @@ def get_aggregate_config(
         use_fc0_skips=arch_params.use_fc0_skips,
         use_lcl_to_output_skips=arch_params.use_lcl_to_output_skips,
         use_lcl_fusion_skips=arch_params.use_lcl_fusion_skips,
+        expert_names=expert_names,
     )
     input_tabular_config = get_base_tabular_input_config(
         cache_for_output_heads=tabular_params.enabled,
@@ -500,6 +626,7 @@ def get_aggregate_config(
         mgmoe_num_experts=arch_params.mgmoe_num_experts,
         output_num_experts=arch_params.output_num_experts,
         output_skip_intermediate_factor=arch_params.output_skip_intermediate_factor,
+        expert_names=expert_names,
     )
     output_configs = get_output_configs(
         output_head=output_head,
@@ -518,4 +645,5 @@ def get_aggregate_config(
         input_tabular_config=input_tabular_config,
         fusion_config=fusion_config,
         output_config=output_configs,
+        expert_snp_groups_file=expert_snp_groups_file,
     )

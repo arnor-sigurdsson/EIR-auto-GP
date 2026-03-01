@@ -331,6 +331,7 @@ class TestSingleRun(luigi.Task):
         injections = _get_all_dynamic_injections(
             injection_params=injection_params,
             genotype_data_path=self.data_config["genotype_data_path"],
+            expert_snp_groups_file=base_aggregate_config.expert_snp_groups_file,
         )
 
         with TemporaryDirectory() as temp_dir:
@@ -491,6 +492,7 @@ class TrainSingleRun(luigi.Task):
         injections = _get_all_dynamic_injections(
             injection_params=injection_params,
             genotype_data_path=self.data_config["genotype_data_path"],
+            expert_snp_groups_file=base_aggregate_config.expert_snp_groups_file,
         )
 
         with TemporaryDirectory() as temp_dir:

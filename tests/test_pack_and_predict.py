@@ -9,6 +9,7 @@ from typing import Any
 
 import pandas as pd
 import pytest
+import yaml
 from eir.train_utils.metrics import calc_pcc
 from sklearn.metrics import accuracy_score, mean_squared_error, roc_auc_score
 
@@ -344,3 +345,71 @@ def test_pack_predict_with_tabular_train_genotype_predict(
         predict_output_folder=predict_output_folder,
         actual_data_path=actual_data_path,
     )
+
+
+def _build_expert_groups_file(
+    simulated_path: Path,
+    output_path: Path,
+) -> Path:
+    bim_file = simulated_path / "genetic_data.bim"
+    with open(bim_file) as f:
+        all_snps = [line.split()[1] for line in f]
+
+    mid = len(all_snps) // 2
+    groups = {
+        "group_cat": {
+            "snps": all_snps[:mid],
+            "traits": ["phenotype"],
+        },
+        "group_con": {
+            "snps": all_snps[mid:],
+            "traits": ["CON_COMPUTED"],
+        },
+    }
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        yaml.dump(groups, f)
+
+    return output_path
+
+
+def test_pack_predict_with_tabular_train_genotype_predict_with_experts(
+    tmp_path: Path,
+    simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
+) -> None:
+    simulated_path = simulate_genetic_data_to_bed(5000, 50, "binary")
+
+    expert_groups_path = tmp_path / "expert_groups.yaml"
+    _build_expert_groups_file(
+        simulated_path=simulated_path,
+        output_path=expert_groups_path,
+    )
+
+    command = (
+        f"--genotype_data_path {simulated_path}/ "
+        f"--label_file_path {simulated_path}/phenotype.csv "
+        "--global_output_folder runs/simulated_test "
+        "--output_cat_columns phenotype "
+        "--output_con_columns CON_COMPUTED "
+        "--input_con_columns CON_RANDOM "
+        "--input_cat_columns CAT_RANDOM "
+        "--model_size nano "
+        "--folds 1 "
+        "--do_test"
+    )
+
+    parser = get_argument_parser()
+    cl_args = parser.parse_args(command.split())
+    cl_args.global_output_folder = str(tmp_path)
+    custom_config = CustomConfig(expert_groups_file=str(expert_groups_path))
+
+    store_experiment_config(cl_args=cl_args, custom_config=custom_config)
+    run(cl_args=cl_args, custom_config=custom_config)
+
+    model_folder = tmp_path / "modelling"
+    for modelling_run in Path(model_folder).iterdir():
+        if not modelling_run.name.startswith("fold_"):
+            continue
+
+        check_modelling_results(run_folder=modelling_run, check_test=True)

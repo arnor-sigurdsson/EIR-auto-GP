@@ -125,6 +125,7 @@ class CustomConfig:
     mgmoe_num_experts: int = 8
     output_num_experts: int | None = None
     output_skip_intermediate_factor: int | None = None
+    expert_groups_file: str | None = None
     adversarial_enabled: bool = True
     adversarial_lambda: float = 0.5
 

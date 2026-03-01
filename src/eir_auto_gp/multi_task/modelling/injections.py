@@ -230,6 +230,7 @@ def _get_genotype_injections(
     input_source: str,
     n_snps: int,
     subset_snp_path: Path | None,
+    expert_snp_groups_file: str | None = None,
 ) -> dict[str, Any]:
     base_snp_path = (
         Path(input_source).parent.parent / "processed/parsed_files/data_final.bim"
@@ -253,7 +254,9 @@ def _get_genotype_injections(
         },
     }
 
-    if subset_snp_path:
+    if expert_snp_groups_file:
+        injections["input_type_info"]["expert_snp_groups_file"] = expert_snp_groups_file
+    elif subset_snp_path:
         injections["input_type_info"]["subset_snps_file"] = str(subset_snp_path)
 
     return injections
@@ -313,6 +316,7 @@ def is_binary_column(df: pl.DataFrame, col: str) -> bool:
 def _get_all_dynamic_injections(
     injection_params: MultiTaskModelInjectionParams,
     genotype_data_path: str,
+    expert_snp_groups_file: str | None = None,
 ) -> dict[str, Any]:
     mip = injection_params
 
@@ -367,6 +371,7 @@ def _get_all_dynamic_injections(
             input_source=mip.genotype_input_source,
             n_snps=n_snps,
             subset_snp_path=subset_snp_path,
+            expert_snp_groups_file=expert_snp_groups_file,
         ),
         "fusion_config": {},
         "output_config": {},
