@@ -268,7 +268,7 @@ def _get_informed_moe_input_genotype_config(
             "model_init_config": {
                 "rb_do": 0.10,
                 "stochastic_depth_p": 0.00,
-                "channel_exp_base": 1,
+                "channel_exp_base": 3,
                 "kernel_width": "FILL",
                 "first_kernel_expansion": "FILL",
                 "l1": 0.0,
@@ -543,6 +543,14 @@ def get_aggregate_config(
     expert_snp_groups_file: str | None = None
 
     if arch_params.expert_groups_file:
+        if arch_params.output_groups:
+            raise ValueError(
+                "Cannot specify both 'expert_groups_file' and 'output_groups'. "
+                "The expert groups file defines both input SNP groups and output "
+                "groups — passing a separate output_groups would create mismatched "
+                "tensor broker wiring. Remove the 'output_groups' argument."
+            )
+
         snp_groups, expert_output_groups = _parse_expert_groups_file(
             path=arch_params.expert_groups_file,
         )
