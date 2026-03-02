@@ -238,6 +238,12 @@ def _get_informed_moe_input_genotype_config(
     expert_names: list[str],
 ) -> dict[str, Any]:
     message_configs = []
+
+    base_cutoff = 4096
+    cutoff_per_expert = base_cutoff // len(expert_names)
+    nearest_power_of_2 = 2 ** (cutoff_per_expert - 1).bit_length()
+    adjusted_cutoff = max(256, nearest_power_of_2)
+
     for name in expert_names:
         message_configs.append(
             {
@@ -272,7 +278,7 @@ def _get_informed_moe_input_genotype_config(
                 "kernel_width": "FILL",
                 "first_kernel_expansion": "FILL",
                 "l1": 0.0,
-                "cutoff": 4096,
+                "cutoff": adjusted_cutoff,
                 "attention_inclusion_cutoff": 0,
             },
         },
