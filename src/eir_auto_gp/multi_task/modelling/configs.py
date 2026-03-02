@@ -171,7 +171,6 @@ def get_base_input_genotype_config(
                 "layer_path": f"{aggregator_base}.after_fc_0",
                 "cache_tensor": True,
                 "layer_cache_target": "output",
-                "kernel_width_divisible_by": 4,
             }
         )
 
@@ -183,7 +182,6 @@ def get_base_input_genotype_config(
                     "layer_path": f"{aggregator_base}.after_lcl_block_{i}",
                     "cache_tensor": True,
                     "layer_cache_target": "output",
-                    "kernel_width_divisible_by": 4,
                 }
             )
 
@@ -194,7 +192,6 @@ def get_base_input_genotype_config(
                 "layer_path": f"{aggregator_base}.after_lcl_block_0",
                 "cache_tensor": True,
                 "layer_cache_target": "output",
-                "kernel_width_divisible_by": 4,
             }
         )
 
@@ -251,7 +248,6 @@ def _get_informed_moe_input_genotype_config(
                 "layer_path": f"input_modules.genotype.expert_branches.{name}.fc_0",
                 "cache_tensor": True,
                 "layer_cache_target": "output",
-                "kernel_width_divisible_by": 16,
             }
         )
 

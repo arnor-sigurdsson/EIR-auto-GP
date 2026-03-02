@@ -79,7 +79,7 @@ def generate_tb_base_config(
                 "use_from_cache": base_cache_names,
                 "projection_type": "lcl+mlp_residual",
                 "cache_fusion_type": "sum",
-                "kernel_width_divisible_by": 4,
+                "kernel_width_divisible_by": 16,
             }
         )
 
@@ -103,7 +103,7 @@ def generate_tb_base_config(
                         "use_from_cache": cache_names,
                         "projection_type": "lcl+mlp_residual",
                         "cache_fusion_type": "sum",
-                        "kernel_width_divisible_by": 4,
+                        "kernel_width_divisible_by": 16,
                     }
                 )
 
@@ -128,7 +128,7 @@ def generate_tb_base_config(
                     "use_from_cache": genotype_cache_names,
                     "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
-                    "kernel_width_divisible_by": 4,
+                    "kernel_width_divisible_by": 16,
                     **output_skip_config,
                 }
             )
@@ -154,7 +154,7 @@ def generate_tb_base_config(
                         "use_from_cache": genotype_cache_names,
                         "projection_type": "lcl+mlp_residual",
                         "cache_fusion_type": "sum",
-                        "kernel_width_divisible_by": 4,
+                        "kernel_width_divisible_by": 16,
                         **output_skip_config,
                     }
                 )
@@ -186,7 +186,7 @@ def generate_tb_base_config(
                         "use_from_cache": genotype_cache_names,
                         "projection_type": "lcl+mlp_residual",
                         "cache_fusion_type": "sum",
-                        "kernel_width_divisible_by": 4,
+                        "kernel_width_divisible_by": 16,
                         **output_skip_config,
                     }
                 )
@@ -242,7 +242,7 @@ def generate_tb_mgmoe_config(
                     "use_from_cache": base_cache_names,
                     "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
-                    "kernel_width_divisible_by": 4,
+                    "kernel_width_divisible_by": 16,
                 }
             )
 
@@ -266,7 +266,7 @@ def generate_tb_mgmoe_config(
                             "use_from_cache": cache_names,
                             "projection_type": "lcl+mlp_residual",
                             "cache_fusion_type": "sum",
-                            "kernel_width_divisible_by": 4,
+                            "kernel_width_divisible_by": 16,
                         }
                     )
 
@@ -291,7 +291,7 @@ def generate_tb_mgmoe_config(
                     "use_from_cache": genotype_cache_names,
                     "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
-                    "kernel_width_divisible_by": 4,
+                    "kernel_width_divisible_by": 16,
                     **output_skip_config,
                 }
             )
@@ -322,7 +322,7 @@ def generate_tb_mgmoe_config(
                         "use_from_cache": genotype_cache_names,
                         "projection_type": "lcl+mlp_residual",
                         "cache_fusion_type": "sum",
-                        "kernel_width_divisible_by": 4,
+                        "kernel_width_divisible_by": 16,
                         **output_skip_config,
                     }
                 )
@@ -371,7 +371,7 @@ def generate_tb_informed_moe_config(
                 "projection_type": "lcl+mlp_residual",
                 "projection_lcl_residual_blocks": True,
                 "cache_fusion_type": "sum",
-                "kernel_width_divisible_by": 4,
+                "kernel_width_divisible_by": 16,
                 **output_skip_config,
             }
         )
