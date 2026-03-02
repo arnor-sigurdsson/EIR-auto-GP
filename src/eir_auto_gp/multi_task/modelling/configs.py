@@ -103,11 +103,11 @@ def get_base_global_config(
             "optimizer": "adabelief",
         },
         "lr_schedule": {
-            "lr_plateau_patience": 6,
+            "lr_plateau_patience": 8,
         },
         "training_control": {
             "early_stopping_buffer": "FILL",
-            "early_stopping_patience": 8,
+            "early_stopping_patience": 10,
             "mixing_alpha": "FILL",
         },
         "attribution_analysis": {
@@ -251,7 +251,7 @@ def _get_informed_moe_input_genotype_config(
                 "layer_path": f"input_modules.genotype.expert_branches.{name}.fc_0",
                 "cache_tensor": True,
                 "layer_cache_target": "output",
-                "kernel_width_divisible_by": 4,
+                "kernel_width_divisible_by": 16,
             }
         )
 
