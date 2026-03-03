@@ -16,7 +16,7 @@ def get_shared_mlp_residual_model_size_params(
     model_size: str,
 ) -> SharedMLPResidualModelSizeParams:
     param_dict = {
-        "nano": SharedMLPResidualModelSizeParams(n_layers=1, fc_dim=32),
+        "nano": SharedMLPResidualModelSizeParams(n_layers=2, fc_dim=32),
         "mini": SharedMLPResidualModelSizeParams(n_layers=2, fc_dim=64),
         "small": SharedMLPResidualModelSizeParams(n_layers=2, fc_dim=128),
         "medium": SharedMLPResidualModelSizeParams(n_layers=4, fc_dim=256),
