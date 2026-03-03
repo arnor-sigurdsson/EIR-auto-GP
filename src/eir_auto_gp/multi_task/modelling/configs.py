@@ -411,6 +411,7 @@ def get_base_fusion_config(
             tabular_cache_dropout_p=tabular_cache_dropout_p,
             output_num_experts=output_num_experts,
             output_skip_intermediate_factor=output_skip_intermediate_factor,
+            use_fc0_output_skips=use_fc0_skips,
         )
 
         if model_type == "mgmoe":

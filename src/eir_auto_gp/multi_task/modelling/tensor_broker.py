@@ -348,6 +348,7 @@ def generate_tb_informed_moe_config(
     tabular_cache_dropout_p: float = 0.00,
     output_num_experts: int | None = None,
     output_skip_intermediate_factor: int | None = None,
+    use_fc0_output_skips: bool = True,
 ) -> dict[str, list[dict[str, Any]]]:
     message_configs: list[dict[str, Any]] = []
 
@@ -375,6 +376,20 @@ def generate_tb_informed_moe_config(
                 **output_skip_config,
             }
         )
+
+        if use_fc0_output_skips:
+            message_configs.append(
+                {
+                    "name": f"expert_{name}_fc_0_to_output",
+                    "layer_path": f"output_modules.eir_auto_gp_{name}.{layer_target}",
+                    "use_from_cache": [f"expert_{name}_fc_0"],
+                    "projection_type": "lcl+mlp_residual",
+                    "projection_lcl_residual_blocks": False,
+                    "cache_fusion_type": "sum",
+                    "kernel_width_divisible_by": 4,
+                    **output_skip_config,
+                }
+            )
 
         if include_tabular:
             message_configs.append(
