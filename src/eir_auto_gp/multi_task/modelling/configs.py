@@ -412,6 +412,8 @@ def get_base_fusion_config(
             output_num_experts=output_num_experts,
             output_skip_intermediate_factor=output_skip_intermediate_factor,
             use_fc0_output_skips=use_fc0_skips,
+            num_fusion_layers=fmsp.n_layers if use_fc0_skips else None,
+            tb_block_frequency=fmsp.tb_block_frequency,
         )
 
         if model_type == "mgmoe":

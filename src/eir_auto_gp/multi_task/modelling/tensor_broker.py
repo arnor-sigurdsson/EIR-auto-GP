@@ -342,6 +342,19 @@ def generate_tb_mgmoe_config(
     return {"message_configs": message_configs}
 
 
+def _get_fusion_layer_targets(
+    num_fusion_layers: int,
+    tb_block_frequency: int,
+) -> list[str]:
+    base = "fusion_modules.computed.fusion_modules.fusion"
+    targets = [f"{base}.0.0"]
+    num_layers_adjusted = num_fusion_layers - 2
+    for layer in range(0, num_layers_adjusted + 1):
+        if layer % tb_block_frequency == 0:
+            targets.append(f"{base}.1.{layer}")
+    return targets
+
+
 def generate_tb_informed_moe_config(
     expert_names: list[str],
     include_tabular: bool = True,
@@ -349,8 +362,28 @@ def generate_tb_informed_moe_config(
     output_num_experts: int | None = None,
     output_skip_intermediate_factor: int | None = None,
     use_fc0_output_skips: bool = True,
+    num_fusion_layers: int | None = None,
+    tb_block_frequency: int = 1,
 ) -> dict[str, list[dict[str, Any]]]:
     message_configs: list[dict[str, Any]] = []
+
+    if num_fusion_layers is not None:
+        fusion_targets = _get_fusion_layer_targets(
+            num_fusion_layers=num_fusion_layers,
+            tb_block_frequency=tb_block_frequency,
+        )
+        for i, name in enumerate(expert_names):
+            target = fusion_targets[i % len(fusion_targets)]
+            message_configs.append(
+                {
+                    "name": f"expert_{name}_fc_0_to_fusion",
+                    "layer_path": target,
+                    "use_from_cache": [f"expert_{name}_fc_0"],
+                    "projection_type": "lcl+mlp_residual",
+                    "cache_fusion_type": "sum",
+                    "kernel_width_divisible_by": 16,
+                }
+            )
 
     output_skip_config: dict[str, Any] = {}
     if output_skip_intermediate_factor is not None:
