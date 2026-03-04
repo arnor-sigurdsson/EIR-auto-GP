@@ -21,9 +21,7 @@ from eir_auto_gp.multi_task.modelling.configs import (
     ArchitectureParams,
     TabularSkipParams,
     get_aggregate_config,
-    get_num_lcl_blocks,
 )
-from eir_auto_gp.multi_task.modelling.hyperparameters import get_gln_kernel_parameters
 from eir_auto_gp.multi_task.modelling.injections import (
     _get_all_dynamic_injections,
     build_injection_params,
@@ -31,19 +29,13 @@ from eir_auto_gp.multi_task.modelling.injections import (
 from eir_auto_gp.preprocess.converge import (
     ParseDataWrapper,
 )
-from eir_auto_gp.single_task.modelling.run_modelling import (
-    lines_in_file,
-)
-from eir_auto_gp.utils.shared_modelling_utils import (
-    get_bim_path,
-)
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
 
 
 def validate_architecture_config(modelling_config: dict[str, Any]) -> None:
-    required_arch_flags = ["use_lcl_to_output_skips", "use_lcl_fusion_skips"]
+    required_arch_flags = ["use_lcl_to_output_skips"]
 
     for flag in required_arch_flags:
         if flag not in modelling_config:
@@ -61,18 +53,9 @@ def validate_architecture_config(modelling_config: dict[str, Any]) -> None:
             f"Must be one of: {valid_lcl_output_values}"
         )
 
-    if not isinstance(modelling_config["use_lcl_fusion_skips"], bool):
-        raise ValueError(
-            f"Invalid value for 'use_lcl_fusion_skips': "
-            f"{modelling_config['use_lcl_fusion_skips']}. "
-            f"Must be a boolean (True/False)."
-        )
-
     logger.info(
-        "Architecture configuration validated: "
-        "use_lcl_to_output_skips=%s, use_lcl_fusion_skips=%s",
+        "Architecture configuration validated: use_lcl_to_output_skips=%s",
         modelling_config["use_lcl_to_output_skips"],
-        modelling_config["use_lcl_fusion_skips"],
     )
 
 
@@ -114,25 +97,6 @@ def _get_fold_iterator(folds: str) -> Iterable:
         return [int(i) for i in folds.split(",")]
     else:
         return range(int(folds))
-
-
-def calculate_n_lcl_blocks(genotype_data_path: str) -> int:
-    bim_path = get_bim_path(genotype_data_path=genotype_data_path)
-    n_snps = lines_in_file(file_path=bim_path)
-
-    kernel_width, first_kernel_expansion = get_gln_kernel_parameters(n_snps=n_snps)
-
-    n_lcl_blocks = get_num_lcl_blocks(
-        n_snps=n_snps,
-        kernel_width=kernel_width,
-        first_kernel_expansion=first_kernel_expansion,
-        channel_exp_base=3,
-        rb_do=0.10,
-        stochastic_depth_p=0.00,
-        cutoff=4096,
-    )
-
-    return n_lcl_blocks
 
 
 def _filter_input_configs(configs: list[dict]) -> list[dict]:
@@ -288,10 +252,6 @@ class TestSingleRun(luigi.Task):
             + self.modelling_config["output_con_columns"]
         )
 
-        n_lcl_blocks = calculate_n_lcl_blocks(
-            genotype_data_path=self.data_config["genotype_data_path"]
-        )
-
         has_tabular_columns = bool(
             self.modelling_config["input_cat_columns"]
             or self.modelling_config["input_con_columns"]
@@ -314,7 +274,6 @@ class TestSingleRun(luigi.Task):
             target_columns=all_target_columns,
             output_cat_columns=self.modelling_config["output_cat_columns"],
             output_con_columns=self.modelling_config["output_con_columns"],
-            n_lcl_blocks=n_lcl_blocks,
             tabular_params=tabular_params,
             adversarial_params=adversarial_params,
         )
@@ -452,10 +411,6 @@ class TrainSingleRun(luigi.Task):
             + self.modelling_config["output_con_columns"]
         )
 
-        n_lcl_blocks = calculate_n_lcl_blocks(
-            genotype_data_path=self.data_config["genotype_data_path"]
-        )
-
         has_tabular_columns = bool(
             self.modelling_config["input_cat_columns"]
             or self.modelling_config["input_con_columns"]
@@ -475,7 +430,6 @@ class TrainSingleRun(luigi.Task):
             target_columns=all_target_columns,
             output_cat_columns=self.modelling_config["output_cat_columns"],
             output_con_columns=self.modelling_config["output_con_columns"],
-            n_lcl_blocks=n_lcl_blocks,
             tabular_params=tabular_params,
             adversarial_params=adversarial_params,
         )

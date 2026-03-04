@@ -23,10 +23,6 @@ class CustomConfig:
         only fc_1 is used (more parameter-efficient). When ``False``, output
         heads receive only fc_0_output.
 
-    :param use_lcl_fusion_skips:
-        When enabled, fusion layers receive multi-scale LCL block outputs
-        in addition to fc_0_output.
-
     :param weighted_sampling:
         Controls weighted sampling during training.
         ``"auto"`` enables it only when there are categorical targets but
@@ -63,13 +59,15 @@ class CustomConfig:
         Training batch size. When ``None``, automatically determined
         based on dataset size.
 
-    :param use_fc0_skips:
-        When ``True``, the fc_0 layer output (first LCL layer) is cached
-        and sent via tensor broker to fusion layers and output heads.
-        This is the primary skip connection in the architecture.
-        When ``False``, no fc_0 features are sent — fusion and output
-        heads rely only on the normal forward-pass features
-        (plus any LCL block skips if enabled separately).
+    :param use_fc0_to_output_skips:
+        When ``True``, the fc_0 layer output is cached and sent via tensor
+        broker to output heads. For informed MoE, routes each expert's fc_0
+        to its corresponding output group.
+
+    :param use_fc0_to_fusion_skips:
+        When ``True``, the fc_0 layer output is cached and sent via tensor
+        broker to fusion layers. For informed MoE, distributes each expert's
+        fc_0 round-robin across fusion layers.
 
     :param fusion_model_type:
         Fusion module architecture type.
@@ -110,8 +108,8 @@ class CustomConfig:
     """
 
     use_lcl_to_output_skips: bool | str = False
-    use_lcl_fusion_skips: bool = False
-    use_fc0_skips: bool = False
+    use_fc0_to_output_skips: bool = False
+    use_fc0_to_fusion_skips: bool = False
     weighted_sampling: str = "auto"
     optimize_model: bool = False
     modelling_data_format: str = "disk"

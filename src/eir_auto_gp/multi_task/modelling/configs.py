@@ -34,9 +34,9 @@ class ArchitectureParams:
     skip_to_every_n_fusion_layers: int | None
     n_output_layers: int | None
     output_dim: int | None
-    use_fc0_skips: bool
+    use_fc0_to_output_skips: bool
+    use_fc0_to_fusion_skips: bool
     use_lcl_to_output_skips: bool | str
-    use_lcl_fusion_skips: bool
     fusion_model_type: str
     mgmoe_num_experts: int
     output_num_experts: int | None
@@ -54,9 +54,9 @@ class ArchitectureParams:
             skip_to_every_n_fusion_layers=config["skip_to_every_n_fusion_layers"],
             n_output_layers=config["n_output_layers"],
             output_dim=config["output_dim"],
-            use_fc0_skips=config["use_fc0_skips"],
+            use_fc0_to_output_skips=config["use_fc0_to_output_skips"],
+            use_fc0_to_fusion_skips=config["use_fc0_to_fusion_skips"],
             use_lcl_to_output_skips=config["use_lcl_to_output_skips"],
-            use_lcl_fusion_skips=config["use_lcl_fusion_skips"],
             fusion_model_type=config["fusion_model_type"],
             mgmoe_num_experts=config["mgmoe_num_experts"],
             output_num_experts=config.get("output_num_experts"),
@@ -152,10 +152,9 @@ def _write_snps_only_yaml(
 
 
 def get_base_input_genotype_config(
-    n_lcl_blocks: int = 0,
-    use_fc0_skips: bool = True,
+    use_fc0_to_output_skips: bool = True,
+    use_fc0_to_fusion_skips: bool = True,
     use_lcl_to_output_skips: bool | str = False,
-    use_lcl_fusion_skips: bool = True,
     expert_names: list[str] | None = None,
 ) -> dict[str, Any]:
     if expert_names is not None:
@@ -164,7 +163,7 @@ def get_base_input_genotype_config(
     aggregator_base = "input_modules.genotype.aggregator.checkpoints"
     message_configs = []
 
-    if use_fc0_skips:
+    if use_fc0_to_output_skips or use_fc0_to_fusion_skips:
         message_configs.append(
             {
                 "name": "fc_0_output",
@@ -174,18 +173,7 @@ def get_base_input_genotype_config(
             }
         )
 
-    if use_lcl_fusion_skips:
-        for i in range(n_lcl_blocks):
-            message_configs.append(
-                {
-                    "name": f"lcl_block_{i}",
-                    "layer_path": f"{aggregator_base}.after_lcl_block_{i}",
-                    "cache_tensor": True,
-                    "layer_cache_target": "output",
-                }
-            )
-
-    if use_lcl_to_output_skips and n_lcl_blocks >= 1:
+    if use_lcl_to_output_skips:
         message_configs.append(
             {
                 "name": "lcl_block_0_output",
@@ -374,10 +362,9 @@ def get_base_fusion_config(
     n_fusion_layers: int | None = None,
     fusion_dim: int | None = None,
     skip_to_every_n_fusion_layers: int | None = None,
-    n_lcl_blocks: int = 0,
-    use_fc0_skips: bool = True,
+    use_fc0_to_output_skips: bool = True,
+    use_fc0_to_fusion_skips: bool = True,
     use_lcl_to_output_skips: bool | str = False,
-    use_lcl_fusion_skips: bool = True,
     include_tabular: bool = True,
     tabular_cache_dropout_p: float = 0.00,
     mgmoe_num_experts: int = 8,
@@ -411,8 +398,8 @@ def get_base_fusion_config(
             tabular_cache_dropout_p=tabular_cache_dropout_p,
             output_num_experts=output_num_experts,
             output_skip_intermediate_factor=output_skip_intermediate_factor,
-            use_fc0_output_skips=use_fc0_skips,
-            num_fusion_layers=fmsp.n_layers if use_fc0_skips else None,
+            use_fc0_output_skips=use_fc0_to_output_skips,
+            num_fusion_layers=fmsp.n_layers if use_fc0_to_fusion_skips else None,
             tb_block_frequency=fmsp.tb_block_frequency,
         )
 
@@ -432,10 +419,9 @@ def get_base_fusion_config(
         "output_head": output_head,
         "target_columns": target_columns,
         "output_groups": output_groups,
-        "n_lcl_blocks": n_lcl_blocks,
-        "use_fc0_skips": use_fc0_skips,
+        "use_fc0_to_output_skips": use_fc0_to_output_skips,
+        "use_fc0_to_fusion_skips": use_fc0_to_fusion_skips,
         "use_lcl_to_output_skips": use_lcl_to_output_skips,
-        "use_lcl_fusion_skips": use_lcl_fusion_skips,
         "include_tabular": include_tabular,
         "tabular_cache_dropout_p": tabular_cache_dropout_p,
         "output_num_experts": output_num_experts,
@@ -535,7 +521,6 @@ def get_aggregate_config(
     target_columns: list[str],
     output_cat_columns: list[str],
     output_con_columns: list[str],
-    n_lcl_blocks: int = 0,
     tabular_params: TabularSkipParams | None = None,
     adversarial_params: AdversarialParams | None = None,
 ) -> AggregateConfig:
@@ -610,10 +595,9 @@ def get_aggregate_config(
 
     global_config = get_base_global_config(adversarial_configs=adversarial_configs)
     input_genotype_config = get_base_input_genotype_config(
-        n_lcl_blocks=n_lcl_blocks,
-        use_fc0_skips=arch_params.use_fc0_skips,
+        use_fc0_to_output_skips=arch_params.use_fc0_to_output_skips,
+        use_fc0_to_fusion_skips=arch_params.use_fc0_to_fusion_skips,
         use_lcl_to_output_skips=arch_params.use_lcl_to_output_skips,
-        use_lcl_fusion_skips=arch_params.use_lcl_fusion_skips,
         expert_names=expert_names,
     )
     input_tabular_config = get_base_tabular_input_config(
@@ -630,10 +614,9 @@ def get_aggregate_config(
         n_fusion_layers=arch_params.n_fusion_layers,
         fusion_dim=arch_params.fusion_dim,
         skip_to_every_n_fusion_layers=arch_params.skip_to_every_n_fusion_layers,
-        n_lcl_blocks=n_lcl_blocks,
-        use_fc0_skips=arch_params.use_fc0_skips,
+        use_fc0_to_output_skips=arch_params.use_fc0_to_output_skips,
+        use_fc0_to_fusion_skips=arch_params.use_fc0_to_fusion_skips,
         use_lcl_to_output_skips=arch_params.use_lcl_to_output_skips,
-        use_lcl_fusion_skips=arch_params.use_lcl_fusion_skips,
         include_tabular=tabular_params.enabled,
         tabular_cache_dropout_p=tabular_params.cache_dropout_p,
         mgmoe_num_experts=arch_params.mgmoe_num_experts,

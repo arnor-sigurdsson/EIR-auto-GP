@@ -2,39 +2,24 @@ from typing import Any
 
 
 def _get_staggered_cache_names(
-    layer_index: int,
-    total_layers: int,
-    n_lcl_blocks: int,
-    use_fc0_skips: bool = True,
-    use_lcl_fusion_skips: bool = True,
+    use_fc0_to_fusion_skips: bool = True,
 ) -> list[str]:
     cache_names = []
 
-    if use_fc0_skips:
+    if use_fc0_to_fusion_skips:
         cache_names.append("fc_0_output")
-
-    if n_lcl_blocks == 0 or not use_lcl_fusion_skips:
-        return cache_names
-
-    num_sections = n_lcl_blocks + 1
-    section_size = total_layers / num_sections
-    section = int(layer_index / section_size)
-
-    if section > 0:
-        lcl_block_index = min(section - 1, n_lcl_blocks - 1)
-        cache_names.append(f"lcl_block_{lcl_block_index}")
 
     return cache_names
 
 
 def _get_output_head_cache_names(
-    use_fc0_skips: bool = True,
+    use_fc0_to_output_skips: bool = True,
     use_lcl_to_output_skips: bool | str = False,
     include_tabular: bool = True,
 ) -> list[str]:
     cache_names = []
 
-    if use_fc0_skips:
+    if use_fc0_to_output_skips:
         cache_names.append("fc_0_output")
 
     if use_lcl_to_output_skips:
@@ -52,10 +37,9 @@ def generate_tb_base_config(
     output_head: str,
     target_columns: list[str],
     output_groups: dict[str, list[str]] | None,
-    n_lcl_blocks: int = 0,
-    use_fc0_skips: bool = True,
+    use_fc0_to_output_skips: bool = True,
+    use_fc0_to_fusion_skips: bool = True,
     use_lcl_to_output_skips: bool | str = False,
-    use_lcl_fusion_skips: bool = True,
     include_tabular: bool = True,
     tabular_cache_dropout_p: float = 0.00,
     # only checked for is not None, kept as int for possible per-expert routing later
@@ -63,11 +47,7 @@ def generate_tb_base_config(
     output_skip_intermediate_factor: int | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     base_cache_names = _get_staggered_cache_names(
-        layer_index=0,
-        total_layers=num_layers,
-        n_lcl_blocks=n_lcl_blocks,
-        use_fc0_skips=use_fc0_skips,
-        use_lcl_fusion_skips=use_lcl_fusion_skips,
+        use_fc0_to_fusion_skips=use_fc0_to_fusion_skips,
     )
     message_configs: list[dict[str, Any]] = []
 
@@ -88,11 +68,7 @@ def generate_tb_base_config(
     for layer in range(0, num_layers_adjusted + 1):
         if layer % tb_block_frequency == 0:
             cache_names = _get_staggered_cache_names(
-                layer_index=layer + 2,
-                total_layers=num_layers,
-                n_lcl_blocks=n_lcl_blocks,
-                use_fc0_skips=use_fc0_skips,
-                use_lcl_fusion_skips=use_lcl_fusion_skips,
+                use_fc0_to_fusion_skips=use_fc0_to_fusion_skips,
             )
             if cache_names:
                 message_configs.append(
@@ -108,7 +84,7 @@ def generate_tb_base_config(
                 )
 
     genotype_cache_names = _get_output_head_cache_names(
-        use_fc0_skips=use_fc0_skips,
+        use_fc0_to_output_skips=use_fc0_to_output_skips,
         use_lcl_to_output_skips=use_lcl_to_output_skips,
         include_tabular=False,
     )
@@ -213,10 +189,9 @@ def generate_tb_mgmoe_config(
     output_head: str,
     target_columns: list[str],
     output_groups: dict[str, list[str]] | None,
-    n_lcl_blocks: int = 0,
-    use_fc0_skips: bool = True,
+    use_fc0_to_output_skips: bool = True,
+    use_fc0_to_fusion_skips: bool = True,
     use_lcl_to_output_skips: bool | str = False,
-    use_lcl_fusion_skips: bool = True,
     include_tabular: bool = True,
     tabular_cache_dropout_p: float = 0.00,
     output_num_experts: int | None = None,
@@ -225,11 +200,7 @@ def generate_tb_mgmoe_config(
     message_configs: list[dict[str, Any]] = []
 
     base_cache_names = _get_staggered_cache_names(
-        layer_index=0,
-        total_layers=num_layers,
-        n_lcl_blocks=n_lcl_blocks,
-        use_fc0_skips=use_fc0_skips,
-        use_lcl_fusion_skips=use_lcl_fusion_skips,
+        use_fc0_to_fusion_skips=use_fc0_to_fusion_skips,
     )
 
     if base_cache_names:
@@ -250,11 +221,7 @@ def generate_tb_mgmoe_config(
     for layer in range(0, num_layers_adjusted + 1):
         if layer % tb_block_frequency == 0:
             cache_names = _get_staggered_cache_names(
-                layer_index=layer + 2,
-                total_layers=num_layers,
-                n_lcl_blocks=n_lcl_blocks,
-                use_fc0_skips=use_fc0_skips,
-                use_lcl_fusion_skips=use_lcl_fusion_skips,
+                use_fc0_to_fusion_skips=use_fc0_to_fusion_skips,
             )
             if cache_names:
                 for expert in range(num_experts):
@@ -271,7 +238,7 @@ def generate_tb_mgmoe_config(
                     )
 
     genotype_cache_names = _get_output_head_cache_names(
-        use_fc0_skips=use_fc0_skips,
+        use_fc0_to_output_skips=use_fc0_to_output_skips,
         use_lcl_to_output_skips=use_lcl_to_output_skips,
         include_tabular=False,
     )
