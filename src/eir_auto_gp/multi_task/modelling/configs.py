@@ -158,7 +158,11 @@ def get_base_input_genotype_config(
     expert_names: list[str] | None = None,
 ) -> dict[str, Any]:
     if expert_names is not None:
-        return _get_informed_moe_input_genotype_config(expert_names=expert_names)
+        return _get_informed_moe_input_genotype_config(
+            expert_names=expert_names,
+            use_fc0_to_output_skips=use_fc0_to_output_skips,
+            use_fc0_to_fusion_skips=use_fc0_to_fusion_skips,
+        )
 
     aggregator_base = "input_modules.genotype.aggregator.checkpoints"
     message_configs = []
@@ -198,7 +202,7 @@ def get_base_input_genotype_config(
             "snp_file": "FILL",
         },
         "model_config": {
-            "model_type": "genome-local-net-moe",
+            "model_type": "genome-local-net",
             "model_init_config": {
                 "rb_do": 0.10,
                 "stochastic_depth_p": 0.00,
@@ -221,6 +225,8 @@ def get_base_input_genotype_config(
 
 def _get_informed_moe_input_genotype_config(
     expert_names: list[str],
+    use_fc0_to_output_skips: bool = True,
+    use_fc0_to_fusion_skips: bool = True,
 ) -> dict[str, Any]:
     message_configs = []
 
@@ -229,15 +235,17 @@ def _get_informed_moe_input_genotype_config(
     nearest_power_of_2 = 2 ** (cutoff_per_expert - 1).bit_length()
     adjusted_cutoff = max(256, nearest_power_of_2)
 
+    needs_fc0_cache = use_fc0_to_output_skips or use_fc0_to_fusion_skips
     for name in expert_names:
-        message_configs.append(
-            {
-                "name": f"expert_{name}_fc_0",
-                "layer_path": f"input_modules.genotype.expert_branches.{name}.fc_0",
-                "cache_tensor": True,
-                "layer_cache_target": "output",
-            }
-        )
+        if needs_fc0_cache:
+            message_configs.append(
+                {
+                    "name": f"expert_{name}_fc_0",
+                    "layer_path": f"input_modules.genotype.expert_branches.{name}.fc_0",
+                    "cache_tensor": True,
+                    "layer_cache_target": "output",
+                }
+            )
 
     return {
         "input_info": {
@@ -391,6 +399,7 @@ def get_base_fusion_config(
         "stochastic_depth_p": 0.10,
     }
 
+    # note early exit from this function if expert names are passed in
     if expert_names is not None:
         tb_config = generate_tb_informed_moe_config(
             expert_names=expert_names,
