@@ -69,7 +69,7 @@ class ArchitectureParams:
 class TabularSkipParams:
     enabled: bool = True
     drop_prob: float = 1.00
-    cache_dropout_p: float = 0.20
+    cache_dropout_p: float = 0.50
 
 
 @dataclass
