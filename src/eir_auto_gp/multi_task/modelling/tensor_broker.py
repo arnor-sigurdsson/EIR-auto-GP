@@ -44,7 +44,6 @@ def generate_tb_base_config(
     tabular_cache_dropout_p: float = 0.00,
     # only checked for is not None, kept as int for possible per-expert routing later
     output_num_experts: int | None = None,
-    output_skip_intermediate_factor: int | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     base_cache_names = _get_staggered_cache_names(
         use_fc0_to_fusion_skips=use_fc0_to_fusion_skips,
@@ -89,12 +88,6 @@ def generate_tb_base_config(
         include_tabular=False,
     )
 
-    output_skip_config: dict[str, Any] = {}
-    if output_skip_intermediate_factor is not None:
-        output_skip_config["projection_intermediate_factor"] = (
-            output_skip_intermediate_factor
-        )
-
     if output_head == "linear":
         if genotype_cache_names:
             message_configs.append(
@@ -105,7 +98,6 @@ def generate_tb_base_config(
                     "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
                     "kernel_width_divisible_by": 16,
-                    **output_skip_config,
                 }
             )
         if include_tabular:
@@ -131,7 +123,6 @@ def generate_tb_base_config(
                         "projection_type": "lcl+mlp_residual",
                         "cache_fusion_type": "sum",
                         "kernel_width_divisible_by": 16,
-                        **output_skip_config,
                     }
                 )
             if include_tabular:
@@ -163,7 +154,6 @@ def generate_tb_base_config(
                         "projection_type": "lcl+mlp_residual",
                         "cache_fusion_type": "sum",
                         "kernel_width_divisible_by": 16,
-                        **output_skip_config,
                     }
                 )
             if include_tabular:
@@ -195,7 +185,6 @@ def generate_tb_mgmoe_config(
     include_tabular: bool = True,
     tabular_cache_dropout_p: float = 0.00,
     output_num_experts: int | None = None,
-    output_skip_intermediate_factor: int | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     message_configs: list[dict[str, Any]] = []
 
@@ -243,12 +232,6 @@ def generate_tb_mgmoe_config(
         include_tabular=False,
     )
 
-    output_skip_config: dict[str, Any] = {}
-    if output_skip_intermediate_factor is not None:
-        output_skip_config["projection_intermediate_factor"] = (
-            output_skip_intermediate_factor
-        )
-
     if output_head == "linear":
         if genotype_cache_names:
             message_configs.append(
@@ -259,7 +242,6 @@ def generate_tb_mgmoe_config(
                     "projection_type": "lcl+mlp_residual",
                     "cache_fusion_type": "sum",
                     "kernel_width_divisible_by": 16,
-                    **output_skip_config,
                 }
             )
         if include_tabular:
@@ -290,7 +272,6 @@ def generate_tb_mgmoe_config(
                         "projection_type": "lcl+mlp_residual",
                         "cache_fusion_type": "sum",
                         "kernel_width_divisible_by": 16,
-                        **output_skip_config,
                     }
                 )
             if include_tabular:
@@ -327,7 +308,6 @@ def generate_tb_informed_moe_config(
     include_tabular: bool = True,
     tabular_cache_dropout_p: float = 0.00,
     output_num_experts: int | None = None,
-    output_skip_intermediate_factor: int | None = None,
     use_fc0_output_skips: bool = True,
     num_fusion_layers: int | None = None,
     tb_block_frequency: int = 1,
@@ -352,12 +332,6 @@ def generate_tb_informed_moe_config(
                 }
             )
 
-    output_skip_config: dict[str, Any] = {}
-    if output_skip_intermediate_factor is not None:
-        output_skip_config["projection_intermediate_factor"] = (
-            output_skip_intermediate_factor
-        )
-
     for name in expert_names:
         if use_fc0_output_skips:
             if output_num_experts is not None:
@@ -376,7 +350,6 @@ def generate_tb_informed_moe_config(
                     "projection_lcl_residual_blocks": True,
                     "cache_fusion_type": "sum",
                     "kernel_width_divisible_by": 16,
-                    **output_skip_config,
                 }
             )
             message_configs.append(

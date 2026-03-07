@@ -86,16 +86,6 @@ class CustomConfig:
         enabled (i.e. ``shared_mlp_residual`` output head). If ``None``,
         uses a single shared branch.
 
-    :param output_skip_intermediate_factor:
-        For ``lcl+mlp_residual`` output head skip projections, multiply the
-        target dimension by this factor to set the intermediate LCL output
-        size. The MLP residual block then compresses from
-        ``target * factor`` to the final target dimension.
-        For example, a factor of 4 with a 512-dim target produces a 2048-dim
-        intermediate. Only affects output head skip connections,
-        not fusion layer skips. If ``None``, no intermediate expansion is used.
-
-
     :param adversarial_enabled:
         Enables adversarial disentanglement training when tabular inputs
         and output groups are both present. The adversarial head encourages
@@ -122,7 +112,6 @@ class CustomConfig:
     fusion_model_type: str = "mgmoe"
     mgmoe_num_experts: int = 8
     output_num_experts: int | None = None
-    output_skip_intermediate_factor: int | None = None
     expert_groups_file: str | None = None
     adversarial_enabled: bool = True
     adversarial_lambda: float = 0.5
@@ -165,15 +154,6 @@ class CustomConfig:
             raise ValueError(
                 f"output_num_experts must be >= 1 or None, "
                 f"got {self.output_num_experts}"
-            )
-
-        if (
-            self.output_skip_intermediate_factor is not None
-            and self.output_skip_intermediate_factor < 1
-        ):
-            raise ValueError(
-                f"output_skip_intermediate_factor must be >= 1 or None, "
-                f"got {self.output_skip_intermediate_factor}"
             )
 
         if self.adversarial_lambda < 0:

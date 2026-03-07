@@ -40,7 +40,6 @@ class ArchitectureParams:
     fusion_model_type: str
     mgmoe_num_experts: int
     output_num_experts: int | None
-    output_skip_intermediate_factor: int | None = None
     expert_groups_file: str | None = None
 
     @classmethod
@@ -60,7 +59,6 @@ class ArchitectureParams:
             fusion_model_type=config["fusion_model_type"],
             mgmoe_num_experts=config["mgmoe_num_experts"],
             output_num_experts=config.get("output_num_experts"),
-            output_skip_intermediate_factor=config["output_skip_intermediate_factor"],
             expert_groups_file=config.get("expert_groups_file"),
         )
 
@@ -376,7 +374,6 @@ def get_base_fusion_config(
     tabular_cache_dropout_p: float = 0.00,
     mgmoe_num_experts: int = 8,
     output_num_experts: int | None = None,
-    output_skip_intermediate_factor: int | None = None,
     expert_names: list[str] | None = None,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
@@ -405,7 +402,6 @@ def get_base_fusion_config(
             include_tabular=include_tabular,
             tabular_cache_dropout_p=tabular_cache_dropout_p,
             output_num_experts=output_num_experts,
-            output_skip_intermediate_factor=output_skip_intermediate_factor,
             use_fc0_output_skips=use_fc0_to_output_skips,
             num_fusion_layers=fmsp.n_layers if use_fc0_to_fusion_skips else None,
             tb_block_frequency=fmsp.tb_block_frequency,
@@ -433,7 +429,6 @@ def get_base_fusion_config(
         "include_tabular": include_tabular,
         "tabular_cache_dropout_p": tabular_cache_dropout_p,
         "output_num_experts": output_num_experts,
-        "output_skip_intermediate_factor": output_skip_intermediate_factor,
     }
 
     if model_type in ("mlp-residual", "mlp-residual-sum"):
@@ -629,7 +624,6 @@ def get_aggregate_config(
         tabular_cache_dropout_p=tabular_params.cache_dropout_p,
         mgmoe_num_experts=arch_params.mgmoe_num_experts,
         output_num_experts=arch_params.output_num_experts,
-        output_skip_intermediate_factor=arch_params.output_skip_intermediate_factor,
         expert_names=expert_names,
     )
     output_configs = get_output_configs(
