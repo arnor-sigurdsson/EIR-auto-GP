@@ -212,7 +212,6 @@ def get_base_input_genotype_config(
                 "l1": 0.0,
                 "cutoff": 4096,
                 "attention_inclusion_cutoff": 0,
-                "num_experts": 8,
             },
         },
         "tensor_broker_config": {
