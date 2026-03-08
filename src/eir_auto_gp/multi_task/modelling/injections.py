@@ -110,9 +110,9 @@ def get_weighted_sampling_columns(
     elif weighted_sampling == "false":
         return None
     elif weighted_sampling == "auto":
-        has_cat = bool(modelling_config["output_cat_columns"])
-        has_con = bool(modelling_config["output_con_columns"])
-        return ["all"] if has_cat and not has_con else None
+        cat_cols = modelling_config["output_cat_columns"]
+        is_single_cat = len(cat_cols) == 1
+        return ["all"] if is_single_cat else None
     else:
         raise ValueError(
             f"Invalid weighted_sampling value: {weighted_sampling}. "
@@ -281,6 +281,7 @@ def _get_output_injections(
     label_file_path: str,
     output_cat_columns: list[str],
     output_con_columns: list[str],
+    use_weighted_sampling: bool = False,
 ) -> dict[str, Any]:
     if output_cat_columns:
         df = pl.scan_csv(source=label_file_path).select(output_cat_columns).collect()
@@ -293,6 +294,8 @@ def _get_output_injections(
     else:
         cat_loss = "CrossEntropyLoss"
 
+    use_cb = cat_loss == "BCEWithLogitsLoss" and not use_weighted_sampling
+
     injections = {
         "output_info": {
             "output_source": label_file_path,
@@ -301,7 +304,7 @@ def _get_output_injections(
             "target_cat_columns": output_cat_columns,
             "target_con_columns": output_con_columns,
             "cat_loss_name": cat_loss,
-            "cat_loss_class_balanced": cat_loss == "BCEWithLogitsLoss",
+            "cat_loss_class_balanced": use_cb,
             "uncertainty_weighted_mt_loss": False,
         },
     }
@@ -388,6 +391,7 @@ def _get_all_dynamic_injections(
             label_file_path=mip.label_file_path,
             output_cat_columns=cat_cols,
             output_con_columns=con_cols,
+            use_weighted_sampling=mip.weighted_sampling_columns is not None,
         )
 
         injections["output_config"][cur_config_name] = cur_injections
