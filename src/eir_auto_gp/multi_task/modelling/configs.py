@@ -162,14 +162,13 @@ def get_base_input_genotype_config(
             use_fc0_to_fusion_skips=use_fc0_to_fusion_skips,
         )
 
-    aggregator_base = "input_modules.genotype.aggregator.checkpoints"
     message_configs = []
 
     if use_fc0_to_output_skips or use_fc0_to_fusion_skips:
         message_configs.append(
             {
                 "name": "fc_0_output",
-                "layer_path": f"{aggregator_base}.after_fc_0",
+                "layer_path": "input_modules.genotype.fc_0",
                 "cache_tensor": True,
                 "layer_cache_target": "output",
             }
@@ -179,7 +178,7 @@ def get_base_input_genotype_config(
         message_configs.append(
             {
                 "name": "lcl_block_0_output",
-                "layer_path": f"{aggregator_base}.after_lcl_block_0",
+                "layer_path": "input_modules.genotype.lcl_blocks.0",
                 "cache_tensor": True,
                 "layer_cache_target": "output",
             }
