@@ -119,6 +119,7 @@ def get_base_global_config(
         },
         "metrics": {
             "con_averaging_metrics": ["pcc", "r2"],
+            "cat_averaging_metrics": ["roc-auc-macro", "ap-macro"],
         },
     }
 
