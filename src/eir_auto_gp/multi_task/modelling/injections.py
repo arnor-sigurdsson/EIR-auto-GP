@@ -301,6 +301,7 @@ def _get_output_injections(
             "target_cat_columns": output_cat_columns,
             "target_con_columns": output_con_columns,
             "cat_loss_name": cat_loss,
+            "cat_loss_class_balanced": cat_loss == "BCEWithLogitsLoss",
             "uncertainty_weighted_mt_loss": False,
         },
     }
