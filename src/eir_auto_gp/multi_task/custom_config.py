@@ -145,6 +145,14 @@ class CustomConfig:
                 f"got {self.fusion_model_type!r}"
             )
 
+        if self.fusion_model_type == "mgmoe" and self.use_fc0_to_fusion_skips:
+            raise ValueError(
+                "use_fc0_to_fusion_skips=True is not supported with "
+                "fusion_model_type='mgmoe'. MGMoE has a different internal "
+                "structure that does not support fusion skip connections. "
+                "Use fusion_model_type='mlp-residual-sum' instead."
+            )
+
         if self.mgmoe_num_experts < 1:
             raise ValueError(
                 f"mgmoe_num_experts must be >= 1, got {self.mgmoe_num_experts}"
