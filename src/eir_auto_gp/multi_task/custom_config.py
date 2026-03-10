@@ -109,7 +109,7 @@ class CustomConfig:
     n_output_layers: int | None = None
     output_dim: int | None = None
     batch_size: int | None = None
-    fusion_model_type: str = "mgmoe"
+    fusion_model_type: str = "mlp-residual-sum"
     mgmoe_num_experts: int = 8
     output_num_experts: int | None = None
     expert_groups_file: str | None = None
