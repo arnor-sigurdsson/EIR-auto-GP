@@ -336,10 +336,8 @@ def generate_tb_informed_moe_config(
         if use_fc0_output_skips:
             if output_num_experts is not None:
                 deep_target = "input_identity"
-                shallow_target = "shared_branch.0.0.0"
             else:
                 deep_target = "shared_branch.0.0.0"
-                shallow_target = "shared_branch.0.1.0"
 
             message_configs.append(
                 {
@@ -350,17 +348,6 @@ def generate_tb_informed_moe_config(
                     "projection_lcl_residual_blocks": True,
                     "cache_fusion_type": "sum",
                     "kernel_width_divisible_by": 16,
-                }
-            )
-            message_configs.append(
-                {
-                    "name": f"expert_{name}_shallow_to_output",
-                    "layer_path": f"output_modules.eir_auto_gp_{name}.{shallow_target}",
-                    "use_from_cache": [f"expert_{name}_fc_0"],
-                    "projection_type": "lcl+mlp_residual",
-                    "projection_lcl_residual_blocks": False,
-                    "cache_fusion_type": "sum",
-                    "kernel_width_divisible_by": 4,
                 }
             )
 
