@@ -1,9 +1,6 @@
-import random
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-import yaml
 from eir.models.input.array.models_locally_connected import (
     LCLResidualBlock,
     LCParameterSpec,
@@ -11,9 +8,71 @@ from eir.models.input.array.models_locally_connected import (
     generate_lcl_residual_blocks_auto,
 )
 
+from eir_auto_gp.multi_task.modelling.output_configs import (
+    _build_output_groups,
+    get_output_configs,
+)
+from eir_auto_gp.multi_task.modelling.tensor_broker import (
+    generate_tb_base_config,
+    generate_tb_mgmoe_config,
+)
 from eir_auto_gp.utils.utils import get_logger
 
 logger = get_logger(name=__name__)
+
+
+@dataclass
+class ArchitectureParams:
+    model_size: str
+    output_groups: str
+    n_random_output_groups: int
+    n_fusion_layers: int | None
+    fusion_dim: int | None
+    skip_to_every_n_fusion_layers: int | None
+    n_output_layers: int | None
+    output_dim: int | None
+    use_fc0_skips: bool
+    use_lcl_to_output_skips: bool | str
+    use_lcl_fusion_skips: bool
+    fusion_model_type: str
+    mgmoe_num_experts: int
+    output_num_experts: int | None
+    output_skip_intermediate_factor: int | None = None
+
+    @classmethod
+    def from_modelling_config(cls, config: dict[str, Any]) -> "ArchitectureParams":
+        return cls(
+            model_size=config["model_size"],
+            output_groups=config["output_groups"],
+            n_random_output_groups=config["n_random_output_groups"],
+            n_fusion_layers=config["n_fusion_layers"],
+            fusion_dim=config["fusion_dim"],
+            skip_to_every_n_fusion_layers=config["skip_to_every_n_fusion_layers"],
+            n_output_layers=config["n_output_layers"],
+            output_dim=config["output_dim"],
+            use_fc0_skips=config["use_fc0_skips"],
+            use_lcl_to_output_skips=config["use_lcl_to_output_skips"],
+            use_lcl_fusion_skips=config["use_lcl_fusion_skips"],
+            fusion_model_type=config["fusion_model_type"],
+            mgmoe_num_experts=config["mgmoe_num_experts"],
+            output_num_experts=config.get("output_num_experts"),
+            output_skip_intermediate_factor=config["output_skip_intermediate_factor"],
+        )
+
+
+@dataclass
+class TabularSkipParams:
+    enabled: bool = True
+    drop_prob: float = 1.00
+    cache_dropout_p: float = 0.20
+
+
+@dataclass
+class AdversarialParams:
+    enabled: bool = True
+    lambda_: float = 0.5
+    hidden_dim: int = 64
+    layers: list[int] | None = None
 
 
 def get_base_global_config(
@@ -39,11 +98,11 @@ def get_base_global_config(
             "optimizer": "adabelief",
         },
         "lr_schedule": {
-            "lr_plateau_patience": 6,
+            "lr_plateau_patience": 16,
         },
         "training_control": {
             "early_stopping_buffer": "FILL",
-            "early_stopping_patience": 8,
+            "early_stopping_patience": 24,
             "mixing_alpha": "FILL",
         },
         "attribution_analysis": {
@@ -68,18 +127,22 @@ def get_base_global_config(
 
 def get_base_input_genotype_config(
     n_lcl_blocks: int = 0,
+    use_fc0_skips: bool = True,
     use_lcl_to_output_skips: bool | str = False,
     use_lcl_fusion_skips: bool = True,
 ) -> dict[str, Any]:
-    message_configs = [
-        {
-            "name": "fc_0_output",
-            "layer_path": "input_modules.genotype.fc_0",
-            "cache_tensor": True,
-            "layer_cache_target": "output",
-            "kernel_width_divisible_by": 4,
-        },
-    ]
+    message_configs = []
+
+    if use_fc0_skips:
+        message_configs.append(
+            {
+                "name": "fc_0_output",
+                "layer_path": "input_modules.genotype.fc_0",
+                "cache_tensor": True,
+                "layer_cache_target": "output",
+                "kernel_width_divisible_by": 4,
+            }
+        )
 
     if use_lcl_fusion_skips:
         for i in range(n_lcl_blocks):
@@ -243,17 +306,21 @@ def get_base_tabular_input_config(
 def get_base_fusion_config(
     target_columns: list[str],
     output_groups: dict[str, list[str]] | None,
-    model_type: str = "mlp-residual",
-    model_size: "str" = "nano",
+    model_type: str = "mlp-residual-sum",
+    model_size: str = "nano",
     output_head: str = "linear",
     n_fusion_layers: int | None = None,
     fusion_dim: int | None = None,
     skip_to_every_n_fusion_layers: int | None = None,
     n_lcl_blocks: int = 0,
+    use_fc0_skips: bool = True,
     use_lcl_to_output_skips: bool | str = False,
     use_lcl_fusion_skips: bool = True,
     include_tabular: bool = True,
     tabular_cache_dropout_p: float = 0.00,
+    mgmoe_num_experts: int = 8,
+    output_num_experts: int | None = None,
+    output_skip_intermediate_factor: int | None = None,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
         assert fusion_dim is not None
@@ -274,42 +341,44 @@ def get_base_fusion_config(
         "stochastic_depth_p": 0.10,
     }
 
-    if model_type == "mlp-residual" or model_type == "mlp-residual-sum":
-        tb_base = generate_tb_base_config(
-            num_layers=fmsp.n_layers,
-            tb_block_frequency=fmsp.tb_block_frequency,
-            output_head=output_head,
-            target_columns=target_columns,
-            output_groups=output_groups,
-            n_lcl_blocks=n_lcl_blocks,
-            use_lcl_to_output_skips=use_lcl_to_output_skips,
-            use_lcl_fusion_skips=use_lcl_fusion_skips,
-            include_tabular=include_tabular,
-            tabular_cache_dropout_p=tabular_cache_dropout_p,
-        )
+    tb_kwargs = {
+        "num_layers": fmsp.n_layers,
+        "tb_block_frequency": fmsp.tb_block_frequency,
+        "output_head": output_head,
+        "target_columns": target_columns,
+        "output_groups": output_groups,
+        "n_lcl_blocks": n_lcl_blocks,
+        "use_fc0_skips": use_fc0_skips,
+        "use_lcl_to_output_skips": use_lcl_to_output_skips,
+        "use_lcl_fusion_skips": use_lcl_fusion_skips,
+        "include_tabular": include_tabular,
+        "tabular_cache_dropout_p": tabular_cache_dropout_p,
+        "output_num_experts": output_num_experts,
+        "output_skip_intermediate_factor": output_skip_intermediate_factor,
+    }
+
+    if model_type in ("mlp-residual", "mlp-residual-sum"):
+        tb_config = generate_tb_base_config(**tb_kwargs)
         base = {
             "model_config": config_base,
             "model_type": model_type,
-            "tensor_broker_config": tb_base,
+            "tensor_broker_config": tb_config,
         }
 
     elif model_type == "mgmoe":
-        config_base["mg_num_experts"] = 8
+        config_base["mg_num_experts"] = mgmoe_num_experts
         config_base["fc_task_dim"] = fmsp.fc_dim // 4
-        tb_mgmoe = generate_tb_mgmoe_config(
-            num_layers=fmsp.n_layers,
-            tb_block_frequency=fmsp.tb_block_frequency,
-            num_experts=8,
-            output_head=output_head,
-            n_lcl_blocks=n_lcl_blocks,
+        tb_config = generate_tb_mgmoe_config(
+            num_experts=mgmoe_num_experts,
+            **tb_kwargs,
         )
         base = {
             "model_config": config_base,
             "model_type": "mgmoe",
-            "tensor_broker_config": tb_mgmoe,
+            "tensor_broker_config": tb_config,
         }
     else:
-        raise ValueError()
+        raise ValueError(f"Unknown fusion model type: {model_type!r}")
 
     return base
 
@@ -332,379 +401,6 @@ def get_fusion_model_size_params(model_size: str) -> FusionModelSizeParams:
     }
 
     return param_dict[model_size]
-
-
-def _get_staggered_cache_names(
-    layer_index: int,
-    total_layers: int,
-    n_lcl_blocks: int,
-    use_lcl_fusion_skips: bool = True,
-) -> list[str]:
-    cache_names = ["fc_0_output"]
-
-    if n_lcl_blocks == 0 or not use_lcl_fusion_skips:
-        return cache_names
-
-    num_sections = n_lcl_blocks + 1
-    section_size = total_layers / num_sections
-    section = int(layer_index / section_size)
-
-    if section > 0:
-        lcl_block_index = min(section - 1, n_lcl_blocks - 1)
-        cache_names.append(f"lcl_block_{lcl_block_index}")
-
-    return cache_names
-
-
-def _get_output_head_cache_names(
-    use_lcl_to_output_skips: bool | str = False,
-    include_tabular: bool = True,
-) -> list[str]:
-    cache_names = ["fc_0_output"]
-
-    if use_lcl_to_output_skips == "fc_1_only":
-        cache_names.append("lcl_block_0_fc_1")
-    elif use_lcl_to_output_skips is True:
-        cache_names.extend(["lcl_block_0_fc_1", "lcl_block_0_fc_2"])
-
-    if include_tabular:
-        cache_names.append("tabular_output")
-
-    return cache_names
-
-
-def generate_tb_base_config(
-    num_layers: int,
-    tb_block_frequency: int,
-    output_head: str,
-    target_columns: list[str],
-    output_groups: dict[str, list[str]] | None,
-    n_lcl_blocks: int = 0,
-    use_lcl_to_output_skips: bool | str = False,
-    use_lcl_fusion_skips: bool = True,
-    include_tabular: bool = True,
-    tabular_cache_dropout_p: float = 0.00,
-) -> dict[str, list[dict[str, Any]]]:
-    base_cache_names = _get_staggered_cache_names(
-        layer_index=0,
-        total_layers=num_layers,
-        n_lcl_blocks=n_lcl_blocks,
-        use_lcl_fusion_skips=use_lcl_fusion_skips,
-    )
-    message_configs: list[dict[str, Any]] = [
-        {
-            "name": "base_fusion_residual_block",
-            "layer_path": "fusion_modules.computed.fusion_modules.fusion.0.0",
-            "use_from_cache": base_cache_names,
-            "projection_type": "lcl+mlp_residual",
-            "cache_fusion_type": "sum",
-            "kernel_width_divisible_by": 4,
-        }
-    ]
-
-    num_layers_adjusted = num_layers - 2
-
-    for layer in range(0, num_layers_adjusted + 1):
-        if layer % tb_block_frequency == 0:
-            cache_names = _get_staggered_cache_names(
-                layer_index=layer + 2,
-                total_layers=num_layers,
-                n_lcl_blocks=n_lcl_blocks,
-                use_lcl_fusion_skips=use_lcl_fusion_skips,
-            )
-            message_configs.append(
-                {
-                    "name": f"{layer}_fusion_residual_block",
-                    "layer_path": f"fusion_modules.computed.fusion_modules"
-                    f".fusion.1.{layer}",
-                    "use_from_cache": cache_names,
-                    "projection_type": "lcl+mlp_residual",
-                    "cache_fusion_type": "sum",
-                    "kernel_width_divisible_by": 4,
-                }
-            )
-
-    genotype_cache_names = _get_output_head_cache_names(
-        use_lcl_to_output_skips=use_lcl_to_output_skips,
-        include_tabular=False,
-    )
-
-    if output_head == "linear":
-        message_configs.append(
-            {
-                "name": "final_layer",
-                "layer_path": "output_modules.eir_auto_gp.linear_layer",
-                "use_from_cache": genotype_cache_names,
-                "projection_type": "lcl+mlp_residual",
-                "cache_fusion_type": "sum",
-                "kernel_width_divisible_by": 4,
-            }
-        )
-        if include_tabular:
-            message_configs.append(
-                {
-                    "name": "tabular_to_output",
-                    "layer_path": "output_modules.eir_auto_gp.linear_layer",
-                    "use_from_cache": ["tabular_output"],
-                    "projection_type": "mlp_residual",
-                    "cache_fusion_type": "additive",
-                    "cache_dropout_p": tabular_cache_dropout_p,
-                }
-            )
-    elif output_head == "mlp":
-        for target_column in target_columns:
-            message_configs.append(
-                {
-                    "name": f"final_layer_{target_column}",
-                    "layer_path": f"output_modules.eir_auto_gp.multi_task_branches."
-                    f"{target_column}.0.1",
-                    "use_from_cache": genotype_cache_names,
-                    "projection_type": "lcl+mlp_residual",
-                    "cache_fusion_type": "sum",
-                    "kernel_width_divisible_by": 4,
-                }
-            )
-            if include_tabular:
-                message_configs.append(
-                    {
-                        "name": f"tabular_to_{target_column}",
-                        "layer_path": f"output_modules.eir_auto_gp.multi_task_branches."
-                        f"{target_column}.0.1",
-                        "use_from_cache": ["tabular_output"],
-                        "projection_type": "mlp_residual",
-                        "cache_fusion_type": "additive",
-                        "cache_dropout_p": tabular_cache_dropout_p,
-                    }
-                )
-    elif output_head == "shared_mlp_residual":
-        assert output_groups is not None
-        for group_name, _group_columns in output_groups.items():
-            message_configs.append(
-                {
-                    "name": f"final_layer_{group_name}",
-                    "layer_path": f"output_modules.eir_auto_gp_{group_name}"
-                    f".shared_branch",
-                    "use_from_cache": genotype_cache_names,
-                    "projection_type": "lcl+mlp_residual",
-                    "cache_fusion_type": "sum",
-                    "kernel_width_divisible_by": 4,
-                }
-            )
-            if include_tabular:
-                message_configs.append(
-                    {
-                        "name": f"tabular_to_{group_name}",
-                        "layer_path": f"output_modules.eir_auto_gp_{group_name}"
-                        f".output_identity",
-                        "use_from_cache": ["tabular_output"],
-                        "projection_type": "mlp_residual",
-                        "cache_fusion_type": "additive",
-                        "cache_dropout_p": tabular_cache_dropout_p,
-                    }
-                )
-
-    return {"message_configs": message_configs}
-
-
-def generate_tb_mgmoe_config(
-    num_layers: int,
-    tb_block_frequency: int,
-    num_experts: int,
-    output_head: str,
-    n_lcl_blocks: int = 0,
-) -> dict[str, list[dict[str, Any]]]:
-    message_configs: list[dict[str, Any]] = []
-
-    for expert in range(num_experts):
-        message_configs.append(
-            {
-                "name": f"expert_{expert}_0_fusion_residual_block",
-                "layer_path": f"fusion_modules.computed.expert_branches"
-                f".expert_{expert}.0.0",
-                "use_from_cache": ["first_layer_tensor"],
-                "projection_type": "lcl+mlp_residual",
-                "cache_fusion_type": "sum",
-                "kernel_width_divisible_by": 4,
-            }
-        )
-
-    num_layers_adjusted = num_layers - 2
-    for layer in range(0, num_layers_adjusted + 1):
-        if layer % tb_block_frequency == 0:
-            for expert in range(num_experts):
-                message_configs.append(
-                    {
-                        "name": f"expert_{expert}_{layer}_fusion_residual_block",
-                        "layer_path": f"fusion_modules.computed.expert_branches"
-                        f".expert_{expert}.1.{layer - 1}",
-                        "use_from_cache": ["first_layer_tensor"],
-                        "projection_type": "lcl+mlp_residual",
-                        "cache_fusion_type": "sum",
-                        "kernel_width_divisible_by": 4,
-                    }
-                )
-
-    use_lcl_to_output_skips = True
-    output_cache_names = _get_output_head_cache_names(
-        use_lcl_to_output_skips=use_lcl_to_output_skips
-    )
-
-    if output_head == "linear":
-        message_configs.append(
-            {
-                "name": "final_layer",
-                "layer_path": "output_modules.eir_auto_gp.linear_layer",
-                "use_from_cache": output_cache_names,
-                "projection_type": "lcl+mlp_residual",
-                "cache_fusion_type": "sum",
-                "kernel_width_divisible_by": 4,
-            }
-        )
-
-    return {"message_configs": message_configs}
-
-
-@dataclass()
-class SharedMLPResidualModelSizeParams:
-    n_layers: int
-    fc_dim: int
-
-
-def get_shared_mlp_residual_model_size_params(
-    model_size: str,
-) -> SharedMLPResidualModelSizeParams:
-    param_dict = {
-        "nano": SharedMLPResidualModelSizeParams(n_layers=1, fc_dim=32),
-        "mini": SharedMLPResidualModelSizeParams(n_layers=2, fc_dim=64),
-        "small": SharedMLPResidualModelSizeParams(n_layers=2, fc_dim=128),
-        "medium": SharedMLPResidualModelSizeParams(n_layers=4, fc_dim=256),
-        "large": SharedMLPResidualModelSizeParams(n_layers=4, fc_dim=512),
-        "xlarge": SharedMLPResidualModelSizeParams(n_layers=4, fc_dim=1024),
-    }
-
-    return param_dict[model_size]
-
-
-def get_output_configs(
-    output_groups: dict[str, list[str]] | None,
-    output_cat_columns: list[str],
-    output_con_columns: list[str],
-    model_size: str,
-    output_head: str = "mlp",
-    n_output_layers: int | None = None,
-    output_dim: int | None = None,
-) -> list[dict[str, Any]]:
-    if n_output_layers is not None:
-        assert output_dim is not None
-        shared_mlp_params = SharedMLPResidualModelSizeParams(
-            n_layers=n_output_layers,
-            fc_dim=output_dim,
-        )
-    else:
-        shared_mlp_params = get_shared_mlp_residual_model_size_params(
-            model_size=model_size
-        )
-
-    head_configs = {
-        "mlp": {
-            "model_type": "mlp_residual",
-            "model_init_config": {
-                "rb_do": 0.10,
-                "fc_do": 0.10,
-                "fc_task_dim": 128,
-                "layers": [2],
-                "stochastic_depth_p": 0.10,
-                "final_layer_type": "linear",
-            },
-        },
-        "linear": {
-            "model_type": "linear",
-        },
-        "shared_mlp_residual": {
-            "model_type": "shared_mlp_residual",
-            "model_init_config": {
-                "layers": [shared_mlp_params.n_layers],
-                "fc_task_dim": shared_mlp_params.fc_dim,
-                "rb_do": 0.10,
-                "fc_do": 0.10,
-                "stochastic_depth_p": 0.10,
-            },
-        },
-    }
-
-    if output_head not in head_configs:
-        raise ValueError(f"Output head {output_head} not recognized.")
-
-    head_config = head_configs[output_head]
-
-    if output_head in ["linear", "mlp"]:
-        return [
-            create_base_config(
-                head_config=head_config,
-                output_cat_columns=output_cat_columns,
-                output_con_columns=output_con_columns,
-            )
-        ]
-    elif output_head == "shared_mlp_residual":
-        return create_shared_mlp_configs(
-            head_config=head_config,
-            output_groups=output_groups,
-            output_cat_columns=output_cat_columns,
-            output_con_columns=output_con_columns,
-        )
-    else:
-        raise ValueError(f"Output head {output_head} not recognized.")
-
-
-def create_base_config(
-    head_config: dict[str, Any],
-    output_cat_columns: Sequence[str],
-    output_con_columns: Sequence[str],
-) -> dict[str, Any]:
-    return {
-        "output_info": {
-            "output_name": "eir_auto_gp",
-            "output_source": "FILL",
-            "output_type": "tabular",
-        },
-        "output_type_info": {
-            "target_cat_columns": list(output_cat_columns),
-            "target_con_columns": list(output_con_columns),
-        },
-        "model_config": head_config,
-    }
-
-
-def create_shared_mlp_configs(
-    head_config: dict[str, Any],
-    output_groups: dict[str, list[str]] | None,
-    output_cat_columns: list[str],
-    output_con_columns: list[str],
-) -> list[dict[str, Any]]:
-    if output_groups is None:
-        raise ValueError("output_groups must be provided for shared_mlp_residual")
-
-    parsed_configs = []
-
-    for group_name, group_columns in output_groups.items():
-        cur_cat_columns = [col for col in output_cat_columns if col in group_columns]
-        cur_con_columns = [col for col in output_con_columns if col in group_columns]
-        parsed_configs.append(
-            {
-                "output_info": {
-                    "output_name": f"eir_auto_gp_{group_name}",
-                    "output_source": "FILL",
-                    "output_type": "tabular",
-                },
-                "output_type_info": {
-                    "target_cat_columns": cur_cat_columns,
-                    "target_con_columns": cur_con_columns,
-                },
-                "model_config": head_config,
-            }
-        )
-
-    return parsed_configs
 
 
 def _get_adversarial_configs(
@@ -749,40 +445,30 @@ class AggregateConfig:
 
 
 def get_aggregate_config(
-    model_size: str,
+    arch_params: ArchitectureParams,
     target_columns: list[str],
     output_cat_columns: list[str],
     output_con_columns: list[str],
-    n_random_groups: int,
-    output_groups: str = "random",
-    output_head: str = "linear",
-    fusion_type: str = "mlp-residual-sum",
-    n_fusion_layers: int | None = None,
-    fusion_dim: int | None = None,
-    skip_to_every_n_fusion_layers: int | None = None,
-    n_output_layers: int | None = None,
-    output_dim: int | None = None,
     n_lcl_blocks: int = 0,
-    use_lcl_to_output_skips: bool | str = False,
-    use_lcl_fusion_skips: bool = True,
-    tabular_to_output_skips: bool = True,
-    tabular_drop_prob: float = 1.00,
-    tabular_cache_dropout_p: float = 0.20,
-    use_adversarial_disentanglement: bool = False,
-    adversarial_lambda: float = 0.5,
-    adversarial_hidden_dim: int = 64,
-    adversarial_layers: list[int] | None = None,
+    tabular_params: TabularSkipParams | None = None,
+    adversarial_params: AdversarialParams | None = None,
 ) -> AggregateConfig:
-    if output_groups:
+    if tabular_params is None:
+        tabular_params = TabularSkipParams()
+    if adversarial_params is None:
+        adversarial_params = AdversarialParams()
+
+    output_head = "linear"
+    if arch_params.output_groups:
         logger.info(
             "Output groups detected. Using output groups and setting output"
             "head to shared residual MLP."
         )
         output_head = "shared_mlp_residual"
         built_output_groups = _build_output_groups(
-            output_groups=output_groups,
+            output_groups=arch_params.output_groups,
             target_columns=target_columns,
-            n_random_groups=n_random_groups,
+            n_random_groups=arch_params.n_random_output_groups,
             cat_columns=output_cat_columns,
             con_columns=output_con_columns,
         )
@@ -791,51 +477,57 @@ def get_aggregate_config(
 
     adversarial_configs = None
     if (
-        tabular_to_output_skips
-        and use_adversarial_disentanglement
+        tabular_params.enabled
+        and adversarial_params.enabled
         and built_output_groups is not None
     ):
         adversarial_configs = _get_adversarial_configs(
             output_groups=built_output_groups,
-            adversarial_lambda=adversarial_lambda,
-            adversarial_hidden_dim=adversarial_hidden_dim,
-            adversarial_layers=adversarial_layers,
+            adversarial_lambda=adversarial_params.lambda_,
+            adversarial_hidden_dim=adversarial_params.hidden_dim,
+            adversarial_layers=adversarial_params.layers,
         )
 
     global_config = get_base_global_config(adversarial_configs=adversarial_configs)
     input_genotype_config = get_base_input_genotype_config(
         n_lcl_blocks=n_lcl_blocks,
-        use_lcl_to_output_skips=use_lcl_to_output_skips,
-        use_lcl_fusion_skips=use_lcl_fusion_skips,
+        use_fc0_skips=arch_params.use_fc0_skips,
+        use_lcl_to_output_skips=arch_params.use_lcl_to_output_skips,
+        use_lcl_fusion_skips=arch_params.use_lcl_fusion_skips,
     )
     input_tabular_config = get_base_tabular_input_config(
-        cache_for_output_heads=tabular_to_output_skips,
-        drop_prob=tabular_drop_prob,
+        cache_for_output_heads=tabular_params.enabled,
+        drop_prob=tabular_params.drop_prob,
     )
 
     fusion_config = get_base_fusion_config(
-        model_type=fusion_type,
-        model_size=model_size,
+        model_type=arch_params.fusion_model_type,
+        model_size=arch_params.model_size,
         output_head=output_head,
         target_columns=target_columns,
         output_groups=built_output_groups,
-        n_fusion_layers=n_fusion_layers,
-        fusion_dim=fusion_dim,
-        skip_to_every_n_fusion_layers=skip_to_every_n_fusion_layers,
+        n_fusion_layers=arch_params.n_fusion_layers,
+        fusion_dim=arch_params.fusion_dim,
+        skip_to_every_n_fusion_layers=arch_params.skip_to_every_n_fusion_layers,
         n_lcl_blocks=n_lcl_blocks,
-        use_lcl_to_output_skips=use_lcl_to_output_skips,
-        use_lcl_fusion_skips=use_lcl_fusion_skips,
-        include_tabular=tabular_to_output_skips,
-        tabular_cache_dropout_p=tabular_cache_dropout_p,
+        use_fc0_skips=arch_params.use_fc0_skips,
+        use_lcl_to_output_skips=arch_params.use_lcl_to_output_skips,
+        use_lcl_fusion_skips=arch_params.use_lcl_fusion_skips,
+        include_tabular=tabular_params.enabled,
+        tabular_cache_dropout_p=tabular_params.cache_dropout_p,
+        mgmoe_num_experts=arch_params.mgmoe_num_experts,
+        output_num_experts=arch_params.output_num_experts,
+        output_skip_intermediate_factor=arch_params.output_skip_intermediate_factor,
     )
     output_configs = get_output_configs(
         output_head=output_head,
         output_groups=built_output_groups,
         output_cat_columns=output_cat_columns,
         output_con_columns=output_con_columns,
-        model_size=model_size,
-        n_output_layers=n_output_layers,
-        output_dim=output_dim,
+        model_size=arch_params.model_size,
+        n_output_layers=arch_params.n_output_layers,
+        output_dim=arch_params.output_dim,
+        output_num_experts=arch_params.output_num_experts,
     )
 
     return AggregateConfig(
@@ -845,114 +537,3 @@ def get_aggregate_config(
         fusion_config=fusion_config,
         output_config=output_configs,
     )
-
-
-def _build_output_groups(
-    output_groups: str | int,
-    target_columns: list[str],
-    n_random_groups: int,
-    cat_columns: list[str] | None,
-    con_columns: list[str] | None,
-) -> dict[str, list[str]]:
-    if isinstance(output_groups, str):
-        if output_groups.lower() == "random":
-            return _create_random_groups(
-                target_columns=target_columns,
-                num_groups=n_random_groups,
-            )
-        elif output_groups.lower() == "semirandom":
-            return _create_semirandom_groups(
-                cat_columns=cat_columns or [],
-                con_columns=con_columns or [],
-                num_groups=n_random_groups,
-            )
-        else:
-            with open(output_groups) as file:
-                return yaml.safe_load(file)
-    elif isinstance(output_groups, int):
-        return _create_random_groups(
-            target_columns=target_columns,
-            num_groups=output_groups,
-        )
-    else:
-        raise ValueError(
-            "output_groups must be either a string "
-            "(file path, 'random', or 'semirandom') or an integer"
-        )
-
-
-def _create_random_groups(
-    target_columns: Sequence[str],
-    num_groups: int,
-    seed: int = 42,
-) -> dict[str, list[str]]:
-    target_columns = list(target_columns)
-
-    if num_groups > len(target_columns):
-        raise ValueError(
-            "Number of groups must be less than or equal to the "
-            "number of target columns."
-        )
-
-    random.seed(seed)
-
-    random.shuffle(target_columns)
-    groups = {f"group_{i + 1}": [] for i in range(num_groups)}
-    for i, target in enumerate(target_columns):
-        group_key = f"group_{(i % num_groups) + 1}"
-        groups[group_key].append(target)
-
-    random.seed()
-
-    return groups
-
-
-def _create_semirandom_groups(
-    cat_columns: list[str],
-    con_columns: list[str],
-    num_groups: int,
-    seed: int = 42,
-) -> dict[str, list[str]]:
-    if not cat_columns and not con_columns:
-        raise ValueError("At least one of cat_columns or con_columns must be provided")
-
-    random.seed(seed)
-
-    total_cols = len(cat_columns) + len(con_columns)
-    if total_cols < num_groups:
-        raise ValueError(
-            "Number of groups must be less than or equal to the "
-            "total number of target columns."
-        )
-
-    if cat_columns and con_columns:
-        cat_groups = max(1, round(num_groups * len(cat_columns) / total_cols))
-        con_groups = max(1, num_groups - cat_groups)
-    else:
-        cat_groups = num_groups if cat_columns else 0
-        con_groups = num_groups if con_columns else 0
-
-    groups = {}
-    group_counter = 1
-
-    if cat_columns:
-        cat_cols = list(cat_columns)
-        random.shuffle(cat_cols)
-        for i in range(cat_groups):
-            start_idx = i * len(cat_cols) // cat_groups
-            end_idx = (i + 1) * len(cat_cols) // cat_groups
-            groups[f"group_{group_counter}"] = cat_cols[start_idx:end_idx]
-            group_counter += 1
-
-    if con_columns:
-        con_cols = list(con_columns)
-        random.shuffle(con_cols)
-        for i in range(con_groups):
-            start_idx = i * len(con_cols) // con_groups
-            end_idx = (i + 1) * len(con_cols) // con_groups
-            groups[f"group_{group_counter}"] = con_cols[start_idx:end_idx]
-            group_counter += 1
-
-    random.seed()
-
-    return groups

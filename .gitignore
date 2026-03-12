@@ -84,9 +84,6 @@ runs/
 *.pt
 eir_auto_gp_tutorials
 
-# exclude custom modules
-*custom_*.py
-
 # Mac OS-specific storage files
 .DS_Store
 

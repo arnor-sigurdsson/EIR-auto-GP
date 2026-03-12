@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 from eir.train_utils.train_handlers import _iterdir_ignore_hidden
 
+from eir_auto_gp.multi_task.custom_config import CustomConfig
 from eir_auto_gp.multi_task.run_multi_task import (
     get_argument_parser,
     run,
@@ -26,7 +27,6 @@ def _get_test_cl_commands() -> list[str]:
         "--input_cat_columns sex "
         "--folds 1 "
         "--model_size nano "
-        "--modelling_data_format auto "
         "--do_test "
     )
 
@@ -53,7 +53,6 @@ def _get_test_cl_commands_genotype_only() -> list[str]:
         "--input_cat_columns sex "
         "--folds 1 "
         "--model_size nano "
-        "--modelling_data_format auto "
         "--do_test "
         "--genotype_only_test "
     )
@@ -73,7 +72,8 @@ def test_modelling(command: str, tmp_path: Path) -> None:
     parser = get_argument_parser()
     cl_args = parser.parse_args(command.split())
     cl_args.global_output_folder = str(tmp_path)
-    run(cl_args=cl_args)
+    custom_config = CustomConfig(modelling_data_format="auto")
+    run(cl_args=cl_args, custom_config=custom_config)
 
     model_folder = tmp_path / "modelling"
     check_test = True if "do_test" in command else False
@@ -125,7 +125,8 @@ def test_modelling_genotype_only_test(command: str, tmp_path: Path) -> None:
     parser = get_argument_parser()
     cl_args = parser.parse_args(command.split())
     cl_args.global_output_folder = str(tmp_path)
-    run(cl_args=cl_args)
+    custom_config = CustomConfig(modelling_data_format="auto")
+    run(cl_args=cl_args, custom_config=custom_config)
 
     model_folder = tmp_path / "modelling"
     check_test = True if "do_test" in command else False
@@ -158,7 +159,6 @@ def test_train_with_tabular_predict_without(tmp_path: Path) -> None:
         "--input_cat_columns sex "
         "--folds 1 "
         "--model_size nano "
-        "--modelling_data_format auto "
         "--data_storage_format disk "
         "--do_test "
         "--genotype_only_test "
@@ -167,7 +167,7 @@ def test_train_with_tabular_predict_without(tmp_path: Path) -> None:
     parser = get_argument_parser()
     cl_args = parser.parse_args(command.split())
     cl_args.global_output_folder = str(tmp_path)
-    run(cl_args=cl_args)
+    run(cl_args=cl_args, custom_config=CustomConfig())
 
     model_folder = tmp_path / "modelling"
     run_folder = None

@@ -5,3 +5,4 @@ Understanding EIR-auto-GP
     :maxdepth: 2
 
     feature_selection_methods
+    custom_config
