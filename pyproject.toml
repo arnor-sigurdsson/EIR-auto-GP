@@ -83,4 +83,4 @@ ignore = ["DEP003"]
 exclude = ["misc", "tests", ".venv", ".tox", "docs"]
 
 [tool.uv.sources]
-eir-dl = { git = "https://github.com/arnor-sigurdsson/EIR", branch = "add-muon-optimizer-support" }
+eir-dl = { git = "https://github.com/arnor-sigurdsson/EIR", branch = "add-prototype-adversarial-disentanglement-support" }

@@ -319,6 +319,12 @@ def build_predict_configs(
                 for input_config in configs_as_dict:
                     cur_name = input_config["input_info"]["input_name"]
 
+                    if cur_name == "eir_tabular":
+                        logger.info(
+                            "Skipping tabular input config for genotype-only prediction"
+                        )
+                        continue
+
                     input_config["input_info"]["input_source"] = str(
                         prepared_input_data_folder
                     )
@@ -334,7 +340,7 @@ def build_predict_configs(
                     modified_files[cur_name] = new_path
 
             case "fusion_config":
-                cur_config = configs_as_dict
+                cur_config = _filter_tabular_from_fusion_config(config=configs_as_dict)
                 new_path = output_folder / f.name
                 new_path.write_text(yaml.dump(cur_config))
                 modified_files["fusion_config"] = new_path
@@ -351,6 +357,42 @@ def build_predict_configs(
                 raise ValueError(f"File {f} is not recognized.")
 
     return modified_files
+
+
+def _filter_tabular_from_fusion_config(config: dict) -> dict:
+    if "tensor_broker_config" not in config:
+        return config
+
+    tb_config = config["tensor_broker_config"]
+    if "message_configs" not in tb_config:
+        return config
+
+    original_messages = tb_config["message_configs"]
+    filtered_messages = []
+
+    for msg in original_messages:
+        if "tabular" in msg.get("name", "").lower():
+            logger.info(f"Filtering tabular TB message: {msg.get('name')}")
+            continue
+
+        if msg.get("from") == "tabular_output":
+            logger.info(
+                f"Filtering TB message with tabular origin: {msg.get('name')} "
+                f"(from: {msg.get('from')})"
+            )
+            continue
+
+        if "use_from_cache" in msg:
+            original_cache = msg["use_from_cache"]
+            filtered_cache = [c for c in original_cache if c != "tabular_output"]
+            if len(filtered_cache) < len(original_cache):
+                logger.info(f"Removed 'tabular_output' from message: {msg.get('name')}")
+                msg["use_from_cache"] = filtered_cache
+
+        filtered_messages.append(msg)
+
+    config["tensor_broker_config"]["message_configs"] = filtered_messages
+    return config
 
 
 def maybe_add_subset_to_input_config(

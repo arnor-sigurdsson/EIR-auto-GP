@@ -301,6 +301,15 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--genotype_only_test",
+        action="store_true",
+        help="When testing (--do_test), predict using only genotype data,\n"
+        "excluding tabular covariates. This simulates deployment to new cohorts\n"
+        "where covariates may not be available. Useful for validating that the\n"
+        "dropout strategy enables robust genotype-only predictions.",
+    )
+
+    parser.add_argument(
         "--optimize_model",
         action="store_true",
         help="Enable model optimizations including torch.compile and "
@@ -314,6 +323,43 @@ def get_cl_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     cl_args = parser.parse_args()
 
     return cl_args
+
+
+def validate_column_duplicates(
+    input_cat_columns: list[str],
+    input_con_columns: list[str],
+    output_cat_columns: list[str],
+    output_con_columns: list[str],
+) -> None:
+    def _check_duplicates_within(columns: list[str], category: str) -> None:
+        seen_lower = {}
+        for col in columns:
+            col_lower = col.lower()
+            if col_lower in seen_lower:
+                raise ValueError(
+                    f"Duplicate column names found in {category} "
+                    f"(case-insensitive): {sorted([seen_lower[col_lower], col])}"
+                )
+            seen_lower[col_lower] = col
+
+    _check_duplicates_within(input_cat_columns, "input categorical columns")
+    _check_duplicates_within(input_con_columns, "input continuous columns")
+    _check_duplicates_within(output_cat_columns, "output categorical columns")
+    _check_duplicates_within(output_con_columns, "output continuous columns")
+
+    all_columns = (
+        input_cat_columns + input_con_columns + output_cat_columns + output_con_columns
+    )
+    seen_global_lower = {}
+    for col in all_columns:
+        col_lower = col.lower()
+        if col_lower in seen_global_lower:
+            raise ValueError(
+                f"Column names must be unique across all input and output columns "
+                f"(case-insensitive). Found duplicates: "
+                f"{sorted([seen_global_lower[col_lower], col])}"
+            )
+        seen_global_lower[col_lower] = col
 
 
 def validate_label_file(
@@ -439,6 +485,12 @@ def validate_model_architecture_params(
 
 def run(cl_args: argparse.Namespace) -> None:
     validate_geno_data_path(geno_data_path=cl_args.genotype_data_path)
+    validate_column_duplicates(
+        input_cat_columns=cl_args.input_cat_columns,
+        input_con_columns=cl_args.input_con_columns,
+        output_cat_columns=cl_args.output_cat_columns,
+        output_con_columns=cl_args.output_con_columns,
+    )
     validate_label_file(
         label_file_path=cl_args.label_file_path,
         input_cat_columns=cl_args.input_cat_columns,
@@ -608,6 +660,7 @@ def build_modelling_config(cl_args: argparse.Namespace) -> dict[str, Any]:
         "batch_size",
         "weighted_sampling",
         "do_test",
+        "genotype_only_test",
         "optimize_model",
     ]
 

@@ -1,7 +1,10 @@
+import contextlib
 import math
 import os
+import shutil
 import subprocess
 from collections.abc import Iterable
+from contextlib import contextmanager
 from dataclasses import dataclass, fields
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -134,6 +137,127 @@ def calculate_n_lcl_blocks(genotype_data_path: str) -> int:
     return n_lcl_blocks
 
 
+def _filter_input_configs(configs: list[dict]) -> list[dict]:
+    filtered = [c for c in configs if c["input_info"]["input_name"] != "eir_tabular"]
+    if len(filtered) < len(configs):
+        logger.info(f"Filtered {len(configs) - len(filtered)} tabular input config(s)")
+    return filtered
+
+
+def _filter_adversarial_from_global_config(config: dict) -> dict:
+    if "adversarial_training" in config:
+        filtered_config = config.copy()
+        del filtered_config["adversarial_training"]
+        return filtered_config
+    return config
+
+
+def _filter_tabular_from_fusion_config(config: dict) -> dict:
+    if "tensor_broker_config" not in config:
+        return config
+
+    tb_config = config["tensor_broker_config"]
+    if "message_configs" not in tb_config:
+        return config
+
+    original_messages = tb_config["message_configs"]
+    filtered_messages = []
+
+    for msg in original_messages:
+        if "tabular" in msg.get("name", "").lower():
+            logger.info(f"Filtering tabular TB message: {msg.get('name')}")
+            continue
+
+        if msg.get("from") == "tabular_output":
+            logger.info(
+                f"Filtering TB message with tabular origin: {msg.get('name')} "
+                f"(from: {msg.get('from')})"
+            )
+            continue
+
+        if "use_from_cache" in msg:
+            original_cache = msg["use_from_cache"]
+            filtered_cache = [c for c in original_cache if c != "tabular_output"]
+            if len(filtered_cache) < len(original_cache):
+                logger.info(
+                    f"Removed 'tabular_output' from TB message: {msg.get('name')}"
+                )
+                msg["use_from_cache"] = filtered_cache
+
+        filtered_messages.append(msg)
+
+    config["tensor_broker_config"]["message_configs"] = filtered_messages
+    return config
+
+
+@contextmanager
+def _filter_serialized_configs_for_genotype_only(train_run_folder: Path):
+    configs_folder = train_run_folder / "serializations" / "configs_stripped"
+
+    if not configs_folder.exists():
+        logger.warning(
+            f"Serialized configs folder not found: {configs_folder}."
+            f" Skipping filtering."
+        )
+        yield
+        return
+
+    backup_folder = configs_folder.parent / "configs_stripped_backup"
+    backup_folder.mkdir(exist_ok=True, parents=True)
+
+    try:
+        logger.info(
+            f"Backing up serialized configs from {configs_folder} to {backup_folder}"
+        )
+        for config_file in configs_folder.iterdir():
+            if config_file.suffix == ".yaml":
+                shutil.copy2(config_file, backup_folder / config_file.name)
+
+        logger.info("Filtering serialized configs for genotype-only prediction")
+        for config_file in configs_folder.iterdir():
+            if config_file.suffix != ".yaml":
+                continue
+
+            if config_file.stem == "input_configs":
+                configs = yaml.safe_load(config_file.read_text())
+                filtered_configs = _filter_input_configs(configs=configs)
+
+                if len(filtered_configs) == len(configs):
+                    logger.info("No tabular input found in training config, skipping")
+                    continue
+
+                config_file.write_text(yaml.dump(filtered_configs))
+
+            elif config_file.stem == "fusion_config":
+                config = yaml.safe_load(config_file.read_text())
+                filtered_config = _filter_tabular_from_fusion_config(config=config)
+                config_file.write_text(yaml.dump(filtered_config))
+
+            elif config_file.stem == "global_config":
+                config = yaml.safe_load(config_file.read_text())
+                filtered_config = _filter_adversarial_from_global_config(config=config)
+                if filtered_config != config:
+                    logger.info(
+                        "Removed adversarial_training from global_config for "
+                        "genotype-only prediction"
+                    )
+                    config_file.write_text(yaml.dump(filtered_config))
+
+        yield
+
+    finally:
+        logger.info(f"Restoring original serialized configs from {backup_folder}")
+        for backup_file in backup_folder.iterdir():
+            if backup_file.suffix == ".yaml":
+                target_path = configs_folder / backup_file.name
+                if target_path.exists():
+                    target_path.unlink()
+                shutil.copy2(backup_file, target_path)
+
+        shutil.rmtree(backup_folder)
+        logger.info("Restored original serialized configs")
+
+
 class TestSingleRun(luigi.Task):
     fold = luigi.IntParameter()
 
@@ -170,6 +294,14 @@ class TestSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"]
         )
 
+        has_tabular_columns = bool(
+            self.modelling_config["input_cat_columns"]
+            or self.modelling_config["input_con_columns"]
+        )
+        tabular_to_output_skips = has_tabular_columns and not self.modelling_config.get(
+            "genotype_only_test", False
+        )
+
         base_aggregate_config = get_aggregate_config(
             output_head="linear",
             output_groups=self.modelling_config["output_groups"],
@@ -188,6 +320,7 @@ class TestSingleRun(luigi.Task):
             n_lcl_blocks=n_lcl_blocks,
             use_lcl_to_output_skips=self.modelling_config["use_lcl_to_output_skips"],
             use_lcl_fusion_skips=self.modelling_config["use_lcl_fusion_skips"],
+            tabular_to_output_skips=tabular_to_output_skips,
         )
 
         injection_params = build_injection_params(
@@ -213,25 +346,35 @@ class TestSingleRun(luigi.Task):
             )
 
             train_run_folder = Path(self.input()["train_run"].path).parent
-            base_predict_command = get_testing_string_from_config_folder(
-                config_folder=temp_config_folder,
-                train_run_folder=train_run_folder,
-                with_labels=True,
-            )
-            logger.info("Testing command: %s", base_predict_command)
 
-            base_command_split = base_predict_command.split()
-            process_info = subprocess.run(
-                base_command_split,
-                env=dict(os.environ, EIR_SEED=str(self.fold)),
-            )
-
-            if process_info.returncode != 0:
-                raise RuntimeError(
-                    f"Testing failed with return code {process_info.returncode}"
+            filter_context = (
+                _filter_serialized_configs_for_genotype_only(
+                    train_run_folder=train_run_folder
                 )
-            testing_complete_file = Path(self.output().path)
-            testing_complete_file.touch()
+                if self.modelling_config.get("genotype_only_test", False)
+                else contextlib.nullcontext()
+            )
+
+            with filter_context:
+                base_predict_command = get_testing_string_from_config_folder(
+                    config_folder=temp_config_folder,
+                    train_run_folder=train_run_folder,
+                    with_labels=True,
+                )
+                logger.info("Testing command: %s", base_predict_command)
+
+                base_command_split = base_predict_command.split()
+                process_info = subprocess.run(
+                    base_command_split,
+                    env=dict(os.environ, EIR_SEED=str(self.fold)),
+                )
+
+                if process_info.returncode != 0:
+                    raise RuntimeError(
+                        f"Testing failed with return code {process_info.returncode}"
+                    )
+                testing_complete_file = Path(self.output().path)
+                testing_complete_file.touch()
 
     def output(self):
         run_folder = Path(self.input()["train_run"].path).parent
@@ -269,6 +412,7 @@ def get_testing_string_from_config_folder(
     assert len(saved_models) == 1, "Expected only one saved model."
 
     final_string += f" --model_path {saved_models[0]}"
+    final_string += " --no-strict"
     if with_labels:
         final_string += " --evaluate"
 
@@ -315,6 +459,11 @@ class TrainSingleRun(luigi.Task):
             genotype_data_path=self.data_config["genotype_data_path"]
         )
 
+        has_tabular_columns = bool(
+            self.modelling_config["input_cat_columns"]
+            or self.modelling_config["input_con_columns"]
+        )
+
         base_aggregate_config = get_aggregate_config(
             output_head="linear",
             output_groups=self.modelling_config["output_groups"],
@@ -333,6 +482,7 @@ class TrainSingleRun(luigi.Task):
             n_lcl_blocks=n_lcl_blocks,
             use_lcl_to_output_skips=self.modelling_config["use_lcl_to_output_skips"],
             use_lcl_fusion_skips=self.modelling_config["use_lcl_fusion_skips"],
+            tabular_to_output_skips=has_tabular_columns,
         )
 
         injection_params = build_injection_params(
@@ -401,6 +551,7 @@ class MultiTaskModelInjectionParams:
     output_configs: list[dict[str, Any]]
     batch_size: int | None
     optimize_model: bool
+    genotype_only_test: bool = False
 
 
 def build_injection_params(
@@ -427,6 +578,10 @@ def build_injection_params(
         base_output_folder=base_output_folder,
     )
 
+    genotype_only_test = task == "test" and modelling_config.get(
+        "genotype_only_test", False
+    )
+
     params = MultiTaskModelInjectionParams(
         fold=fold,
         output_folder=cur_run_output_folder,
@@ -444,6 +599,7 @@ def build_injection_params(
         output_configs=output_configs,
         batch_size=modelling_config["batch_size"],
         optimize_model=modelling_config["optimize_model"],
+        genotype_only_test=genotype_only_test,
     )
 
     return params
@@ -785,13 +941,13 @@ def _get_genotype_injections(
 
 
 def get_gln_kernel_parameters(n_snps: int) -> tuple[int, int]:
-    if n_snps < 1_000:
-        params = 16, -4
-    elif n_snps < 10_000:
-        params = 16, -2
-    elif n_snps < 100_000:
-        params = 16, 1
-    elif n_snps < 500_000:
+    # if n_snps < 1_000:
+    #     params = 16, -4
+    # elif n_snps < 10_000:
+    #     params = 16, -2
+    # elif n_snps < 100_000:
+    #     params = 16, 1
+    if n_snps < 500_000:
         params = 16, 2
     elif n_snps < 2_000_000:
         params = 16, 4
@@ -935,7 +1091,7 @@ def _get_all_dynamic_injections(
 
         injections["output_config"][cur_config_name] = cur_injections
 
-    if mip.input_cat_columns or mip.input_con_columns:
+    if (mip.input_cat_columns or mip.input_con_columns) and not mip.genotype_only_test:
         injections["input_tabular_config"] = _get_tabular_injections(
             input_source=mip.label_file_path,
             input_cat_columns=list(mip.input_cat_columns),
