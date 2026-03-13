@@ -110,9 +110,9 @@ def get_weighted_sampling_columns(
     elif weighted_sampling == "false":
         return None
     elif weighted_sampling == "auto":
-        has_cat = bool(modelling_config["output_cat_columns"])
-        has_con = bool(modelling_config["output_con_columns"])
-        return ["all"] if has_cat and not has_con else None
+        cat_cols = modelling_config["output_cat_columns"]
+        is_single_cat = len(cat_cols) == 1
+        return ["all"] if is_single_cat else None
     else:
         raise ValueError(
             f"Invalid weighted_sampling value: {weighted_sampling}. "
@@ -230,6 +230,7 @@ def _get_genotype_injections(
     input_source: str,
     n_snps: int,
     subset_snp_path: Path | None,
+    expert_snp_groups_file: str | None = None,
 ) -> dict[str, Any]:
     base_snp_path = (
         Path(input_source).parent.parent / "processed/parsed_files/data_final.bim"
@@ -253,7 +254,9 @@ def _get_genotype_injections(
         },
     }
 
-    if subset_snp_path:
+    if expert_snp_groups_file:
+        injections["input_type_info"]["expert_snp_groups_file"] = expert_snp_groups_file
+    elif subset_snp_path:
         injections["input_type_info"]["subset_snps_file"] = str(subset_snp_path)
 
     return injections
@@ -278,6 +281,7 @@ def _get_output_injections(
     label_file_path: str,
     output_cat_columns: list[str],
     output_con_columns: list[str],
+    use_weighted_sampling: bool = False,
 ) -> dict[str, Any]:
     if output_cat_columns:
         df = pl.scan_csv(source=label_file_path).select(output_cat_columns).collect()
@@ -290,6 +294,8 @@ def _get_output_injections(
     else:
         cat_loss = "CrossEntropyLoss"
 
+    use_cb = cat_loss == "BCEWithLogitsLoss" and not use_weighted_sampling
+
     injections = {
         "output_info": {
             "output_source": label_file_path,
@@ -298,6 +304,7 @@ def _get_output_injections(
             "target_cat_columns": output_cat_columns,
             "target_con_columns": output_con_columns,
             "cat_loss_name": cat_loss,
+            "cat_loss_class_balanced": use_cb,
             "uncertainty_weighted_mt_loss": False,
         },
     }
@@ -313,6 +320,7 @@ def is_binary_column(df: pl.DataFrame, col: str) -> bool:
 def _get_all_dynamic_injections(
     injection_params: MultiTaskModelInjectionParams,
     genotype_data_path: str,
+    expert_snp_groups_file: str | None = None,
 ) -> dict[str, Any]:
     mip = injection_params
 
@@ -367,6 +375,7 @@ def _get_all_dynamic_injections(
             input_source=mip.genotype_input_source,
             n_snps=n_snps,
             subset_snp_path=subset_snp_path,
+            expert_snp_groups_file=expert_snp_groups_file,
         ),
         "fusion_config": {},
         "output_config": {},
@@ -382,6 +391,7 @@ def _get_all_dynamic_injections(
             label_file_path=mip.label_file_path,
             output_cat_columns=cat_cols,
             output_con_columns=con_cols,
+            use_weighted_sampling=mip.weighted_sampling_columns is not None,
         )
 
         injections["output_config"][cur_config_name] = cur_injections

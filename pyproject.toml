@@ -38,7 +38,6 @@ dev = [
     "gdown>=5.2.0",
     "pytest-split>=0.9.0",
     "vulture>=2.14",
-    "bed-reader>=1.0.6",
 ]
 
 [build-system]
@@ -83,4 +82,4 @@ ignore = ["DEP003"]
 exclude = ["misc", "tests", ".venv", ".tox", "docs"]
 
 [tool.uv.sources]
-eir-dl = { git = "https://github.com/arnor-sigurdsson/EIR", branch = "update-gln-model" }
+eir-dl = { git = "https://github.com/arnor-sigurdsson/EIR", branch = "add-gln-moe-model" }

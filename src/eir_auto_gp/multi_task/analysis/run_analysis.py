@@ -323,7 +323,9 @@ def _gather_validation_results(
 
         fold_folder = maybe_fold_folder
 
-        output_folders = Path(fold_folder, "results").iterdir()
+        output_folders = _iterdir_ignore_hidden(
+            path=Path(fold_folder, "results"),
+        )
 
         for targets_folder in output_folders:
             avg_file = Path(fold_folder, "validation_average_history.log")
