@@ -17,7 +17,7 @@ from eir_auto_gp.utils.utils import get_logger
 logger = get_logger(name=__name__)
 
 if TYPE_CHECKING:
-    from eir_auto_gp.multi_task.modelling.run_modelling import (
+    from eir_auto_gp.multi_task.modelling.injections import (
         MultiTaskModelInjectionParams,
     )
     from eir_auto_gp.single_task.modelling.run_modelling import (

@@ -16,9 +16,9 @@ dependencies = [
     "rich>=13.7.1",
     "aislib>=0.3.0",
     "polars>=1.15.0",
-    "eir-dl>=0.23.0",
     "torch>=2.7.1",
     "plink-pipelines==0.8.3",
+    "eir-dl",
 ]
 
 [dependency-groups]
@@ -38,7 +38,6 @@ dev = [
     "gdown>=5.2.0",
     "pytest-split>=0.9.0",
     "vulture>=2.14",
-    "bed-reader>=1.0.6",
 ]
 
 [build-system]
@@ -83,4 +82,4 @@ ignore = ["DEP003"]
 exclude = ["misc", "tests", ".venv", ".tox", "docs"]
 
 [tool.uv.sources]
-eir-dl = { git = "https://github.com/arnor-sigurdsson/EIR", branch = "add-prototype-adversarial-disentanglement-support" }
+eir-dl = { git = "https://github.com/arnor-sigurdsson/EIR", branch = "add-gln-moe-model" }

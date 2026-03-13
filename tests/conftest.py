@@ -1,7 +1,8 @@
+import math
+import struct
 from collections.abc import Callable
 from pathlib import Path
 
-import bed_reader
 import numpy as np
 import pandas as pd
 import pytest
@@ -53,7 +54,11 @@ def simulate_genetic_data_to_bed(tmp_path: Path) -> Callable[[int, int, str], Pa
 
         file_path = tmp_path / "genetic_data.bed"
 
-        bed_reader.to_bed(filepath=file_path, val=df_snp.values, properties=properties)
+        _write_plink_bed_files(
+            bed_path=file_path,
+            val=df_snp.values,
+            properties=properties,
+        )
         df_pheno.index = ind_ids
         df_pheno.index.name = "ID"
         df_pheno.to_csv(tmp_path / "phenotype.csv", index=True)
@@ -174,3 +179,48 @@ def _get_snp_list(n_snps: int) -> list[str]:
     assert len(snp_list) == n_snps
 
     return snp_list
+
+
+def _write_plink_bed_files(
+    bed_path: Path,
+    val: np.ndarray,
+    properties: dict[str, list],
+) -> None:
+    n_individuals, n_snps = val.shape
+    bytes_per_snp = math.ceil(n_individuals / 4)
+
+    genotype_to_bits = {0: 0b11, 1: 0b10, 2: 0b00}
+    missing_bits = 0b01
+
+    with open(bed_path, "wb") as f:
+        f.write(struct.pack("BBB", 0x6C, 0x1B, 0x01))
+
+        for snp_idx in range(n_snps):
+            snp_bytes = bytearray(bytes_per_snp)
+            for ind_idx in range(n_individuals):
+                genotype = val[ind_idx, snp_idx]
+                if np.isnan(genotype):
+                    bits = missing_bits
+                else:
+                    bits = genotype_to_bits[int(genotype)]
+
+                byte_idx = ind_idx // 4
+                bit_offset = (ind_idx % 4) * 2
+                snp_bytes[byte_idx] |= bits << bit_offset
+
+            f.write(snp_bytes)
+
+    bim_path = bed_path.with_suffix(".bim")
+    with open(bim_path, "w") as f:
+        for i in range(n_snps):
+            chrom = properties["chromosome"][i]
+            sid = properties["sid"][i]
+            bp = properties["bp_position"][i]
+            a1 = properties["allele_1"][i]
+            a2 = properties["allele_2"][i]
+            f.write(f"{chrom}\t{sid}\t0\t{bp}\t{a1}\t{a2}\n")
+
+    fam_path = bed_path.with_suffix(".fam")
+    with open(fam_path, "w") as f:
+        for iid in properties["iid"]:
+            f.write(f"{iid}\t{iid}\t0\t0\t0\t-9\n")
