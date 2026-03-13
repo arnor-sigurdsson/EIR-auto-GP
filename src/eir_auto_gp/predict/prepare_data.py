@@ -310,6 +310,34 @@ def get_complement_series(series: pd.Series) -> pd.Series:
     return series.astype(str).str.translate(str.maketrans("ATGC", "TACG"))
 
 
+def _deduplicate_matches(
+    direct_matches: pd.DataFrame,
+    swap_matches: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    n_direct_before = len(direct_matches)
+    direct_matches = direct_matches.drop_duplicates(subset=["target_idx"], keep="first")
+    n_direct_dupes = n_direct_before - len(direct_matches)
+
+    n_swap_before = len(swap_matches)
+    swap_matches = swap_matches.drop_duplicates(subset=["target_idx"], keep="first")
+    n_swap_dupes = n_swap_before - len(swap_matches)
+
+    direct_target_set = set(direct_matches["target_idx"])
+    swap_conflict_mask = swap_matches["target_idx"].isin(direct_target_set)
+    n_conflicts = int(swap_conflict_mask.sum())
+    swap_matches = swap_matches[~swap_conflict_mask]
+
+    total_removed = n_direct_dupes + n_swap_dupes + n_conflicts
+    if total_removed > 0:
+        logger.warning(
+            f"Removed {total_removed} duplicate target mappings "
+            f"({n_direct_dupes} direct dupes, {n_swap_dupes} swap dupes, "
+            f"{n_conflicts} cross-type conflicts resolved in favor of direct match)"
+        )
+
+    return direct_matches, swap_matches
+
+
 def create_snp_mapping(
     from_bim: pd.DataFrame,
     to_reference_bim: pd.DataFrame,
@@ -371,10 +399,16 @@ def create_snp_mapping(
     swap_mask = mask_rev | mask_strand_rev
 
     direct_matches = matches[direct_mask]
+    swap_matches = matches[swap_mask]
+
+    direct_matches, swap_matches = _deduplicate_matches(
+        direct_matches=direct_matches,
+        swap_matches=swap_matches,
+    )
+
     direct_source_indices = direct_matches["source_idx"].to_numpy()
     direct_target_indices = direct_matches["target_idx"].to_numpy()
 
-    swap_matches = matches[swap_mask]
     swap_source_indices = swap_matches["source_idx"].to_numpy()
     swap_target_indices = swap_matches["target_idx"].to_numpy()
 
