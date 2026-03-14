@@ -9,10 +9,9 @@ from eir_auto_gp.multi_task.modelling.output_configs import (
 @pytest.mark.parametrize(
     "n_targets, expected_dim",
     [
-        (1, 256),
-        (2, 256),
-        (8, 256),
-        (9, 512),
+        (1, 512),
+        (2, 512),
+        (8, 512),
         (15, 512),
         (20, 512),
         (21, 1024),
@@ -26,7 +25,6 @@ def test_auto_output_dim_tiers(n_targets: int, expected_dim: int) -> None:
 def test_auto_output_dim_per_group_configs() -> None:
     output_groups = {
         "small_group": ["trait_a", "trait_b"],
-        "medium_group": [f"trait_med_{i}" for i in range(15)],
         "large_group": [f"trait_lg_{i}" for i in range(25)],
     }
 
@@ -44,7 +42,7 @@ def test_auto_output_dim_per_group_configs() -> None:
         output_dim="auto",
     )
 
-    assert len(configs) == 3
+    assert len(configs) == 2
 
     dims_by_group = {}
     for cfg in configs:
@@ -52,8 +50,7 @@ def test_auto_output_dim_per_group_configs() -> None:
         dim = cfg["model_config"]["model_init_config"]["fc_task_dim"]
         dims_by_group[name] = dim
 
-    assert dims_by_group["eir_auto_gp_small_group"] == 256
-    assert dims_by_group["eir_auto_gp_medium_group"] == 512
+    assert dims_by_group["eir_auto_gp_small_group"] == 512
     assert dims_by_group["eir_auto_gp_large_group"] == 1024
 
 

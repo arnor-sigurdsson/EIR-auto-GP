@@ -55,7 +55,7 @@ class CustomConfig:
     :param output_dim:
         Dimension of shared MLP residual output head layers.
         When ``"auto"``, scales per output group based on number of targets:
-        ≤8 targets → 256, ≤20 targets → 512, >20 targets → 1024.
+        ≤20 targets → 512, >20 targets → 1024.
 
     :param batch_size:
         Training batch size. When ``None``, automatically determined

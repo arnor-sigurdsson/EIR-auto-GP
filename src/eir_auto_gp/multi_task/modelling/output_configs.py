@@ -32,9 +32,7 @@ def get_shared_mlp_residual_model_size_params(
 
 
 def _get_auto_output_dim(n_targets: int) -> int:
-    if n_targets <= 8:
-        return 256
-    elif n_targets <= 20:
+    if n_targets <= 20:
         return 512
     else:
         return 1024
