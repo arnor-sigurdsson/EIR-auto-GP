@@ -365,8 +365,10 @@ def test_modelling_pack_and_predict_serve(
     cl_args = parser.parse_args(command.split())
     cl_args.global_output_folder = str(tmp_path)
 
-    store_experiment_config(cl_args=cl_args)
-    run(cl_args=cl_args)
+    custom_config = CustomConfig(modelling_data_format="auto")
+
+    store_experiment_config(cl_args=cl_args, custom_config=custom_config)
+    run(cl_args=cl_args, custom_config=custom_config)
 
     model_folder = tmp_path / "modelling"
     check_test = True if "--do_test" in command else False
