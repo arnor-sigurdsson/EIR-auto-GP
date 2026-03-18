@@ -72,7 +72,7 @@ def get_encoded_snp_stream(
         read_chunk_size=chunk_size,
     )
 
-    process_chunk_size = max(1, chunk_size // 3)
+    process_chunk_size = max(1, chunk_size // 4)
     to_process_generator = rechunk_generator(
         chunk_generator=read_generator,  # type: ignore
         new_chunk_size=process_chunk_size,
