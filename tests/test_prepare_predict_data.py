@@ -93,10 +93,11 @@ def test_prepare_module() -> None:
 
         n_samples, n_encodings, n_snps = arrays.shape
         assert n_samples == 100, f"Expected 100 samples, got {n_samples}"
-        assert n_encodings == 4, f"Expected 4 encodings, got {n_encodings}"
+        assert n_encodings == 3, f"Expected 3 encodings, got {n_encodings}"
         assert n_snps == 1000, f"Expected 1000 SNPs, got {n_snps}"
 
-        assert np.allclose(arrays.sum(axis=1), 1.0), "Arrays not one-hot encoded"
+        col_sums = arrays.sum(axis=1)
+        assert ((col_sums == 0) | (col_sums == 1)).all(), "Arrays not one-hot encoded"
 
         df_prepared = pd.read_csv(
             prepared_data.bim_file,
@@ -196,9 +197,8 @@ def test_prepare_flipped_data() -> None:
             array_folder=flipped_output / "encoded_arrays"
         )
 
-        assert np.allclose(flipped_arrays.sum(axis=1), 1.0), (
-            "Arrays not one-hot encoded"
-        )
+        col_sums = flipped_arrays.sum(axis=1)
+        assert ((col_sums == 0) | (col_sums == 1)).all(), "Arrays not one-hot encoded"
 
         assert np.allclose(flipped_arrays[:, 0, :], original_arrays[:, 2, :]), (
             "After allele reversal, row 0 (REF/REF) should equal original row 2"
@@ -210,9 +210,6 @@ def test_prepare_flipped_data() -> None:
         )
         assert np.allclose(flipped_arrays[:, 1, :], original_arrays[:, 1, :]), (
             "After allele reversal, row 1 (HET) should be unchanged"
-        )
-        assert np.allclose(flipped_arrays[:, 3, :], original_arrays[:, 3, :]), (
-            "After allele reversal, row 3 (missing) should be unchanged"
         )
 
 
@@ -246,9 +243,10 @@ def test_plink_prefilter_optimization() -> None:
         n_samples, n_encodings, n_snps = arrays.shape
 
         assert n_samples == 100
-        assert n_encodings == 4
+        assert n_encodings == 3
         assert n_snps == 1000
-        assert np.allclose(arrays.sum(axis=1), 1.0)
+        col_sums = arrays.sum(axis=1)
+        assert ((col_sums == 0) | (col_sums == 1)).all()
 
         plink_filtered_dirs = list(output_dir.glob("plink_filtered_*"))
         assert len(plink_filtered_dirs) >= 1, "PLINK filtered directory should exist"
@@ -282,8 +280,9 @@ def test_plink_prefilter_disabled() -> None:
 
         arrays, _ = read_encoded_arrays(prepared_data.array_folder)
 
-        assert arrays.shape == (100, 4, 1000)
-        assert np.allclose(arrays.sum(axis=1), 1.0)
+        assert arrays.shape == (100, 3, 1000)
+        col_sums = arrays.sum(axis=1)
+        assert ((col_sums == 0) | (col_sums == 1)).all()
 
         plink_filtered_dirs = list(output_dir.glob("plink_filtered_*"))
         assert len(plink_filtered_dirs) == 0, (
@@ -318,8 +317,9 @@ def test_high_overlap_skips_prefilter() -> None:
         )
 
         arrays, _ = read_encoded_arrays(prepared_data.array_folder)
-        assert arrays.shape == (100, 4, 1000)
-        assert np.allclose(arrays.sum(axis=1), 1.0)
+        assert arrays.shape == (100, 3, 1000)
+        col_sums = arrays.sum(axis=1)
+        assert ((col_sums == 0) | (col_sums == 1)).all()
 
         plink_filtered_dirs = list(output_dir.glob("plink_filtered_*"))
         assert len(plink_filtered_dirs) == 0, (
@@ -363,7 +363,8 @@ def test_strand_flip_logic() -> None:
         arrays, _ = read_encoded_arrays(prepared_data.array_folder)
 
         assert arrays.shape[2] == 1, "Strand flip SNP was not matched!"
-        assert np.allclose(arrays.sum(axis=1), 1.0), "Arrays not one-hot encoded"
+        col_sums = arrays.sum(axis=1)
+        assert ((col_sums == 0) | (col_sums == 1)).all(), "Arrays not one-hot encoded"
 
 
 def test_strand_flip_and_reversal_logic() -> None:
@@ -402,7 +403,8 @@ def test_strand_flip_and_reversal_logic() -> None:
         arrays, _ = read_encoded_arrays(prepared_data.array_folder)
 
         assert arrays.shape[2] == 1, "Strand flip + reversal SNP was not matched!"
-        assert np.allclose(arrays.sum(axis=1), 1.0), "Arrays not one-hot encoded"
+        col_sums = arrays.sum(axis=1)
+        assert ((col_sums == 0) | (col_sums == 1)).all(), "Arrays not one-hot encoded"
 
 
 def test_ambiguous_snps_are_dropped() -> None:
@@ -441,8 +443,8 @@ def test_ambiguous_snps_are_dropped() -> None:
         arrays, _ = read_encoded_arrays(prepared_data.array_folder)
 
         assert arrays.shape[2] == 2, "Output should have 2 SNPs in reference space"
-        assert np.allclose(arrays[:, 3, :], 1.0), (
-            "Ambiguous SNPs should all be marked as missing (channel 3)"
+        assert np.allclose(arrays.sum(axis=1), 0.0), (
+            "Ambiguous SNPs should all be marked as missing (all-zeros)"
         )
 
 
@@ -482,8 +484,8 @@ def test_mismatched_snps_are_dropped() -> None:
         arrays, _ = read_encoded_arrays(prepared_data.array_folder)
 
         assert arrays.shape[2] == 1, "Output should have 1 SNP in reference space"
-        assert np.allclose(arrays[:, 3, :], 1.0), (
-            "Mismatched SNP should be marked as missing"
+        assert np.allclose(arrays.sum(axis=1), 0.0), (
+            "Mismatched SNP should be marked as missing (all-zeros)"
         )
 
 
@@ -543,11 +545,12 @@ def test_comprehensive_matching_scenarios() -> None:
         valid_snps = arrays[:, :, :n_valid_matches]
         invalid_snps = arrays[:, :, n_valid_matches:]
 
-        assert not np.allclose(valid_snps[:, 3, :], 1.0), (
+        valid_col_sums = valid_snps.sum(axis=1)
+        assert not np.allclose(valid_col_sums, 0.0), (
             "Valid matches should NOT all be missing"
         )
-        assert np.allclose(invalid_snps[:, 3, :], 1.0), (
-            "Invalid SNPs (ambiguous + mismatch) should be missing"
+        assert np.allclose(invalid_snps.sum(axis=1), 0.0), (
+            "Invalid SNPs (ambiguous + mismatch) should be missing (all-zeros)"
         )
 
 

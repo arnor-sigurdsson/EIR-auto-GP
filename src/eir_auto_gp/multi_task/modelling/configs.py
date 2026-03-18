@@ -286,7 +286,7 @@ def get_num_lcl_blocks(
     stochastic_depth_p: float = 0.00,
     cutoff: int = 4096,
 ) -> int:
-    in_features = n_snps * 4
+    in_features = n_snps * 3
 
     fc_0_kernel_size = calc_value_after_expansion(
         base=kernel_width,

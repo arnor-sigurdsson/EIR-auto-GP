@@ -401,7 +401,7 @@ def test_cross_type_conflict_prefers_direct():
 
 
 def _make_one_hot(genotype: int) -> np.ndarray:
-    arr = np.zeros(4, dtype=np.uint8)
+    arr = np.zeros(3, dtype=np.uint8)
     arr[genotype] = 1
     return arr
 
@@ -415,15 +415,15 @@ def _single_sample_stream(
 
 
 def test_projection_exact_match_preserves_values():
-    source_genotypes = [0, 1, 2, 3]
+    source_genotypes = [0, 1, 2]
     mapping = SNPMapping(
-        direct_match_source_indices=np.array([0, 1, 2, 3]),
-        direct_match_target_indices=np.array([0, 1, 2, 3]),
+        direct_match_source_indices=np.array([0, 1, 2]),
+        direct_match_target_indices=np.array([0, 1, 2]),
         flip_match_source_indices=np.array([], dtype=int),
         flip_match_target_indices=np.array([], dtype=int),
         missing_target_indices=np.array([], dtype=int),
-        n_source_snps=4,
-        n_target_snps=4,
+        n_source_snps=3,
+        n_target_snps=3,
     )
 
     stream = _single_sample_stream(sample_id="s1", genotypes=source_genotypes)
@@ -436,21 +436,20 @@ def test_projection_exact_match_preserves_values():
     assert projected[0, 0] == 1 and projected.sum(axis=0)[0] == 1
     assert projected[1, 1] == 1 and projected.sum(axis=0)[1] == 1
     assert projected[2, 2] == 1 and projected.sum(axis=0)[2] == 1
-    assert projected[3, 3] == 1 and projected.sum(axis=0)[3] == 1
 
 
 def test_projection_reversal_swaps_ref_alt():
     mapping = SNPMapping(
         direct_match_source_indices=np.array([], dtype=int),
         direct_match_target_indices=np.array([], dtype=int),
-        flip_match_source_indices=np.array([0, 1, 2, 3]),
-        flip_match_target_indices=np.array([0, 1, 2, 3]),
+        flip_match_source_indices=np.array([0, 1, 2]),
+        flip_match_target_indices=np.array([0, 1, 2]),
         missing_target_indices=np.array([], dtype=int),
-        n_source_snps=4,
-        n_target_snps=4,
+        n_source_snps=3,
+        n_target_snps=3,
     )
 
-    source_genotypes = [0, 1, 2, 3]
+    source_genotypes = [0, 1, 2]
     stream = _single_sample_stream(sample_id="s1", genotypes=source_genotypes)
     results = list(get_projected_snp_stream(from_stream=stream, snp_mapping=mapping))
 
@@ -463,8 +462,6 @@ def test_projection_reversal_swaps_ref_alt():
 
     assert projected[0, 2] == 1, "Source ALT/ALT (row 2) should become REF/REF (row 0)"
     assert projected[2, 2] == 0
-
-    assert projected[3, 3] == 1, "Source missing (row 3) should remain missing (row 3)"
 
 
 def test_projection_missing_targets_get_missing_channel():
@@ -482,15 +479,14 @@ def test_projection_missing_targets_get_missing_channel():
     results = list(get_projected_snp_stream(from_stream=stream, snp_mapping=mapping))
 
     _, projected = results[0]
-    assert projected.shape == (4, 3)
+    assert projected.shape == (3, 3)
 
     assert projected[0, 0] == 1
 
     for missing_idx in [1, 2]:
-        assert projected[3, missing_idx] == 1, (
-            f"Target {missing_idx} should be missing (channel 3)"
+        assert projected[:, missing_idx].sum() == 0, (
+            f"Target {missing_idx} should be missing (all-zeros)"
         )
-        assert projected[:3, missing_idx].sum() == 0
 
 
 def test_projection_mixed_direct_and_swap():
@@ -516,7 +512,7 @@ def test_projection_mixed_direct_and_swap():
     )
     assert projected[2, 0] == 0
 
-    assert projected[3, 2] == 1, "Missing target"
+    assert projected[:, 2].sum() == 0, "Missing target should be all-zeros"
 
 
 if __name__ == "__main__":
