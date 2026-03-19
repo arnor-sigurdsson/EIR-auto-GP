@@ -80,6 +80,7 @@ class AdversarialParams:
 
 def get_base_global_config(
     adversarial_configs: list[dict[str, Any]] | None = None,
+    manifold_mixup_layer_groups: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     base = {
         "basic_experiment": {
@@ -125,6 +126,11 @@ def get_base_global_config(
 
     if adversarial_configs:
         base["adversarial_training"] = {"adversarial_configs": adversarial_configs}
+
+    if manifold_mixup_layer_groups:
+        base["training_control"]["manifold_mixup_layer_groups"] = (
+            manifold_mixup_layer_groups
+        )
 
     return base
 
@@ -509,6 +515,50 @@ def _get_adversarial_configs(
     return adversarial_configs
 
 
+def _get_manifold_mixup_layer_groups_informed_moe(
+    expert_names: list[str],
+) -> dict[str, list[str]]:
+    input_experts = [
+        f"input_modules.genotype.expert_branches.{name}.lcl_blocks"
+        for name in expert_names
+    ]
+
+    output_entry = [
+        f"output_modules.eir_auto_gp_{name}.shared_branch.0.0.0"
+        for name in expert_names
+    ]
+
+    output_deep = [
+        f"output_modules.eir_auto_gp_{name}.shared_branch.0.1" for name in expert_names
+    ]
+
+    return {
+        "input_experts": input_experts,
+        "output_entry": output_entry,
+        "output_deep": output_deep,
+    }
+
+
+def _get_manifold_mixup_layer_groups_base(
+    output_groups: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    group_names = list(output_groups.keys())
+
+    output_entry = [
+        f"output_modules.eir_auto_gp_{name}.shared_branch.0.0.0" for name in group_names
+    ]
+
+    output_deep = [
+        f"output_modules.eir_auto_gp_{name}.shared_branch.0.1" for name in group_names
+    ]
+
+    return {
+        "input_encoder": ["input_modules.genotype.lcl_blocks"],
+        "output_entry": output_entry,
+        "output_deep": output_deep,
+    }
+
+
 @dataclass(frozen=True)
 class AggregateConfig:
     global_config: dict[str, Any]
@@ -596,7 +646,20 @@ def get_aggregate_config(
             adversarial_layers=adversarial_params.layers,
         )
 
-    global_config = get_base_global_config(adversarial_configs=adversarial_configs)
+    manifold_mixup_layer_groups = None
+    if expert_names is not None:
+        manifold_mixup_layer_groups = _get_manifold_mixup_layer_groups_informed_moe(
+            expert_names=expert_names,
+        )
+    elif built_output_groups is not None:
+        manifold_mixup_layer_groups = _get_manifold_mixup_layer_groups_base(
+            output_groups=built_output_groups,
+        )
+
+    global_config = get_base_global_config(
+        adversarial_configs=adversarial_configs,
+        manifold_mixup_layer_groups=manifold_mixup_layer_groups,
+    )
     input_genotype_config = get_base_input_genotype_config(
         use_fc0_to_output_skips=arch_params.use_fc0_to_output_skips,
         use_fc0_to_fusion_skips=arch_params.use_fc0_to_fusion_skips,
