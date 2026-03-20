@@ -82,5 +82,5 @@ ignore = ["DEP003"]
 exclude = ["misc", "tests", ".venv", ".tox", "docs"]
 
 [tool.uv.sources]
-plink-pipelines = { git = "https://github.com/arnor-sigurdsson/plink_pipelines", branch = "more-efficient-genotype-format" }
 eir-dl = { git = "https://github.com/arnor-sigurdsson/EIR", branch = "add-manifold-mixup-support" }
+plink-pipelines = { git = "https://github.com/arnor-sigurdsson/plink_pipelines", rev = "a023cc6" }
