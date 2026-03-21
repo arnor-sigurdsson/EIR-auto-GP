@@ -126,6 +126,9 @@ class CustomConfig:
                 f"got {self.use_lcl_to_output_skips!r}"
             )
 
+        if isinstance(self.weighted_sampling, bool):
+            self.weighted_sampling = str(self.weighted_sampling).lower()
+
         valid_sampling = ("auto", "true", "false")
         if self.weighted_sampling not in valid_sampling:
             raise ValueError(
