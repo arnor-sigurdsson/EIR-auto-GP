@@ -40,6 +40,7 @@ class ArchitectureParams:
     fusion_model_type: str
     mgmoe_num_experts: int
     output_num_experts: int | None
+    channel_exp_base: int = 3
     expert_groups_file: str | None = None
 
     @classmethod
@@ -59,6 +60,7 @@ class ArchitectureParams:
             fusion_model_type=config["fusion_model_type"],
             mgmoe_num_experts=config["mgmoe_num_experts"],
             output_num_experts=config.get("output_num_experts"),
+            channel_exp_base=config.get("channel_exp_base", 3),
             expert_groups_file=config.get("expert_groups_file"),
         )
 
@@ -161,12 +163,14 @@ def get_base_input_genotype_config(
     use_fc0_to_fusion_skips: bool = True,
     use_lcl_to_output_skips: bool | str = False,
     expert_names: list[str] | None = None,
+    channel_exp_base: int = 3,
 ) -> dict[str, Any]:
     if expert_names is not None:
         return _get_informed_moe_input_genotype_config(
             expert_names=expert_names,
             use_fc0_to_output_skips=use_fc0_to_output_skips,
             use_fc0_to_fusion_skips=use_fc0_to_fusion_skips,
+            channel_exp_base=channel_exp_base,
         )
 
     message_configs = []
@@ -210,7 +214,7 @@ def get_base_input_genotype_config(
             "model_init_config": {
                 "rb_do": 0.10,
                 "stochastic_depth_p": 0.00,
-                "channel_exp_base": 3,
+                "channel_exp_base": channel_exp_base,
                 "kernel_width": "FILL",
                 "first_kernel_expansion": "FILL",
                 "l1": 0.0,
@@ -230,6 +234,7 @@ def _get_informed_moe_input_genotype_config(
     expert_names: list[str],
     use_fc0_to_output_skips: bool = True,
     use_fc0_to_fusion_skips: bool = True,
+    channel_exp_base: int = 3,
 ) -> dict[str, Any]:
     message_configs = []
 
@@ -269,7 +274,7 @@ def _get_informed_moe_input_genotype_config(
             "model_init_config": {
                 "rb_do": 0.10,
                 "stochastic_depth_p": 0.00,
-                "channel_exp_base": 3,
+                "channel_exp_base": channel_exp_base,
                 "kernel_width": "FILL",
                 "first_kernel_expansion": "FILL",
                 "l1": 0.0,
@@ -665,6 +670,7 @@ def get_aggregate_config(
         use_fc0_to_fusion_skips=arch_params.use_fc0_to_fusion_skips,
         use_lcl_to_output_skips=arch_params.use_lcl_to_output_skips,
         expert_names=expert_names,
+        channel_exp_base=arch_params.channel_exp_base,
     )
     input_tabular_config = get_base_tabular_input_config(
         cache_for_output_heads=tabular_params.enabled,

@@ -97,6 +97,10 @@ class CustomConfig:
     :param adversarial_lambda:
         Weight of the adversarial loss term. Higher values enforce stronger
         disentanglement between genotype and tabular features.
+
+    :param channel_exp_base:
+        Base exponent for the number of channels in the genome-local-net.
+        The number of channel feature sets is ``2**channel_exp_base``.
     """
 
     use_lcl_to_output_skips: bool | str = False
@@ -117,6 +121,7 @@ class CustomConfig:
     expert_groups_file: str | None = None
     adversarial_enabled: bool = True
     adversarial_lambda: float = 0.5
+    channel_exp_base: int = 3
 
     def __post_init__(self) -> None:
         valid_skip_values = (True, False, "fc_1_only")
@@ -184,6 +189,11 @@ class CustomConfig:
         if self.adversarial_lambda < 0:
             raise ValueError(
                 f"adversarial_lambda must be >= 0, got {self.adversarial_lambda}"
+            )
+
+        if self.channel_exp_base < 1:
+            raise ValueError(
+                f"channel_exp_base must be >= 1, got {self.channel_exp_base}"
             )
 
     @classmethod
