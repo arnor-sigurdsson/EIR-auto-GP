@@ -119,6 +119,7 @@ class CustomConfig:
     mgmoe_num_experts: int = 8
     output_num_experts: int | None = None
     expert_groups_file: str | None = None
+    informed_moe_fusion_factor: int = 1
     adversarial_enabled: bool = True
     adversarial_lambda: float = 0.5
     channel_exp_base: int = 3
@@ -155,12 +156,16 @@ class CustomConfig:
                 f"got {self.fusion_model_type!r}"
             )
 
-        if self.fusion_model_type == "mgmoe" and self.use_fc0_to_fusion_skips:
+        if (
+            self.fusion_model_type == "mgmoe"
+            and self.use_fc0_to_fusion_skips
+            and self.expert_groups_file is None
+        ):
             raise ValueError(
-                "use_fc0_to_fusion_skips=True is not supported with "
-                "fusion_model_type='mgmoe'. MGMoE has a different internal "
-                "structure that does not support fusion skip connections. "
-                "Use fusion_model_type='mlp-residual-sum' instead."
+                "use_fc0_to_fusion_skips=True with fusion_model_type='mgmoe' "
+                "is only supported when expert_groups_file is set (informed "
+                "MoE input). Without expert groups, use "
+                "fusion_model_type='mlp-residual-sum' instead."
             )
 
         if self.output_dim is not None:
@@ -184,6 +189,12 @@ class CustomConfig:
             raise ValueError(
                 f"output_num_experts must be >= 1 or None, "
                 f"got {self.output_num_experts}"
+            )
+
+        if self.informed_moe_fusion_factor < 1:
+            raise ValueError(
+                f"informed_moe_fusion_factor must be >= 1, "
+                f"got {self.informed_moe_fusion_factor}"
             )
 
         if self.adversarial_lambda < 0:
