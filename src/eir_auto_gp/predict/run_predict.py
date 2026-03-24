@@ -163,6 +163,34 @@ def gather_results(unpacked_experiment_path: Path, output_folder: Path) -> None:
 
     aggregated_data: dict[str, pd.DataFrame] = {}
 
+    _gather_tabular_predictions(
+        unpacked_experiment_path=unpacked_experiment_path,
+        data_types=data_types,
+        aggregated_data=aggregated_data,
+    )
+
+    _gather_survival_predictions(
+        unpacked_experiment_path=unpacked_experiment_path,
+        data_types=data_types,
+        aggregated_data=aggregated_data,
+    )
+
+    for target_name, df_aggregated in aggregated_data.items():
+        output_path = output_folder / f"{target_name}.csv"
+        data_type = data_types[target_name]
+        df_aggregated = compute_ensemble_and_uncertainty(
+            df=df_aggregated,
+            target=target_name,
+            data_type=data_type,
+        )
+        df_aggregated.to_csv(output_path, index=False)
+
+
+def _gather_tabular_predictions(
+    unpacked_experiment_path: Path,
+    data_types: dict[str, str],
+    aggregated_data: dict[str, pd.DataFrame],
+) -> None:
     for predictions_file in unpacked_experiment_path.rglob("predictions.csv"):
         df = pd.read_csv(predictions_file)
 
@@ -174,7 +202,9 @@ def gather_results(unpacked_experiment_path: Path, output_folder: Path) -> None:
 
         id_column = "ID"
 
-        data_type = data_types[target_name]
+        data_type = data_types.get(target_name)
+        if data_type is None or data_type == "survival":
+            continue
 
         if data_type == "continuous":
             target_column = f"{target_name} Untransformed"
@@ -209,15 +239,49 @@ def gather_results(unpacked_experiment_path: Path, output_folder: Path) -> None:
         else:
             aggregated_data[target_name] = df_selected
 
-    for target_name, df_aggregated in aggregated_data.items():
-        output_path = output_folder / f"{target_name}.csv"
-        data_type = data_types[target_name]
-        df_aggregated = compute_ensemble_and_uncertainty(
-            df=df_aggregated,
-            target=target_name,
-            data_type=data_type,
-        )
-        df_aggregated.to_csv(output_path, index=False)
+
+def _gather_survival_predictions(
+    unpacked_experiment_path: Path,
+    data_types: dict[str, str],
+    aggregated_data: dict[str, pd.DataFrame],
+) -> None:
+    survival_targets = {k for k, v in data_types.items() if v == "survival"}
+    if not survival_targets:
+        return
+
+    for predictions_file in unpacked_experiment_path.rglob("survival_predictions.csv"):
+        df = pd.read_csv(predictions_file)
+        event_name = predictions_file.parent.name
+
+        if event_name not in survival_targets:
+            continue
+
+        fold_parts = [p for p in predictions_file.parts if p.startswith("fold_")]
+        if not fold_parts:
+            continue
+        fold_number = fold_parts[0].split("_")[-1]
+
+        id_column = "ID"
+
+        risk_col = "Risk_Score" if "Risk_Score" in df.columns else "Predicted_Risk"
+        rename_map = {risk_col: f"{event_name} Risk Fold {fold_number}"}
+
+        surv_prob_cols = [c for c in df.columns if c.startswith("Surv_Prob_")]
+        for col in surv_prob_cols:
+            rename_map[col] = f"{event_name}: {col} Fold {fold_number}"
+
+        cols_to_keep = [id_column] + list(rename_map.keys())
+        df_selected = df[cols_to_keep].rename(columns=rename_map)
+
+        if event_name in aggregated_data:
+            aggregated_data[event_name] = pd.merge(
+                left=aggregated_data[event_name],
+                right=df_selected,
+                on="ID",
+                how="outer",
+            )
+        else:
+            aggregated_data[event_name] = df_selected
 
 
 def read_config(config_file: Path) -> dict:
@@ -228,8 +292,12 @@ def read_config(config_file: Path) -> dict:
 
 def prepare_data_types(config: dict) -> dict:
     data_types = {}
+    categorical_as_survival = config.get("categorical_as_survival", False)
     for col in config["output_cat_columns"]:
-        data_types[col] = "categorical"
+        if categorical_as_survival:
+            data_types[col] = "survival"
+        else:
+            data_types[col] = "categorical"
     for col in config["output_con_columns"]:
         data_types[col] = "continuous"
     return data_types
@@ -305,6 +373,32 @@ def _check_if_probabilities(values: np.ndarray) -> bool:
     return all_sum_to_one and all_in_range
 
 
+def compute_survival_ensemble(
+    df: pd.DataFrame,
+    target_columns: list[str],
+    target: str,
+) -> pd.DataFrame:
+    results = pd.DataFrame()
+
+    risk_columns = [col for col in target_columns if "Risk" in col and "Fold" in col]
+    if risk_columns:
+        results[f"{target} Ensemble Risk"] = df[risk_columns].mean(axis=1)
+
+    surv_prob_ids = sorted(
+        {
+            col.split(": ")[1].split(" Fold")[0]
+            for col in target_columns
+            if ": Surv_Prob_" in col
+        }
+    )
+    for sp_id in surv_prob_ids:
+        sp_fold_cols = [col for col in target_columns if f": {sp_id} Fold" in col]
+        if sp_fold_cols:
+            results[f"{target} Ensemble {sp_id}"] = df[sp_fold_cols].mean(axis=1)
+
+    return results
+
+
 def compute_ensemble_and_uncertainty(
     df: pd.DataFrame,
     target: str,
@@ -322,6 +416,12 @@ def compute_ensemble_and_uncertainty(
         )
     elif data_type == "categorical":
         ensemble_results = compute_categorical_ensemble(
+            df=df,
+            target_columns=target_columns,
+            target=target,
+        )
+    elif data_type == "survival":
+        ensemble_results = compute_survival_ensemble(
             df=df,
             target_columns=target_columns,
             target=target,

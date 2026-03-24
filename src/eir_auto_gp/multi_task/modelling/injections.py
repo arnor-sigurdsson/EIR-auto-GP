@@ -103,6 +103,9 @@ def build_injection_params(
 def get_weighted_sampling_columns(
     modelling_config: dict[str, Any],
 ) -> list[str] | None:
+    if modelling_config.get("categorical_as_survival", False):
+        return None
+
     weighted_sampling = modelling_config["weighted_sampling"]
 
     if weighted_sampling == "true":
@@ -313,6 +316,16 @@ def _get_output_injections(
     return injections
 
 
+def _get_survival_output_injections(
+    label_file_path: str,
+) -> dict[str, Any]:
+    return {
+        "output_info": {
+            "output_source": label_file_path,
+        },
+    }
+
+
 def is_binary_column(df: pl.DataFrame, col: str) -> bool:
     n_unique = df.select(pl.col(col)).filter(pl.col(col).is_not_null()).unique().height
     return n_unique <= 2
@@ -383,17 +396,22 @@ def _get_all_dynamic_injections(
     }
 
     for output_config in mip.output_configs:
-        cat_cols = output_config["output_type_info"]["target_cat_columns"]
-        con_cols = output_config["output_type_info"]["target_con_columns"]
-
         cur_config_name = output_config["output_info"]["output_name"]
+        is_survival = output_config["output_info"]["output_type"] == "survival"
 
-        cur_injections = _get_output_injections(
-            label_file_path=mip.label_file_path,
-            output_cat_columns=cat_cols,
-            output_con_columns=con_cols,
-            use_weighted_sampling=mip.weighted_sampling_columns is not None,
-        )
+        if is_survival:
+            cur_injections = _get_survival_output_injections(
+                label_file_path=mip.label_file_path,
+            )
+        else:
+            cat_cols = output_config["output_type_info"]["target_cat_columns"]
+            con_cols = output_config["output_type_info"]["target_con_columns"]
+            cur_injections = _get_output_injections(
+                label_file_path=mip.label_file_path,
+                output_cat_columns=cat_cols,
+                output_con_columns=con_cols,
+                use_weighted_sampling=mip.weighted_sampling_columns is not None,
+            )
 
         injections["output_config"][cur_config_name] = cur_injections
 

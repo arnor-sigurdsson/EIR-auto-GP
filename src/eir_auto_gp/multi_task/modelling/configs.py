@@ -581,6 +581,7 @@ def get_aggregate_config(
     output_con_columns: list[str],
     tabular_params: TabularSkipParams | None = None,
     adversarial_params: AdversarialParams | None = None,
+    categorical_as_survival: bool = False,
 ) -> AggregateConfig:
     if tabular_params is None:
         tabular_params = TabularSkipParams()
@@ -704,6 +705,7 @@ def get_aggregate_config(
         n_output_layers=arch_params.n_output_layers,
         output_dim=arch_params.output_dim,
         output_num_experts=arch_params.output_num_experts,
+        categorical_as_survival=categorical_as_survival,
     )
 
     return AggregateConfig(

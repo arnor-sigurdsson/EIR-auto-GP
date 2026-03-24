@@ -276,6 +276,9 @@ class TestSingleRun(luigi.Task):
             output_con_columns=self.modelling_config["output_con_columns"],
             tabular_params=tabular_params,
             adversarial_params=adversarial_params,
+            categorical_as_survival=self.modelling_config.get(
+                "categorical_as_survival", False
+            ),
         )
 
         injection_params = build_injection_params(
@@ -432,6 +435,9 @@ class TrainSingleRun(luigi.Task):
             output_con_columns=self.modelling_config["output_con_columns"],
             tabular_params=tabular_params,
             adversarial_params=adversarial_params,
+            categorical_as_survival=self.modelling_config.get(
+                "categorical_as_survival", False
+            ),
         )
 
         injection_params = build_injection_params(

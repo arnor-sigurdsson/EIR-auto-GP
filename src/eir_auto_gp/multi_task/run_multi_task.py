@@ -222,6 +222,15 @@ def get_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--categorical_as_survival",
+        action="store_true",
+        help="Treat categorical output columns as survival (time-to-event) targets.\n"
+        "When set, each categorical column 'X' is treated as an event indicator\n"
+        "(0=censored, 1=event) and a corresponding time column 'X_Time' must\n"
+        "exist in the label file. Uses Cox PH loss by default.",
+    )
+
+    parser.add_argument(
         "--custom_config",
         type=str,
         required=False,
@@ -287,6 +296,7 @@ def validate_label_file(
     input_con_columns: list[str],
     output_cat_columns: list[str],
     output_con_columns: list[str],
+    categorical_as_survival: bool = False,
 ) -> None:
     if not Path(label_file_path).exists():
         raise ValueError(
@@ -304,6 +314,11 @@ def validate_label_file(
     all_columns = set(
         input_cat_columns + input_con_columns + output_cat_columns + output_con_columns
     )
+
+    if categorical_as_survival:
+        time_columns = {f"{col}_Time" for col in output_cat_columns}
+        all_columns |= time_columns
+
     missing_columns = all_columns - set(columns)
     if len(missing_columns) > 0:
         raise ValueError(
@@ -407,6 +422,7 @@ def run(cl_args: argparse.Namespace, custom_config: CustomConfig) -> None:
         input_con_columns=cl_args.input_con_columns,
         output_cat_columns=cl_args.output_cat_columns,
         output_con_columns=cl_args.output_con_columns,
+        categorical_as_survival=cl_args.categorical_as_survival,
     )
     validate_targets(
         output_con_columns=cl_args.output_con_columns,
@@ -572,6 +588,7 @@ def build_modelling_config(
         "model_size",
         "do_test",
         "genotype_only_test",
+        "categorical_as_survival",
     ]
 
     config = extract_from_namespace(namespace=cl_args, keys=modelling_keys)

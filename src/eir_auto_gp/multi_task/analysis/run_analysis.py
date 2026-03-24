@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 import luigi
+import numpy as np
 import pandas as pd
 from aislib.misc_utils import ensure_path_exists
 from eir.experiment_io.experiment_io import load_serialized_train_experiment
@@ -65,21 +66,47 @@ class GatherTestResults(luigi.Task):
         run_folder = Path(self.modelling_config["modelling_output_folder"])
         cat_targets = self.modelling_config["output_cat_columns"]
         con_targets = self.modelling_config["output_con_columns"]
-        test_results_iterator = gather_test_predictions(
-            folder_with_folds=run_folder,
-            cat_targets=cat_targets,
-            con_targets=con_targets,
+        categorical_as_survival = self.modelling_config.get(
+            "categorical_as_survival", False
         )
 
-        for tr in test_results_iterator:
-            tr.df_ensemble.to_csv(
-                path_or_buf=output_folder / f"{tr.target_name}_test_predictions.csv",
-                index=True,
+        if categorical_as_survival and cat_targets:
+            survival_results_iter = gather_survival_test_predictions(
+                folder_with_folds=run_folder,
+                event_targets=cat_targets,
             )
-            tr.results.to_csv(
-                path_or_buf=output_folder / f"{tr.target_name}_test_results.csv",
-                index=True,
+            for tr in survival_results_iter:
+                tr.df_ensemble.to_csv(
+                    path_or_buf=output_folder
+                    / f"{tr.target_name}_test_predictions.csv",
+                    index=True,
+                )
+                tr.results.to_csv(
+                    path_or_buf=output_folder / f"{tr.target_name}_test_results.csv",
+                    index=True,
+                )
+
+            tabular_cat_targets: Sequence[str] = []
+        else:
+            tabular_cat_targets = cat_targets
+
+        if tabular_cat_targets or con_targets:
+            test_results_iterator = gather_test_predictions(
+                folder_with_folds=run_folder,
+                cat_targets=tabular_cat_targets,
+                con_targets=con_targets,
             )
+
+            for tr in test_results_iterator:
+                tr.df_ensemble.to_csv(
+                    path_or_buf=output_folder
+                    / f"{tr.target_name}_test_predictions.csv",
+                    index=True,
+                )
+                tr.results.to_csv(
+                    path_or_buf=output_folder / f"{tr.target_name}_test_results.csv",
+                    index=True,
+                )
 
     def output(self):
         analysis_output_folder = Path(self.analysis_config["analysis_output_folder"])
@@ -257,7 +284,9 @@ def compute_metrics(
 
 
 def get_target_type(
-    target_name: str, cat_targets: Sequence[str], con_targets: Sequence[str]
+    target_name: str,
+    cat_targets: Sequence[str],
+    con_targets: Sequence[str],
 ) -> Literal["con", "cat"]:
     if target_name in cat_targets:
         return "cat"
@@ -267,6 +296,119 @@ def get_target_type(
         raise ValueError(
             f"Target '{target_name}' not found in cat_targets or con_targets"
         )
+
+
+def gather_survival_test_predictions(
+    folder_with_folds: Path,
+    event_targets: Sequence[str],
+) -> Iterator[TestResults]:
+    dfs: dict[str, list[pd.DataFrame]] = {}
+    results: dict[str, list[dict[str, float | str]]] = {}
+
+    for fold in _iterdir_ignore_hidden(path=folder_with_folds):
+        if not fold.name.startswith("fold_"):
+            continue
+
+        output_folders = Path(fold, "test_set_predictions").iterdir()
+
+        for output_folder in output_folders:
+            if not output_folder.is_dir():
+                continue
+            if not output_folder.name.startswith("eir_auto_gp"):
+                continue
+
+            for event_folder in _iterdir_ignore_hidden(path=output_folder):
+                event_name = event_folder.name
+                if event_name not in event_targets:
+                    continue
+
+                if event_name not in dfs:
+                    dfs[event_name] = []
+                if event_name not in results:
+                    results[event_name] = []
+
+                predictions_file = event_folder / "survival_predictions.csv"
+                if not predictions_file.exists():
+                    logger.warning(
+                        "Missing survival predictions at %s", predictions_file
+                    )
+                    continue
+
+                df = pd.read_csv(filepath_or_buffer=predictions_file)
+                dfs[event_name].append(df)
+
+                cur_metrics = get_single_fold_results(
+                    fold=fold,
+                    output_name=output_folder.name,
+                    target_name=event_name,
+                )
+                results[event_name].append(cur_metrics)
+
+    for event_name, event_dfs in dfs.items():
+        df_ensemble = _get_survival_ensemble_predictions(dfs=event_dfs)
+
+        ensemble_metrics: dict[str, float | str] = {"Fold": "Ensemble"}
+        if "Risk_Score" in df_ensemble.columns and event_name in df_ensemble.columns:
+            try:
+                import torch
+                from torchsurv.metrics.cindex import ConcordanceIndex
+
+                risk = torch.tensor(
+                    df_ensemble["Risk_Score"].values, dtype=torch.float32
+                )
+                events = torch.tensor(df_ensemble[event_name].values, dtype=torch.bool)
+                time_col = f"{event_name}_Time"
+                times = torch.tensor(df_ensemble[time_col].values, dtype=torch.float32)
+
+                valid = ~(torch.isnan(risk) | torch.isnan(times))
+                risk = risk[valid]
+                events = events[valid]
+                times = times[valid]
+
+                c_index = ConcordanceIndex()
+                c_index_value = float(
+                    c_index(risk.unsqueeze(0), events.unsqueeze(0), times.unsqueeze(0))
+                )
+                ensemble_metrics["C-INDEX"] = c_index_value
+            except Exception as e:
+                logger.error("Ensemble C-index calculation failed: %s", e)
+                ensemble_metrics["C-INDEX"] = np.nan
+
+        results[event_name].append(ensemble_metrics)
+
+        df_results = pd.DataFrame(results[event_name])
+        df_results = df_results.sort_values(by="Fold").set_index("Fold")
+
+        yield TestResults(
+            target_name=event_name,
+            df_ensemble=df_ensemble,
+            results=df_results,
+        )
+
+
+def _get_survival_ensemble_predictions(
+    dfs: Sequence[pd.DataFrame],
+) -> pd.DataFrame:
+    id_col = "ID"
+    risk_col = "Risk_Score"
+
+    non_agg_cols = {id_col}
+    event_time_cols = set()
+    for df in dfs:
+        for col in df.columns:
+            if col not in (id_col, risk_col) and not col.startswith("Surv_Prob_"):
+                event_time_cols.add(col)
+    non_agg_cols |= event_time_cols
+
+    agg_cols = [col for col in dfs[0].columns if col not in non_agg_cols]
+
+    df_combined = pd.concat(dfs, axis=0)
+    df_ensemble = df_combined.groupby(id_col)[agg_cols].mean()
+
+    first_values = df_combined.groupby(id_col)[list(event_time_cols)].first()
+    df_ensemble = df_ensemble.join(first_values)
+
+    return df_ensemble
 
 
 class GatherValidationResults(luigi.Task):

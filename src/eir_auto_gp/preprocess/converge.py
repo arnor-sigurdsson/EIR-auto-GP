@@ -58,6 +58,9 @@ class CommonSplitIntoTestSet(luigi.Task):
             input_con_columns=self.modelling_config.get("input_con_columns", []),
             output_cat_columns=self.modelling_config.get("output_cat_columns", []),
             output_con_columns=self.modelling_config.get("output_con_columns", []),
+            categorical_as_survival=self.modelling_config.get(
+                "categorical_as_survival", False
+            ),
         )
         return {
             "genotype": geno_task,
@@ -106,6 +109,9 @@ class CommonSplitIntoTestSet(luigi.Task):
             input_con_columns=self.modelling_config.get("input_con_columns"),
             output_cat_columns=self.modelling_config.get("output_cat_columns"),
             output_con_columns=self.modelling_config.get("output_con_columns"),
+            categorical_as_survival=self.modelling_config.get(
+                "categorical_as_survival", False
+            ),
         )
 
         one_hot_stream = get_encoded_snp_stream(
@@ -438,6 +444,7 @@ def _split_csv_into_train_and_test(
     input_con_columns: Sequence[str] | None = None,
     output_cat_columns: Sequence[str] | None = None,
     output_con_columns: Sequence[str] | None = None,
+    categorical_as_survival: bool = False,
 ) -> None:
     logger.info("Splitting label %s file into train and test sets.", source)
 
@@ -455,6 +462,10 @@ def _split_csv_into_train_and_test(
             required_columns.update(output_cat_columns)
         if output_con_columns:
             required_columns.update(output_con_columns)
+
+        if categorical_as_survival and output_cat_columns:
+            for col in output_cat_columns:
+                required_columns.add(f"{col}_Time")
 
         logger.info(
             "Direct modelling mode: loading only required columns: %s",

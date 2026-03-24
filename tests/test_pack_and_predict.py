@@ -7,6 +7,7 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pytest
 import yaml
@@ -516,4 +517,126 @@ def test_pack_predict_with_tabular_train_genotype_predict_with_experts(
     check_predict_results(
         predict_output_folder=predict_output_folder,
         actual_data_path=actual_data_path,
+    )
+
+
+def _add_survival_time_column(
+    phenotype_csv_path: Path,
+    event_column: str = "phenotype",
+) -> None:
+    df = pd.read_csv(phenotype_csv_path)
+
+    n = len(df)
+    rng = np.random.default_rng(seed=42)
+
+    base_time = rng.exponential(scale=100.0, size=n)
+
+    event_mask = df[event_column] == 1
+    base_time[event_mask] *= 0.5
+
+    base_time = np.clip(base_time, a_min=1.0, a_max=500.0)
+
+    df[f"{event_column}_Time"] = base_time
+
+    df.to_csv(phenotype_csv_path, index=False)
+
+
+def _get_test_survival_cl_commands(folder_path: Path) -> list[str]:
+    base = (
+        f"--genotype_data_path {folder_path}/ "
+        f"--label_file_path {folder_path}/phenotype.csv "
+        "--global_output_folder runs/simulated_test "
+        "--output_cat_columns phenotype "
+        "--categorical_as_survival "
+        "--model_size nano "
+        "--folds 1 "
+        "--do_test"
+    )
+
+    with_groups = f"{base} --output_groups random --n_random_output_groups 1"
+
+    return [base, with_groups]
+
+
+@pytest.mark.parametrize("command", _get_test_survival_cl_commands(Path("placeholder")))
+def test_modelling_pack_and_predict_survival(
+    command: str,
+    tmp_path: Path,
+    simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
+) -> None:
+    simulated_path = simulate_genetic_data_to_bed(5000, 50, "binary")
+
+    _add_survival_time_column(
+        phenotype_csv_path=simulated_path / "phenotype.csv",
+        event_column="phenotype",
+    )
+
+    command = command.replace("placeholder", str(simulated_path))
+
+    parser = get_argument_parser()
+    cl_args = parser.parse_args(command.split())
+    cl_args.global_output_folder = str(tmp_path)
+    custom_config = CustomConfig()
+
+    store_experiment_config(cl_args=cl_args, custom_config=custom_config)
+    run(cl_args=cl_args, custom_config=custom_config)
+
+    model_folder = tmp_path / "modelling"
+    for modelling_run in Path(model_folder).iterdir():
+        if not modelling_run.name.startswith("fold_"):
+            continue
+
+        check_modelling_results(run_folder=modelling_run, check_test=True)
+
+    experiment_folder = tmp_path
+    packed_path = experiment_folder / "experiment.zip"
+    pack_experiment(
+        experiment_folder=experiment_folder,
+        output_path=packed_path,
+    )
+
+    predict_test_parser = get_parser()
+
+    test_predict_subset_folder = _build_test_predict_data(
+        tmp_path=tmp_path,
+        input_data_path=simulated_path,
+        num_snps=25,
+    )
+
+    predict_output_folder = tmp_path / "predict_output"
+    predict_test_cl_args = predict_test_parser.parse_args(
+        f"--genotype_data_path {str(test_predict_subset_folder)} "
+        f"--packed_experiment_path {packed_path} "
+        f"--output_folder {str(predict_output_folder)}".split()
+    )
+
+    run_sync_and_predict_wrapper(cl_args=predict_test_cl_args)
+
+    predict_results_folder = tmp_path / "predict_output" / "results"
+    check_survival_predict_results(
+        predict_output_folder=predict_results_folder,
+    )
+
+
+def check_survival_predict_results(
+    predict_output_folder: Path,
+) -> None:
+    survival_csv = predict_output_folder / "phenotype.csv"
+    assert survival_csv.exists(), (
+        f"Survival prediction file not found at {survival_csv}. "
+        f"Files found: {list(predict_output_folder.iterdir())}"
+    )
+
+    df = pd.read_csv(survival_csv)
+    assert "ID" in df.columns
+    assert len(df) > 0
+
+    risk_cols = [c for c in df.columns if "Risk" in c]
+    assert len(risk_cols) > 0, (
+        f"No risk score columns found. Columns: {list(df.columns)}"
+    )
+
+    ensemble_risk_col = [c for c in df.columns if "Ensemble Risk" in c]
+    assert len(ensemble_risk_col) == 1, (
+        f"Expected 1 ensemble risk column, got {ensemble_risk_col}"
     )

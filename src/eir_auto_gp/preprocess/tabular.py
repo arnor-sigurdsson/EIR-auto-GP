@@ -18,6 +18,7 @@ class ParseLabelFile(luigi.Task):
     input_con_columns = luigi.ListParameter(default=[])
     output_cat_columns = luigi.ListParameter(default=[])
     output_con_columns = luigi.ListParameter(default=[])
+    categorical_as_survival = luigi.BoolParameter(default=False)
 
     def run(self) -> None:
         ensure_path_exists(path=self.output_path())
@@ -41,6 +42,10 @@ class ParseLabelFile(luigi.Task):
                 required_columns.update(self.output_cat_columns)
             if self.output_con_columns:
                 required_columns.update(self.output_con_columns)
+
+            if self.categorical_as_survival and self.output_cat_columns:
+                for col in self.output_cat_columns:
+                    required_columns.add(f"{col}_Time")
 
             logger.info(
                 "Direct modelling mode: copying only required columns: %s",

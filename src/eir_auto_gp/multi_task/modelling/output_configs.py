@@ -47,6 +47,7 @@ def get_output_configs(
     n_output_layers: int | None = None,
     output_dim: int | str | None = None,
     output_num_experts: int | None = None,
+    categorical_as_survival: bool = False,
 ) -> list[dict[str, Any]]:
     auto_scale = isinstance(output_dim, str) and output_dim == "auto"
 
@@ -101,13 +102,12 @@ def get_output_configs(
     head_config = head_configs[output_head]
 
     if output_head in ["linear", "mlp"]:
-        return [
-            create_base_config(
-                head_config=head_config,
-                output_cat_columns=output_cat_columns,
-                output_con_columns=output_con_columns,
-            )
-        ]
+        return _build_base_output_configs(
+            head_config=head_config,
+            output_cat_columns=output_cat_columns,
+            output_con_columns=output_con_columns,
+            categorical_as_survival=categorical_as_survival,
+        )
     elif output_head == "shared_mlp_residual":
         return create_shared_mlp_configs(
             head_config=head_config,
@@ -115,19 +115,57 @@ def get_output_configs(
             output_cat_columns=output_cat_columns,
             output_con_columns=output_con_columns,
             auto_scale_output_dim=auto_scale,
+            categorical_as_survival=categorical_as_survival,
         )
     else:
         raise ValueError(f"Output head {output_head} not recognized.")
+
+
+def _build_base_output_configs(
+    head_config: dict[str, Any],
+    output_cat_columns: Sequence[str],
+    output_con_columns: Sequence[str],
+    categorical_as_survival: bool = False,
+) -> list[dict[str, Any]]:
+    configs: list[dict[str, Any]] = []
+
+    if categorical_as_survival and output_cat_columns:
+        configs.append(
+            create_survival_config(
+                head_config=head_config,
+                event_columns=list(output_cat_columns),
+            )
+        )
+        if output_con_columns:
+            configs.append(
+                create_base_config(
+                    head_config=head_config,
+                    output_cat_columns=[],
+                    output_con_columns=output_con_columns,
+                    output_name="eir_auto_gp_tabular",
+                )
+            )
+    else:
+        configs.append(
+            create_base_config(
+                head_config=head_config,
+                output_cat_columns=output_cat_columns,
+                output_con_columns=output_con_columns,
+            )
+        )
+
+    return configs
 
 
 def create_base_config(
     head_config: dict[str, Any],
     output_cat_columns: Sequence[str],
     output_con_columns: Sequence[str],
+    output_name: str = "eir_auto_gp",
 ) -> dict[str, Any]:
     return {
         "output_info": {
-            "output_name": "eir_auto_gp",
+            "output_name": output_name,
             "output_source": "FILL",
             "output_type": "tabular",
         },
@@ -139,12 +177,37 @@ def create_base_config(
     }
 
 
+def create_survival_config(
+    head_config: dict[str, Any],
+    event_columns: list[str],
+    output_name: str = "eir_auto_gp",
+    loss_function: str = "CoxPHLoss",
+    num_durations: int = 0,
+) -> dict[str, Any]:
+    time_columns = [f"{col}_Time" for col in event_columns]
+    return {
+        "output_info": {
+            "output_name": output_name,
+            "output_source": "FILL",
+            "output_type": "survival",
+        },
+        "output_type_info": {
+            "event_columns": event_columns,
+            "time_columns": time_columns,
+            "loss_function": loss_function,
+            "num_durations": num_durations,
+        },
+        "model_config": head_config,
+    }
+
+
 def create_shared_mlp_configs(
     head_config: dict[str, Any],
     output_groups: dict[str, list[str]] | None,
     output_cat_columns: list[str],
     output_con_columns: list[str],
     auto_scale_output_dim: bool = False,
+    categorical_as_survival: bool = False,
 ) -> list[dict[str, Any]]:
     if output_groups is None:
         raise ValueError("output_groups must be provided for shared_mlp_residual")
@@ -181,20 +244,34 @@ def create_shared_mlp_configs(
         else:
             group_head_config = head_config
 
-        parsed_configs.append(
-            {
-                "output_info": {
-                    "output_name": f"eir_auto_gp_{group_name}",
-                    "output_source": "FILL",
-                    "output_type": "tabular",
-                },
-                "output_type_info": {
-                    "target_cat_columns": cur_cat_columns,
-                    "target_con_columns": cur_con_columns,
-                },
-                "model_config": group_head_config,
-            }
-        )
+        output_name = f"eir_auto_gp_{group_name}"
+
+        if categorical_as_survival and cur_cat_columns:
+            parsed_configs.append(
+                create_survival_config(
+                    head_config=group_head_config,
+                    event_columns=cur_cat_columns,
+                    output_name=output_name,
+                )
+            )
+            if cur_con_columns:
+                parsed_configs.append(
+                    create_base_config(
+                        head_config=group_head_config,
+                        output_cat_columns=[],
+                        output_con_columns=cur_con_columns,
+                        output_name=f"{output_name}_tabular",
+                    )
+                )
+        else:
+            parsed_configs.append(
+                create_base_config(
+                    head_config=group_head_config,
+                    output_cat_columns=cur_cat_columns,
+                    output_con_columns=cur_con_columns,
+                    output_name=output_name,
+                )
+            )
 
     return parsed_configs
 
