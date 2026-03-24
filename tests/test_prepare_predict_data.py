@@ -170,31 +170,50 @@ def test_prepare_flipped_data() -> None:
         df_bim[["A1", "A2"]] = df_bim[["A2", "A1"]]
         df_bim.to_csv(flipped_bim, sep="\t", header=False, index=False)
 
-        output_dir = tmpdir / "prepare_output"
-        output_dir.mkdir()
+        original_output = tmpdir / "original_output"
+        original_output.mkdir()
+        run_prepare_data(
+            genotype_data_path=original_dir,
+            array_chunk_size=100,
+            reference_bim_to_project_to=original_path.with_suffix(".bim"),
+            output_folder=original_output,
+            enable_plink_prefilter=False,
+        )
+        original_arrays, _ = read_encoded_arrays(
+            array_folder=original_output / "encoded_arrays"
+        )
 
-        prepared_data = run_prepare_data(
+        flipped_output = tmpdir / "flipped_output"
+        flipped_output.mkdir()
+        run_prepare_data(
             genotype_data_path=flipped_dir,
             array_chunk_size=100,
             reference_bim_to_project_to=original_path.with_suffix(".bim"),
-            output_folder=output_dir,
+            output_folder=flipped_output,
+            enable_plink_prefilter=False,
+        )
+        flipped_arrays, _ = read_encoded_arrays(
+            array_folder=flipped_output / "encoded_arrays"
         )
 
-        arrays, _ = read_encoded_arrays(array_folder=prepared_data.array_folder)
-
-        # For flipped alleles, encoding should be flipped
-        # Original: [1,0,0,0] -> Flipped: [0,0,1,0]
-        assert np.allclose(arrays.sum(axis=1), 1.0), "Arrays not one-hot encoded"
-
-        original_arrays, _ = read_encoded_arrays(
-            array_folder=output_dir / "encoded_arrays"
+        assert np.allclose(flipped_arrays.sum(axis=1), 1.0), (
+            "Arrays not one-hot encoded"
         )
 
-        # When alleles are flipped, the 0 and 2 encodings should be swapped
-        # This means summing the 0th and 2nd encoding positions should give same results
-        assert np.allclose(
-            arrays[:, [0, 2]].sum(axis=1), original_arrays[:, [0, 2]].sum(axis=1)
-        ), "Flipped allele encoding mismatch"
+        assert np.allclose(flipped_arrays[:, 0, :], original_arrays[:, 2, :]), (
+            "After allele reversal, row 0 (REF/REF) should equal original row 2"
+            " (ALT/ALT)"
+        )
+        assert np.allclose(flipped_arrays[:, 2, :], original_arrays[:, 0, :]), (
+            "After allele reversal, row 2 (ALT/ALT) should equal original row 0"
+            " (REF/REF)"
+        )
+        assert np.allclose(flipped_arrays[:, 1, :], original_arrays[:, 1, :]), (
+            "After allele reversal, row 1 (HET) should be unchanged"
+        )
+        assert np.allclose(flipped_arrays[:, 3, :], original_arrays[:, 3, :]), (
+            "After allele reversal, row 3 (missing) should be unchanged"
+        )
 
 
 def test_plink_prefilter_optimization() -> None:

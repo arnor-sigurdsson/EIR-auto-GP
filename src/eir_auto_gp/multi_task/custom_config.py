@@ -54,6 +54,8 @@ class CustomConfig:
 
     :param output_dim:
         Dimension of shared MLP residual output head layers.
+        When ``"auto"``, scales per output group based on number of targets:
+        ≤20 targets → 512, >20 targets → 1024.
 
     :param batch_size:
         Training batch size. When ``None``, automatically determined
@@ -107,7 +109,7 @@ class CustomConfig:
     fusion_dim: int | None = None
     skip_to_every_n_fusion_layers: int | None = None
     n_output_layers: int | None = None
-    output_dim: int | None = None
+    output_dim: int | str | None = None
     batch_size: int | None = None
     fusion_model_type: str = "mlp-residual-sum"
     mgmoe_num_experts: int = 8
@@ -152,6 +154,18 @@ class CustomConfig:
                 "structure that does not support fusion skip connections. "
                 "Use fusion_model_type='mlp-residual-sum' instead."
             )
+
+        if self.output_dim is not None:
+            if isinstance(self.output_dim, str) and self.output_dim != "auto":
+                raise ValueError(
+                    f"output_dim must be an integer, 'auto', or None, "
+                    f"got {self.output_dim!r}"
+                )
+            if isinstance(self.output_dim, int | float) and not isinstance(
+                self.output_dim, bool
+            ):
+                if int(self.output_dim) < 1:
+                    raise ValueError(f"output_dim must be >= 1, got {self.output_dim}")
 
         if self.mgmoe_num_experts < 1:
             raise ValueError(

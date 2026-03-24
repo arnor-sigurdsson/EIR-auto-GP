@@ -33,7 +33,7 @@ class ArchitectureParams:
     fusion_dim: int | None
     skip_to_every_n_fusion_layers: int | None
     n_output_layers: int | None
-    output_dim: int | None
+    output_dim: int | str | None
     use_fc0_to_output_skips: bool
     use_fc0_to_fusion_skips: bool
     use_lcl_to_output_skips: bool | str
@@ -67,7 +67,7 @@ class ArchitectureParams:
 class TabularSkipParams:
     enabled: bool = True
     drop_prob: float = 1.00
-    cache_dropout_p: float = 0.333
+    cache_dropout_p: float = 0.50
 
 
 @dataclass

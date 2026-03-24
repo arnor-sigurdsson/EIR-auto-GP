@@ -20,7 +20,11 @@ from eir_auto_gp.multi_task.run_multi_task import (
     store_experiment_config,
 )
 from eir_auto_gp.predict.pack import pack_experiment
-from eir_auto_gp.predict.run_predict import get_parser, run_sync_and_predict_wrapper
+from eir_auto_gp.predict.run_predict import (
+    get_parser,
+    run_serve_predict_wrapper,
+    run_sync_and_predict_wrapper,
+)
 
 
 def _get_test_cl_commands(folder_path: Path) -> list[str]:
@@ -337,6 +341,67 @@ def test_pack_predict_with_tabular_train_genotype_predict(
     )
 
     run_sync_and_predict_wrapper(cl_args=predict_test_cl_args)
+
+    predict_output_folder = tmp_path / "predict_output" / "results"
+    actual_data_path = simulated_path / "phenotype.csv"
+
+    check_predict_results(
+        predict_output_folder=predict_output_folder,
+        actual_data_path=actual_data_path,
+    )
+
+
+@pytest.mark.parametrize("command", _get_test_cl_commands(Path("placeholder"))[:1])
+def test_modelling_pack_and_predict_serve(
+    command: str,
+    tmp_path: Path,
+    simulate_genetic_data_to_bed: Callable[[int, int, str], Path],
+) -> None:
+    simulated_path = simulate_genetic_data_to_bed(5000, 50, "binary")
+
+    command = command.replace("placeholder", str(simulated_path))
+
+    parser = get_argument_parser()
+    cl_args = parser.parse_args(command.split())
+    cl_args.global_output_folder = str(tmp_path)
+
+    custom_config = CustomConfig(modelling_data_format="auto")
+
+    store_experiment_config(cl_args=cl_args, custom_config=custom_config)
+    run(cl_args=cl_args, custom_config=custom_config)
+
+    model_folder = tmp_path / "modelling"
+    check_test = True if "--do_test" in command else False
+    for modelling_run in Path(model_folder).iterdir():
+        if not modelling_run.name.startswith("fold_"):
+            continue
+
+        check_modelling_results(run_folder=modelling_run, check_test=check_test)
+
+    experiment_folder = tmp_path
+    packed_path = experiment_folder / "experiment.zip"
+    pack_experiment(
+        experiment_folder=experiment_folder,
+        output_path=packed_path,
+    )
+
+    predict_test_parser = get_parser()
+
+    test_predict_subset_folder = _build_test_predict_data(
+        tmp_path=tmp_path,
+        input_data_path=simulated_path,
+        num_snps=25,
+    )
+
+    predict_output_folder = tmp_path / "predict_output"
+    predict_test_cl_args = predict_test_parser.parse_args(
+        f"--genotype_data_path {str(test_predict_subset_folder)} "
+        f"--packed_experiment_path {packed_path} "
+        f"--output_folder {str(predict_output_folder)} "
+        f"--use_serve".split()
+    )
+
+    run_serve_predict_wrapper(cl_args=predict_test_cl_args)
 
     predict_output_folder = tmp_path / "predict_output" / "results"
     actual_data_path = simulated_path / "phenotype.csv"

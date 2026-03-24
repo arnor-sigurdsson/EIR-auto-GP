@@ -22,6 +22,7 @@ from eir_auto_gp.multi_task.modelling.run_modelling import (
 from eir_auto_gp.predict.data_preparation_utils import get_experiment_bim_file
 from eir_auto_gp.predict.pack import unpack_experiment
 from eir_auto_gp.predict.prepare_data import run_prepare_data
+from eir_auto_gp.predict.serve_predict import ServeConfig, run_serve_predict
 
 logger = get_logger(name=__name__)
 
@@ -54,6 +55,28 @@ def get_parser() -> argparse.ArgumentParser:
         type=int,
         default=1024,
     )
+
+    parser.add_argument(
+        "--use_serve",
+        action="store_true",
+        help="Use eirserve for prediction instead of eirpredict. "
+        "This streams data directly to the model without saving arrays to disk.",
+    )
+
+    parser.add_argument(
+        "--serve_batch_size",
+        type=int,
+        default=32,
+        help="Batch size for serve-based prediction (default: 32).",
+    )
+
+    parser.add_argument(
+        "--serve_chunk_size",
+        type=int,
+        default=1024,
+        help="Chunk size for reading genotype data in serve mode (default: 1024).",
+    )
+
     return parser
 
 
@@ -93,6 +116,42 @@ def run_sync_and_predict_wrapper(
     )
 
     shutil.rmtree(path=data_output_folder)
+    shutil.rmtree(path=unpacked_experiment_path)
+
+
+def run_serve_predict_wrapper(
+    cl_args: argparse.Namespace,
+) -> None:
+    unpacked_experiment_path = Path(
+        unpack_experiment(
+            packed_experiment_path=cl_args.packed_experiment_path,
+            output_path=cl_args.output_folder + "/unpacked_experiment",
+        )
+    )
+
+    output_folder = Path(cl_args.output_folder)
+
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    logger.info(f"Using device: {device}")
+
+    serve_config = ServeConfig(
+        batch_size=cl_args.serve_batch_size,
+        chunk_size=cl_args.serve_chunk_size,
+    )
+
+    run_serve_predict(
+        genotype_data_path=Path(cl_args.genotype_data_path),
+        unpacked_experiment_path=unpacked_experiment_path,
+        output_folder=output_folder,
+        serve_config=serve_config,
+        device=device,
+    )
+
+    gather_results(
+        unpacked_experiment_path=unpacked_experiment_path,
+        output_folder=output_folder / "results",
+    )
+
     shutil.rmtree(path=unpacked_experiment_path)
 
 
@@ -210,9 +269,15 @@ def compute_categorical_ensemble(
         ]
         results[f"{target} Ensemble Raw {class_name}"] = df[class_columns].mean(axis=1)
 
-    raw_outputs = results[[f"{target} Ensemble Raw {c}" for c in classes]].values
+    raw_output_cols = [f"{target} Ensemble Raw {c}" for c in classes]
+    raw_outputs = results[raw_output_cols].values
 
-    if len(classes) == 1:
+    already_probabilities = _check_if_probabilities(values=raw_outputs)
+
+    if already_probabilities:
+        softmax_probs = raw_outputs
+        results = results.drop(columns=raw_output_cols)
+    elif len(classes) == 1:
         class1_probs = 1 / (1 + np.exp(-raw_outputs))
         softmax_probs = np.hstack([1 - class1_probs, class1_probs])
         classes = ["0"] + classes
@@ -227,6 +292,17 @@ def compute_categorical_ensemble(
     ]
 
     return results
+
+
+def _check_if_probabilities(values: np.ndarray) -> bool:
+    if values.shape[1] < 2:
+        return False
+
+    row_sums = values.sum(axis=1)
+    all_sum_to_one = np.allclose(row_sums, 1.0, atol=0.01)
+    all_in_range = np.all((values >= 0) & (values <= 1))
+
+    return all_sum_to_one and all_in_range
 
 
 def compute_ensemble_and_uncertainty(
@@ -425,7 +501,12 @@ def maybe_add_subset_to_input_config(
 def main() -> None:
     parser = get_parser()
     cl_args = parser.parse_args()
-    run_sync_and_predict_wrapper(cl_args=cl_args)
+
+    if cl_args.use_serve:
+        logger.info("Using serve-based prediction (streaming mode)")
+        run_serve_predict_wrapper(cl_args=cl_args)
+    else:
+        run_sync_and_predict_wrapper(cl_args=cl_args)
 
 
 if __name__ == "__main__":

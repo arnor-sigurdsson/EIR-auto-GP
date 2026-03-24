@@ -1,9 +1,13 @@
+import copy
+import logging
 import random
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass()
@@ -27,6 +31,13 @@ def get_shared_mlp_residual_model_size_params(
     return param_dict[model_size]
 
 
+def _get_auto_output_dim(n_targets: int) -> int:
+    if n_targets <= 20:
+        return 512
+    else:
+        return 1024
+
+
 def get_output_configs(
     output_groups: dict[str, list[str]] | None,
     output_cat_columns: list[str],
@@ -34,15 +45,23 @@ def get_output_configs(
     model_size: str,
     output_head: str = "mlp",
     n_output_layers: int | None = None,
-    output_dim: int | None = None,
+    output_dim: int | str | None = None,
     output_num_experts: int | None = None,
 ) -> list[dict[str, Any]]:
+    auto_scale = isinstance(output_dim, str) and output_dim == "auto"
+
     if n_output_layers is not None:
-        assert output_dim is not None
-        shared_mlp_params = SharedMLPResidualModelSizeParams(
-            n_layers=n_output_layers,
-            fc_dim=output_dim,
-        )
+        if auto_scale:
+            shared_mlp_params = SharedMLPResidualModelSizeParams(
+                n_layers=n_output_layers,
+                fc_dim=0,
+            )
+        else:
+            assert output_dim is not None
+            shared_mlp_params = SharedMLPResidualModelSizeParams(
+                n_layers=n_output_layers,
+                fc_dim=output_dim,
+            )
     else:
         shared_mlp_params = get_shared_mlp_residual_model_size_params(
             model_size=model_size
@@ -95,6 +114,7 @@ def get_output_configs(
             output_groups=output_groups,
             output_cat_columns=output_cat_columns,
             output_con_columns=output_con_columns,
+            auto_scale_output_dim=auto_scale,
         )
     else:
         raise ValueError(f"Output head {output_head} not recognized.")
@@ -124,6 +144,7 @@ def create_shared_mlp_configs(
     output_groups: dict[str, list[str]] | None,
     output_cat_columns: list[str],
     output_con_columns: list[str],
+    auto_scale_output_dim: bool = False,
 ) -> list[dict[str, Any]]:
     if output_groups is None:
         raise ValueError("output_groups must be provided for shared_mlp_residual")
@@ -146,6 +167,20 @@ def create_shared_mlp_configs(
                 f"add its traits to the model outputs."
             )
 
+        if auto_scale_output_dim:
+            n_targets = len(cur_cat_columns) + len(cur_con_columns)
+            auto_dim = _get_auto_output_dim(n_targets=n_targets)
+            group_head_config = copy.deepcopy(head_config)
+            group_head_config["model_init_config"]["fc_task_dim"] = auto_dim
+            logger.info(
+                "Auto output_dim for '%s': %d targets -> %d dim",
+                group_name,
+                n_targets,
+                auto_dim,
+            )
+        else:
+            group_head_config = head_config
+
         parsed_configs.append(
             {
                 "output_info": {
@@ -157,7 +192,7 @@ def create_shared_mlp_configs(
                     "target_cat_columns": cur_cat_columns,
                     "target_con_columns": cur_con_columns,
                 },
-                "model_config": head_config,
+                "model_config": group_head_config,
             }
         )
 
