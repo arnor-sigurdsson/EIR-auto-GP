@@ -16,6 +16,7 @@ from eir_auto_gp.multi_task.modelling.output_configs import (
 )
 from eir_auto_gp.multi_task.modelling.tensor_broker import (
     generate_tb_base_config,
+    generate_tb_informed_mgmoe_config,
     generate_tb_informed_moe_config,
     generate_tb_mgmoe_config,
 )
@@ -42,6 +43,7 @@ class ArchitectureParams:
     output_num_experts: int | None
     channel_exp_base: int = 3
     expert_groups_file: str | None = None
+    informed_moe_fusion_factor: int = 1
 
     @classmethod
     def from_modelling_config(cls, config: dict[str, Any]) -> "ArchitectureParams":
@@ -62,6 +64,7 @@ class ArchitectureParams:
             output_num_experts=config.get("output_num_experts"),
             channel_exp_base=config.get("channel_exp_base", 3),
             expert_groups_file=config.get("expert_groups_file"),
+            informed_moe_fusion_factor=config.get("informed_moe_fusion_factor", 1),
         )
 
 
@@ -241,7 +244,7 @@ def _get_informed_moe_input_genotype_config(
     base_cutoff = 4096
     cutoff_per_expert = base_cutoff // len(expert_names)
     nearest_power_of_2 = 2 ** (cutoff_per_expert - 1).bit_length()
-    adjusted_cutoff = max(256, nearest_power_of_2)
+    adjusted_cutoff = max(128, nearest_power_of_2)
 
     needs_fc0_cache = use_fc0_to_output_skips or use_fc0_to_fusion_skips
     for name in expert_names:
@@ -386,6 +389,7 @@ def get_base_fusion_config(
     mgmoe_num_experts: int = 8,
     output_num_experts: int | None = None,
     expert_names: list[str] | None = None,
+    informed_moe_fusion_factor: int = 1,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
         assert fusion_dim is not None
@@ -408,19 +412,33 @@ def get_base_fusion_config(
 
     # note early exit from this function if expert names are passed in
     if expert_names is not None:
-        tb_config = generate_tb_informed_moe_config(
-            expert_names=expert_names,
-            include_tabular=include_tabular,
-            tabular_cache_dropout_p=tabular_cache_dropout_p,
-            output_num_experts=output_num_experts,
-            use_fc0_output_skips=use_fc0_to_output_skips,
-            num_fusion_layers=fmsp.n_layers if use_fc0_to_fusion_skips else None,
-            tb_block_frequency=fmsp.tb_block_frequency,
-        )
-
-        if model_type == "mgmoe":
+        if model_type == "mgmoe" and use_fc0_to_fusion_skips:
             config_base["mg_num_experts"] = mgmoe_num_experts
             config_base["fc_task_dim"] = fmsp.fc_dim // 4
+            tb_config = generate_tb_informed_mgmoe_config(
+                expert_names=expert_names,
+                num_fusion_layers=fmsp.n_layers,
+                tb_block_frequency=fmsp.tb_block_frequency,
+                num_mgmoe_experts=mgmoe_num_experts,
+                fusion_factor=informed_moe_fusion_factor,
+                include_tabular=include_tabular,
+                tabular_cache_dropout_p=tabular_cache_dropout_p,
+                output_num_experts=output_num_experts,
+                use_fc0_output_skips=use_fc0_to_output_skips,
+            )
+        else:
+            tb_config = generate_tb_informed_moe_config(
+                expert_names=expert_names,
+                include_tabular=include_tabular,
+                tabular_cache_dropout_p=tabular_cache_dropout_p,
+                output_num_experts=output_num_experts,
+                use_fc0_output_skips=use_fc0_to_output_skips,
+                num_fusion_layers=fmsp.n_layers if use_fc0_to_fusion_skips else None,
+                tb_block_frequency=fmsp.tb_block_frequency,
+            )
+            if model_type == "mgmoe":
+                config_base["mg_num_experts"] = mgmoe_num_experts
+                config_base["fc_task_dim"] = fmsp.fc_dim // 4
 
         return {
             "model_config": config_base,
@@ -695,6 +713,7 @@ def get_aggregate_config(
         mgmoe_num_experts=arch_params.mgmoe_num_experts,
         output_num_experts=arch_params.output_num_experts,
         expert_names=expert_names,
+        informed_moe_fusion_factor=arch_params.informed_moe_fusion_factor,
     )
     output_configs = get_output_configs(
         output_head=output_head,

@@ -1,3 +1,4 @@
+import random
 from typing import Any
 
 
@@ -301,6 +302,89 @@ def _get_fusion_layer_targets(
         if layer % tb_block_frequency == 0:
             targets.append(f"{base}.1.{layer}")
     return targets
+
+
+def _get_mgmoe_fusion_layer_targets(
+    num_fusion_layers: int,
+    tb_block_frequency: int,
+    num_mgmoe_experts: int,
+) -> list[str]:
+    base = "fusion_modules.computed.expert_branches"
+    targets = []
+    for expert in range(num_mgmoe_experts):
+        targets.append(f"{base}.expert_{expert}.0.0")
+        num_layers_adjusted = num_fusion_layers - 2
+        for layer in range(0, num_layers_adjusted + 1):
+            if layer % tb_block_frequency == 0:
+                targets.append(f"{base}.expert_{expert}.1.{layer}")
+    return targets
+
+
+def generate_tb_informed_mgmoe_config(
+    expert_names: list[str],
+    num_fusion_layers: int,
+    tb_block_frequency: int,
+    num_mgmoe_experts: int,
+    fusion_factor: int = 1,
+    include_tabular: bool = True,
+    tabular_cache_dropout_p: float = 0.00,
+    output_num_experts: int | None = None,
+    use_fc0_output_skips: bool = True,
+) -> dict[str, list[dict[str, Any]]]:
+    message_configs: list[dict[str, Any]] = []
+
+    mgmoe_targets = _get_mgmoe_fusion_layer_targets(
+        num_fusion_layers=num_fusion_layers,
+        tb_block_frequency=tb_block_frequency,
+        num_mgmoe_experts=num_mgmoe_experts,
+    )
+
+    for name in expert_names:
+        for factor_idx in range(fusion_factor):
+            target = random.choice(mgmoe_targets)
+            message_configs.append(
+                {
+                    "name": f"expert_{name}_fc_0_to_mgmoe_f{factor_idx}",
+                    "layer_path": target,
+                    "use_from_cache": [f"expert_{name}_fc_0"],
+                    "projection_type": "lcl+mlp_residual",
+                    "cache_fusion_type": "sum",
+                    "kernel_width_divisible_by": 12,
+                }
+            )
+
+    for name in expert_names:
+        if use_fc0_output_skips:
+            if output_num_experts is not None:
+                deep_target = "input_identity"
+            else:
+                deep_target = "shared_branch.0.0.0"
+
+            message_configs.append(
+                {
+                    "name": f"expert_{name}_deep_to_output",
+                    "layer_path": f"output_modules.eir_auto_gp_{name}.{deep_target}",
+                    "use_from_cache": [f"expert_{name}_fc_0"],
+                    "projection_type": "lcl+mlp_residual",
+                    "projection_lcl_residual_blocks": True,
+                    "cache_fusion_type": "sum",
+                    "kernel_width_divisible_by": 12,
+                }
+            )
+
+        if include_tabular:
+            message_configs.append(
+                {
+                    "name": f"tabular_to_{name}",
+                    "layer_path": f"output_modules.eir_auto_gp_{name}.output_identity",
+                    "use_from_cache": ["tabular_output"],
+                    "projection_type": "mlp_residual",
+                    "cache_fusion_type": "additive",
+                    "cache_dropout_p": tabular_cache_dropout_p,
+                }
+            )
+
+    return {"message_configs": message_configs}
 
 
 def generate_tb_informed_moe_config(
