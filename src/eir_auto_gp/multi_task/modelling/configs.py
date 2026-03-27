@@ -111,7 +111,7 @@ def get_base_global_config(
         },
         "training_control": {
             "early_stopping_buffer": "FILL",
-            "early_stopping_patience": 10,
+            "early_stopping_patience": 12,
             "mixing_alpha": "FILL",
         },
         "attribution_analysis": {

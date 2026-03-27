@@ -36,7 +36,7 @@ class ServeConfig:
     base_port: int = 8000
     batch_size: int = 32
     chunk_size: int = 1024
-    startup_timeout: float = 120.0
+    startup_timeout: float = 300.0
     request_timeout: float = 300.0
 
 

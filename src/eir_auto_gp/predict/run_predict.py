@@ -53,7 +53,7 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--genotype_processing_chunk_size",
         type=int,
-        default=1024,
+        default=8192,
     )
 
     parser.add_argument(
@@ -73,7 +73,7 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--serve_chunk_size",
         type=int,
-        default=1024,
+        default=8192,
         help="Chunk size for reading genotype data in serve mode (default: 1024).",
     )
 
