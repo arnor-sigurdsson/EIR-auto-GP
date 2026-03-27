@@ -363,7 +363,9 @@ def build_injection_params(
     params = SingleTaskModelInjectionParams(
         fold=fold,
         output_folder=cur_run_output_folder,
-        manual_valid_ids_file=str(manual_valid_ids_file),
+        manual_valid_ids_file=str(manual_valid_ids_file)
+        if manual_valid_ids_file is not None
+        else None,
         genotype_input_source=data_input_dict[f"{task}_genotype"].path,
         genotype_subset_snps_file=str(snp_subset_file)
         if snp_subset_file is not None

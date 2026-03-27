@@ -81,7 +81,9 @@ def build_injection_params(
         fold=fold,
         output_folder=cur_run_output_folder,
         modelling_base_output_folder=base_output_folder,
-        manual_valid_ids_file=str(manual_valid_ids_file),
+        manual_valid_ids_file=str(manual_valid_ids_file)
+        if manual_valid_ids_file is not None
+        else None,
         genotype_input_source=data_input_dict[f"{task}_genotype"].path,
         label_file_path=label_file_path,
         genotype_feature_selection=modelling_config["genotype_feature_selection"],
