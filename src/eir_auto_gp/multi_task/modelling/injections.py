@@ -348,7 +348,7 @@ def _get_all_dynamic_injections(
         batch_size = get_batch_size(samples_per_epoch=spe.samples_per_epoch)
 
     valid_size = get_dynamic_valid_size(
-        num_samples_per_epoch=spe.samples_per_epoch,
+        num_samples_per_epoch=spe.num_samples_total,
         minimum=batch_size,
     )
     iter_per_epoch = get_num_iter_per_epoch(
