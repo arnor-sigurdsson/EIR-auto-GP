@@ -611,6 +611,7 @@ def generate_tb_informed_moe_config(
                         "use_from_cache": dense_cache_names,
                         "multi_source_aggregation": "attention",
                         "projection_type": "lcl+mlp_residual",
+                        "projection_lcl_residual_blocks": True,
                         "cache_fusion_type": "sum",
                         "kernel_width_divisible_by": 12,
                     }
