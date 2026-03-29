@@ -390,6 +390,7 @@ def get_base_fusion_config(
     output_num_experts: int | None = None,
     expert_names: list[str] | None = None,
     informed_moe_fusion_factor: int = 1,
+    dense_output_connections: bool = True,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
         assert fusion_dim is not None
@@ -435,6 +436,7 @@ def get_base_fusion_config(
                 use_fc0_output_skips=use_fc0_to_output_skips,
                 num_fusion_layers=fmsp.n_layers if use_fc0_to_fusion_skips else None,
                 tb_block_frequency=fmsp.tb_block_frequency,
+                dense_output_connections=dense_output_connections,
             )
             if model_type == "mgmoe":
                 config_base["mg_num_experts"] = mgmoe_num_experts
@@ -461,7 +463,10 @@ def get_base_fusion_config(
     }
 
     if model_type in ("mlp-residual", "mlp-residual-sum"):
-        tb_config = generate_tb_base_config(**tb_kwargs)
+        tb_config = generate_tb_base_config(
+            **tb_kwargs,
+            dense_output_connections=dense_output_connections,
+        )
         base = {
             "model_config": config_base,
             "model_type": model_type,

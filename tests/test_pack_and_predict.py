@@ -471,6 +471,7 @@ def test_pack_predict_with_tabular_train_genotype_predict_with_experts(
     custom_config = CustomConfig(
         expert_groups_file=str(expert_groups_path),
         use_fc0_to_output_skips=True,
+        use_fc0_to_fusion_skips=True,
         fusion_model_type="mlp-residual-sum",
     )
 
