@@ -8,9 +8,9 @@ import polars as pl
 
 from eir_auto_gp.multi_task.modelling.hyperparameters import (
     _get_checkpoint_interval,
-    _get_compile_model,
     _get_learning_rate,
-    _get_supported_precision,
+    _get_resolved_compile_model,
+    _get_resolved_precision,
     build_random_snp_subset_file,
     get_gln_kernel_parameters,
 )
@@ -45,7 +45,8 @@ class MultiTaskModelInjectionParams:
     modelling_data_format: str
     output_configs: list[dict[str, Any]]
     batch_size: int | None
-    optimize_model: bool
+    mixed_precision: bool
+    compile_model: bool
     genotype_only_test: bool = False
 
 
@@ -95,7 +96,8 @@ def build_injection_params(
         modelling_data_format=data_config["modelling_data_format"],
         output_configs=output_configs,
         batch_size=modelling_config["batch_size"],
-        optimize_model=modelling_config["optimize_model"],
+        mixed_precision=modelling_config["mixed_precision"],
+        compile_model=modelling_config["compile_model"],
         genotype_only_test=genotype_only_test,
     )
 
@@ -165,7 +167,8 @@ def _get_global_injections(
     iter_per_epoch: int,
     weighted_sampling_columns: list[str] | None,
     modelling_data_format: str,
-    optimize_model: bool,
+    mixed_precision: bool,
+    compile_model: bool,
 ) -> dict[str, Any]:
     mixing_candidates = [0.0]
     cur_mixing = mixing_candidates[fold % len(mixing_candidates)]
@@ -195,8 +198,8 @@ def _get_global_injections(
     )
 
     lr = _get_learning_rate(n_snps=n_snps)
-    precision = _get_supported_precision(optimize_model=optimize_model)
-    compile_model = _get_compile_model(optimize_model=optimize_model)
+    precision = _get_resolved_precision(mixed_precision=mixed_precision)
+    compile_model = _get_resolved_compile_model(compile_model=compile_model)
 
     injections = {
         "basic_experiment": {
@@ -385,7 +388,8 @@ def _get_all_dynamic_injections(
             n_samples=spe.num_samples_total,
             weighted_sampling_columns=mip.weighted_sampling_columns,
             modelling_data_format=mip.modelling_data_format,
-            optimize_model=mip.optimize_model,
+            mixed_precision=mip.mixed_precision,
+            compile_model=mip.compile_model,
         ),
         "input_genotype_config": _get_genotype_injections(
             input_source=mip.genotype_input_source,

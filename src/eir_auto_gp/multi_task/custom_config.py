@@ -28,9 +28,11 @@ class CustomConfig:
         ``"auto"`` enables it only when there are categorical targets but
         no continuous targets. ``"true"``/``"false"`` force it on/off.
 
-    :param optimize_model:
-        Enables model optimizations including ``torch.compile``
-        and mixed precision (bf16) training when supported by hardware.
+    :param mixed_precision:
+        Enables mixed precision (bf16) training when supported by hardware.
+
+    :param compile_model:
+        Enables ``torch.compile`` model compilation when supported by hardware.
 
     :param modelling_data_format:
         Storage format for data during modelling.
@@ -107,7 +109,8 @@ class CustomConfig:
     use_fc0_to_output_skips: bool = False
     use_fc0_to_fusion_skips: bool = False
     weighted_sampling: str = "auto"
-    optimize_model: bool = False
+    mixed_precision: bool = False
+    compile_model: bool = False
     modelling_data_format: str = "disk"
     n_fusion_layers: int | None = None
     fusion_dim: int | None = None

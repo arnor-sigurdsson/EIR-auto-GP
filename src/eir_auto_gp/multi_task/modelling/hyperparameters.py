@@ -12,9 +12,9 @@ from eir_auto_gp.utils.utils import get_logger
 logger = get_logger(name=__name__)
 
 
-def _get_supported_precision(optimize_model: bool) -> str:
-    if not optimize_model:
-        logger.info("Model optimization disabled. Using 32-true precision.")
+def _get_resolved_precision(mixed_precision: bool) -> str:
+    if not mixed_precision:
+        logger.info("Mixed precision disabled. Using 32-true precision.")
         return "32-true"
 
     if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
@@ -25,9 +25,9 @@ def _get_supported_precision(optimize_model: bool) -> str:
     return "32-true"
 
 
-def _get_compile_model(optimize_model: bool) -> bool:
-    if not optimize_model:
-        logger.info("Model optimization disabled. torch.compile disabled.")
+def _get_resolved_compile_model(compile_model: bool) -> bool:
+    if not compile_model:
+        logger.info("torch.compile disabled.")
         return False
 
     if torch.backends.mps.is_available():
@@ -38,7 +38,7 @@ def _get_compile_model(optimize_model: bool) -> bool:
         logger.info("Enabling torch.compile for CUDA.")
         return True
 
-    logger.info("torch.compile disabled on CPU (experimental for training). ")
+    logger.info("torch.compile disabled on CPU (experimental for training).")
     return False
 
 
