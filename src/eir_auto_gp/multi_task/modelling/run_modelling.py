@@ -137,7 +137,7 @@ def _filter_tabular_from_fusion_config(config: dict) -> dict:
             )
             continue
 
-        if "use_from_cache" in msg:
+        if msg.get("use_from_cache"):
             original_cache = msg["use_from_cache"]
             filtered_cache = [c for c in original_cache if c != "tabular_output"]
             if len(filtered_cache) < len(original_cache):
