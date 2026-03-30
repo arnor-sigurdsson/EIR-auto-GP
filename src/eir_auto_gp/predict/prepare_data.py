@@ -438,8 +438,7 @@ def get_projected_snp_stream(
     snp_mapping: SNPMapping,
 ) -> Generator[tuple[str, np.ndarray]]:
     for sample_id, source_array in from_stream:
-        projected_array = np.zeros((4, snp_mapping.n_target_snps), dtype=np.uint8)
-        projected_array[3, :] = 1
+        projected_array = np.zeros((3, snp_mapping.n_target_snps), dtype=np.uint8)
 
         projected_array[:, snp_mapping.direct_match_target_indices] = source_array[
             :, snp_mapping.direct_match_source_indices
@@ -450,7 +449,8 @@ def get_projected_snp_stream(
             flipped_data[[0, 2]] = flipped_data[[2, 0]]
             projected_array[:, snp_mapping.flip_match_target_indices] = flipped_data
 
-        assert np.allclose(projected_array.sum(axis=0), 1.0)
+        col_sums = projected_array.sum(axis=0)
+        assert ((col_sums == 0) | (col_sums == 1)).all()
         yield sample_id, projected_array
 
 

@@ -214,6 +214,7 @@ def _get_global_injections(
             "mixing_alpha": cur_mixing,
             "early_stopping_buffer": early_stopping_buffer,
             "weighted_sampling_columns": weighted_sampling_columns,
+            **({"manifold_mixup_layer_groups": None} if cur_mixing <= 0 else {}),
         },
         "model": {
             "compile_model": compile_model,

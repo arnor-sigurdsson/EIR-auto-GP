@@ -97,6 +97,10 @@ class CustomConfig:
     :param adversarial_lambda:
         Weight of the adversarial loss term. Higher values enforce stronger
         disentanglement between genotype and tabular features.
+
+    :param channel_exp_base:
+        Base exponent for the number of channels in the genome-local-net.
+        The number of channel feature sets is ``2**channel_exp_base``.
     """
 
     use_lcl_to_output_skips: bool | str = False
@@ -115,8 +119,10 @@ class CustomConfig:
     mgmoe_num_experts: int = 8
     output_num_experts: int | None = None
     expert_groups_file: str | None = None
+    informed_moe_fusion_factor: int = 1
     adversarial_enabled: bool = True
     adversarial_lambda: float = 0.5
+    channel_exp_base: int = 3
 
     def __post_init__(self) -> None:
         valid_skip_values = (True, False, "fc_1_only")
@@ -125,6 +131,9 @@ class CustomConfig:
                 f"use_lcl_to_output_skips must be one of {valid_skip_values}, "
                 f"got {self.use_lcl_to_output_skips!r}"
             )
+
+        if isinstance(self.weighted_sampling, bool):
+            self.weighted_sampling = str(self.weighted_sampling).lower()
 
         valid_sampling = ("auto", "true", "false")
         if self.weighted_sampling not in valid_sampling:
@@ -147,12 +156,16 @@ class CustomConfig:
                 f"got {self.fusion_model_type!r}"
             )
 
-        if self.fusion_model_type == "mgmoe" and self.use_fc0_to_fusion_skips:
+        if (
+            self.fusion_model_type == "mgmoe"
+            and self.use_fc0_to_fusion_skips
+            and self.expert_groups_file is None
+        ):
             raise ValueError(
-                "use_fc0_to_fusion_skips=True is not supported with "
-                "fusion_model_type='mgmoe'. MGMoE has a different internal "
-                "structure that does not support fusion skip connections. "
-                "Use fusion_model_type='mlp-residual-sum' instead."
+                "use_fc0_to_fusion_skips=True with fusion_model_type='mgmoe' "
+                "is only supported when expert_groups_file is set (informed "
+                "MoE input). Without expert groups, use "
+                "fusion_model_type='mlp-residual-sum' instead."
             )
 
         if self.output_dim is not None:
@@ -178,9 +191,20 @@ class CustomConfig:
                 f"got {self.output_num_experts}"
             )
 
+        if self.informed_moe_fusion_factor < 1:
+            raise ValueError(
+                f"informed_moe_fusion_factor must be >= 1, "
+                f"got {self.informed_moe_fusion_factor}"
+            )
+
         if self.adversarial_lambda < 0:
             raise ValueError(
                 f"adversarial_lambda must be >= 0, got {self.adversarial_lambda}"
+            )
+
+        if self.channel_exp_base < 1:
+            raise ValueError(
+                f"channel_exp_base must be >= 1, got {self.channel_exp_base}"
             )
 
     @classmethod

@@ -776,13 +776,13 @@ def _get_learning_rate(n_snps: int) -> float:
 
 def get_gln_kernel_parameters(n_snps: int) -> tuple[int, int]:
     if n_snps < 100_000:
-        params = 16, -4
+        params = 12, -4
     elif n_snps < 500_000:
-        params = 16, 2
+        params = 12, 2
     elif n_snps < 2_000_000:
-        params = 16, 4
+        params = 12, 4
     else:
-        params = 16, 8
+        params = 12, 8
 
     logger.info(
         "Setting kernel width to %d and first kernel expansion to %d based on %d SNPs.",

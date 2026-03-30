@@ -66,8 +66,8 @@ def get_memory_dataset(n_snps: int, n_samples: int) -> bool:
     )
     upper_bound = 0.5 * available_memory
 
-    # 4 for one-hot encoding
-    total_size = n_snps * n_samples * 4
+    # 3 for one-hot encoding
+    total_size = n_snps * n_samples * 3
 
     percent = total_size / available_memory
     if total_size < upper_bound:

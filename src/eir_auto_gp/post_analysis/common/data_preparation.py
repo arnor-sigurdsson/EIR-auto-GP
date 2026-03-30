@@ -290,8 +290,9 @@ def load_genotype_samples_into_df(
     for sample_id, sample_genotype in sample_id_iter:
         sample_genotype_subset = sample_genotype[:, genotype_indices_to_load]
 
+        is_missing = sample_genotype_subset.sum(axis=0) == 0
         array_maxed = sample_genotype_subset.argmax(0).astype(np.float32)
-        array_maxed[array_maxed == 3] = np.nan
+        array_maxed[is_missing] = np.nan
 
         ids.append(sample_id)
         genotype_arrays.append(array_maxed)

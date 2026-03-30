@@ -16,6 +16,7 @@ from eir_auto_gp.multi_task.modelling.output_configs import (
 )
 from eir_auto_gp.multi_task.modelling.tensor_broker import (
     generate_tb_base_config,
+    generate_tb_informed_mgmoe_config,
     generate_tb_informed_moe_config,
     generate_tb_mgmoe_config,
 )
@@ -40,7 +41,9 @@ class ArchitectureParams:
     fusion_model_type: str
     mgmoe_num_experts: int
     output_num_experts: int | None
+    channel_exp_base: int = 3
     expert_groups_file: str | None = None
+    informed_moe_fusion_factor: int = 1
 
     @classmethod
     def from_modelling_config(cls, config: dict[str, Any]) -> "ArchitectureParams":
@@ -59,7 +62,9 @@ class ArchitectureParams:
             fusion_model_type=config["fusion_model_type"],
             mgmoe_num_experts=config["mgmoe_num_experts"],
             output_num_experts=config.get("output_num_experts"),
+            channel_exp_base=config.get("channel_exp_base", 3),
             expert_groups_file=config.get("expert_groups_file"),
+            informed_moe_fusion_factor=config.get("informed_moe_fusion_factor", 1),
         )
 
 
@@ -80,6 +85,7 @@ class AdversarialParams:
 
 def get_base_global_config(
     adversarial_configs: list[dict[str, Any]] | None = None,
+    manifold_mixup_layer_groups: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     base = {
         "basic_experiment": {
@@ -126,6 +132,11 @@ def get_base_global_config(
     if adversarial_configs:
         base["adversarial_training"] = {"adversarial_configs": adversarial_configs}
 
+    if manifold_mixup_layer_groups:
+        base["training_control"]["manifold_mixup_layer_groups"] = (
+            manifold_mixup_layer_groups
+        )
+
     return base
 
 
@@ -155,12 +166,14 @@ def get_base_input_genotype_config(
     use_fc0_to_fusion_skips: bool = True,
     use_lcl_to_output_skips: bool | str = False,
     expert_names: list[str] | None = None,
+    channel_exp_base: int = 3,
 ) -> dict[str, Any]:
     if expert_names is not None:
         return _get_informed_moe_input_genotype_config(
             expert_names=expert_names,
             use_fc0_to_output_skips=use_fc0_to_output_skips,
             use_fc0_to_fusion_skips=use_fc0_to_fusion_skips,
+            channel_exp_base=channel_exp_base,
         )
 
     message_configs = []
@@ -204,7 +217,7 @@ def get_base_input_genotype_config(
             "model_init_config": {
                 "rb_do": 0.10,
                 "stochastic_depth_p": 0.00,
-                "channel_exp_base": 3,
+                "channel_exp_base": channel_exp_base,
                 "kernel_width": "FILL",
                 "first_kernel_expansion": "FILL",
                 "l1": 0.0,
@@ -224,13 +237,14 @@ def _get_informed_moe_input_genotype_config(
     expert_names: list[str],
     use_fc0_to_output_skips: bool = True,
     use_fc0_to_fusion_skips: bool = True,
+    channel_exp_base: int = 3,
 ) -> dict[str, Any]:
     message_configs = []
 
     base_cutoff = 4096
     cutoff_per_expert = base_cutoff // len(expert_names)
     nearest_power_of_2 = 2 ** (cutoff_per_expert - 1).bit_length()
-    adjusted_cutoff = max(256, nearest_power_of_2)
+    adjusted_cutoff = max(128, nearest_power_of_2)
 
     needs_fc0_cache = use_fc0_to_output_skips or use_fc0_to_fusion_skips
     for name in expert_names:
@@ -263,7 +277,7 @@ def _get_informed_moe_input_genotype_config(
             "model_init_config": {
                 "rb_do": 0.10,
                 "stochastic_depth_p": 0.00,
-                "channel_exp_base": 3,
+                "channel_exp_base": channel_exp_base,
                 "kernel_width": "FILL",
                 "first_kernel_expansion": "FILL",
                 "l1": 0.0,
@@ -286,7 +300,7 @@ def get_num_lcl_blocks(
     stochastic_depth_p: float = 0.00,
     cutoff: int = 4096,
 ) -> int:
-    in_features = n_snps * 4
+    in_features = n_snps * 3
 
     fc_0_kernel_size = calc_value_after_expansion(
         base=kernel_width,
@@ -375,6 +389,7 @@ def get_base_fusion_config(
     mgmoe_num_experts: int = 8,
     output_num_experts: int | None = None,
     expert_names: list[str] | None = None,
+    informed_moe_fusion_factor: int = 1,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
         assert fusion_dim is not None
@@ -397,19 +412,33 @@ def get_base_fusion_config(
 
     # note early exit from this function if expert names are passed in
     if expert_names is not None:
-        tb_config = generate_tb_informed_moe_config(
-            expert_names=expert_names,
-            include_tabular=include_tabular,
-            tabular_cache_dropout_p=tabular_cache_dropout_p,
-            output_num_experts=output_num_experts,
-            use_fc0_output_skips=use_fc0_to_output_skips,
-            num_fusion_layers=fmsp.n_layers if use_fc0_to_fusion_skips else None,
-            tb_block_frequency=fmsp.tb_block_frequency,
-        )
-
-        if model_type == "mgmoe":
+        if model_type == "mgmoe" and use_fc0_to_fusion_skips:
             config_base["mg_num_experts"] = mgmoe_num_experts
             config_base["fc_task_dim"] = fmsp.fc_dim // 4
+            tb_config = generate_tb_informed_mgmoe_config(
+                expert_names=expert_names,
+                num_fusion_layers=fmsp.n_layers,
+                tb_block_frequency=fmsp.tb_block_frequency,
+                num_mgmoe_experts=mgmoe_num_experts,
+                fusion_factor=informed_moe_fusion_factor,
+                include_tabular=include_tabular,
+                tabular_cache_dropout_p=tabular_cache_dropout_p,
+                output_num_experts=output_num_experts,
+                use_fc0_output_skips=use_fc0_to_output_skips,
+            )
+        else:
+            tb_config = generate_tb_informed_moe_config(
+                expert_names=expert_names,
+                include_tabular=include_tabular,
+                tabular_cache_dropout_p=tabular_cache_dropout_p,
+                output_num_experts=output_num_experts,
+                use_fc0_output_skips=use_fc0_to_output_skips,
+                num_fusion_layers=fmsp.n_layers if use_fc0_to_fusion_skips else None,
+                tb_block_frequency=fmsp.tb_block_frequency,
+            )
+            if model_type == "mgmoe":
+                config_base["mg_num_experts"] = mgmoe_num_experts
+                config_base["fc_task_dim"] = fmsp.fc_dim // 4
 
         return {
             "model_config": config_base,
@@ -509,6 +538,50 @@ def _get_adversarial_configs(
     return adversarial_configs
 
 
+def _get_manifold_mixup_layer_groups_informed_moe(
+    expert_names: list[str],
+) -> dict[str, list[str]]:
+    input_experts = [
+        f"input_modules.genotype.expert_branches.{name}.lcl_blocks"
+        for name in expert_names
+    ]
+
+    output_entry = [
+        f"output_modules.eir_auto_gp_{name}.shared_branch.0.0.0"
+        for name in expert_names
+    ]
+
+    output_deep = [
+        f"output_modules.eir_auto_gp_{name}.shared_branch.0.1" for name in expert_names
+    ]
+
+    return {
+        "input_experts": input_experts,
+        "output_entry": output_entry,
+        "output_deep": output_deep,
+    }
+
+
+def _get_manifold_mixup_layer_groups_base(
+    output_groups: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    group_names = list(output_groups.keys())
+
+    output_entry = [
+        f"output_modules.eir_auto_gp_{name}.shared_branch.0.0.0" for name in group_names
+    ]
+
+    output_deep = [
+        f"output_modules.eir_auto_gp_{name}.shared_branch.0.1" for name in group_names
+    ]
+
+    return {
+        "input_encoder": ["input_modules.genotype.lcl_blocks"],
+        "output_entry": output_entry,
+        "output_deep": output_deep,
+    }
+
+
 @dataclass(frozen=True)
 class AggregateConfig:
     global_config: dict[str, Any]
@@ -596,12 +669,26 @@ def get_aggregate_config(
             adversarial_layers=adversarial_params.layers,
         )
 
-    global_config = get_base_global_config(adversarial_configs=adversarial_configs)
+    manifold_mixup_layer_groups = None
+    if expert_names is not None:
+        manifold_mixup_layer_groups = _get_manifold_mixup_layer_groups_informed_moe(
+            expert_names=expert_names,
+        )
+    elif built_output_groups is not None:
+        manifold_mixup_layer_groups = _get_manifold_mixup_layer_groups_base(
+            output_groups=built_output_groups,
+        )
+
+    global_config = get_base_global_config(
+        adversarial_configs=adversarial_configs,
+        manifold_mixup_layer_groups=manifold_mixup_layer_groups,
+    )
     input_genotype_config = get_base_input_genotype_config(
         use_fc0_to_output_skips=arch_params.use_fc0_to_output_skips,
         use_fc0_to_fusion_skips=arch_params.use_fc0_to_fusion_skips,
         use_lcl_to_output_skips=arch_params.use_lcl_to_output_skips,
         expert_names=expert_names,
+        channel_exp_base=arch_params.channel_exp_base,
     )
     input_tabular_config = get_base_tabular_input_config(
         cache_for_output_heads=tabular_params.enabled,
@@ -625,6 +712,7 @@ def get_aggregate_config(
         mgmoe_num_experts=arch_params.mgmoe_num_experts,
         output_num_experts=arch_params.output_num_experts,
         expert_names=expert_names,
+        informed_moe_fusion_factor=arch_params.informed_moe_fusion_factor,
     )
     output_configs = get_output_configs(
         output_head=output_head,
