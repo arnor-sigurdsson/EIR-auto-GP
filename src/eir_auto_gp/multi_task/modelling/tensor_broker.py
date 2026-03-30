@@ -572,18 +572,25 @@ def generate_tb_informed_moe_config(
             num_fusion_layers=num_fusion_layers,
             tb_block_frequency=tb_block_frequency,
         )
+        target_to_experts: dict[str, list[str]] = {}
         for i, name in enumerate(expert_names):
             target = fusion_targets[i % len(fusion_targets)]
-            message_configs.append(
-                {
-                    "name": f"expert_{name}_fc_0_to_fusion",
-                    "layer_path": target,
-                    "use_from_cache": [f"expert_{name}_fc_0"],
-                    "projection_type": "lcl+mlp_residual",
-                    "cache_fusion_type": "sum",
-                    "kernel_width_divisible_by": 12,
-                }
-            )
+            target_to_experts.setdefault(target, []).append(name)
+
+        for target, names in target_to_experts.items():
+            cache_names = [f"expert_{n}_fc_0" for n in names]
+            expert_label = "+".join(names)
+            msg: dict[str, Any] = {
+                "name": f"experts_{expert_label}_fc_0_to_fusion",
+                "layer_path": target,
+                "use_from_cache": cache_names,
+                "projection_type": "lcl+mlp_residual",
+                "cache_fusion_type": "sum",
+                "kernel_width_divisible_by": 12,
+            }
+            if len(cache_names) > 1:
+                msg["multi_source_aggregation"] = "attention"
+            message_configs.append(msg)
 
     fusion_cache_names: list[str] = []
     if dense_output_connections and num_fusion_layers is not None:
