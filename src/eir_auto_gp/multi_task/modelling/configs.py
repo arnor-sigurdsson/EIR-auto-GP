@@ -105,6 +105,7 @@ def get_base_global_config(
             "lr": "FILL",
             "gradient_clipping": 1.0,
             "optimizer": "adamw",
+            "wd": 0.05,
         },
         "lr_schedule": {
             "lr_plateau_patience": 8,
