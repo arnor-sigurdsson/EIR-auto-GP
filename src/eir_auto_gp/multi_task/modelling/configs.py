@@ -411,6 +411,8 @@ def get_base_fusion_config(
         "stochastic_depth_p": 0.10,
     }
 
+    modalities_to_skip = ["eir_tabular"] if include_tabular else None
+
     # note early exit from this function if expert names are passed in
     if expert_names is not None:
         if model_type == "mgmoe" and use_fc0_to_fusion_skips:
@@ -441,11 +443,16 @@ def get_base_fusion_config(
                 config_base["mg_num_experts"] = mgmoe_num_experts
                 config_base["fc_task_dim"] = fmsp.fc_dim // 4
 
-        return {
+        base = {
             "model_config": config_base,
             "model_type": model_type,
             "tensor_broker_config": tb_config,
         }
+
+        if modalities_to_skip:
+            base["modalities_to_skip"] = modalities_to_skip
+
+        return base
 
     tb_kwargs = {
         "num_layers": fmsp.n_layers,
@@ -468,6 +475,9 @@ def get_base_fusion_config(
             "model_type": model_type,
             "tensor_broker_config": tb_config,
         }
+
+        if modalities_to_skip:
+            base["modalities_to_skip"] = modalities_to_skip
 
     elif model_type == "mgmoe":
         config_base["mg_num_experts"] = mgmoe_num_experts
