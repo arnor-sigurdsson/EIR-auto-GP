@@ -256,8 +256,10 @@ class TestSingleRun(luigi.Task):
             self.modelling_config["input_cat_columns"]
             or self.modelling_config["input_con_columns"]
         )
-        tabular_to_output_skips = has_tabular_columns and not self.modelling_config.get(
-            "genotype_only_test", False
+        tabular_to_output_skips = (
+            has_tabular_columns
+            and not self.modelling_config.get("genotype_only_test", False)
+            and self.modelling_config.get("use_tabular_to_output_skips", True)
         )
 
         arch_params = ArchitectureParams.from_modelling_config(
@@ -422,7 +424,10 @@ class TrainSingleRun(luigi.Task):
         arch_params = ArchitectureParams.from_modelling_config(
             config=self.modelling_config,
         )
-        tabular_params = TabularSkipParams(enabled=has_tabular_columns)
+        tabular_to_output_skips = has_tabular_columns and self.modelling_config.get(
+            "use_tabular_to_output_skips", True
+        )
+        tabular_params = TabularSkipParams(enabled=tabular_to_output_skips)
         adversarial_params = AdversarialParams(
             enabled=self.modelling_config.get("adversarial_enabled", True),
             lambda_=self.modelling_config.get("adversarial_lambda", 0.5),
