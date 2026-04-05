@@ -314,7 +314,7 @@ def _get_output_injections(
             "target_con_columns": output_con_columns,
             "cat_loss_name": cat_loss,
             "cat_loss_class_balanced": use_cb,
-            "uncertainty_weighted_mt_loss": True,
+            "uncertainty_weighted_mt_loss": False,
         },
     }
 
