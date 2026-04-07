@@ -247,6 +247,10 @@ def _get_informed_moe_input_genotype_config(
     nearest_power_of_2 = 2 ** (cutoff_per_expert - 1).bit_length()
     adjusted_cutoff = max(128, nearest_power_of_2)
 
+    stub_experts = False
+    if use_fc0_to_output_skips and not use_fc0_to_fusion_skips:
+        stub_experts = True
+
     needs_fc0_cache = use_fc0_to_output_skips or use_fc0_to_fusion_skips
     for name in expert_names:
         if needs_fc0_cache:
@@ -284,6 +288,7 @@ def _get_informed_moe_input_genotype_config(
                 "l1": 0.0,
                 "cutoff": adjusted_cutoff,
                 "attention_inclusion_cutoff": 0,
+                "stub_experts": stub_experts,
             },
         },
         "tensor_broker_config": {
