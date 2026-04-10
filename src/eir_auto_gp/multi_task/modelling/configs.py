@@ -44,6 +44,7 @@ class ArchitectureParams:
     channel_exp_base: int = 3
     expert_groups_file: str | None = None
     informed_moe_fusion_factor: int = 1
+    use_fc0_to_final_skip: bool = False
 
     @classmethod
     def from_modelling_config(cls, config: dict[str, Any]) -> "ArchitectureParams":
@@ -65,6 +66,7 @@ class ArchitectureParams:
             channel_exp_base=config.get("channel_exp_base", 3),
             expert_groups_file=config.get("expert_groups_file"),
             informed_moe_fusion_factor=config.get("informed_moe_fusion_factor", 1),
+            use_fc0_to_final_skip=config.get("use_fc0_to_final_skip", False),
         )
 
 
@@ -396,6 +398,7 @@ def get_base_fusion_config(
     output_num_experts: int | None = None,
     expert_names: list[str] | None = None,
     informed_moe_fusion_factor: int = 1,
+    use_fc0_to_final_skip: bool = False,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
         assert fusion_dim is not None
@@ -433,6 +436,7 @@ def get_base_fusion_config(
                 tabular_cache_dropout_p=tabular_cache_dropout_p,
                 output_num_experts=output_num_experts,
                 use_fc0_output_skips=use_fc0_to_output_skips,
+                use_fc0_to_final_skip=use_fc0_to_final_skip,
             )
         else:
             tb_config = generate_tb_informed_moe_config(
@@ -443,6 +447,7 @@ def get_base_fusion_config(
                 use_fc0_output_skips=use_fc0_to_output_skips,
                 num_fusion_layers=fmsp.n_layers if use_fc0_to_fusion_skips else None,
                 tb_block_frequency=fmsp.tb_block_frequency,
+                use_fc0_to_final_skip=use_fc0_to_final_skip,
             )
             if model_type == "mgmoe":
                 config_base["mg_num_experts"] = mgmoe_num_experts
@@ -471,6 +476,7 @@ def get_base_fusion_config(
         "include_tabular": include_tabular,
         "tabular_cache_dropout_p": tabular_cache_dropout_p,
         "output_num_experts": output_num_experts,
+        "use_fc0_to_final_skip": use_fc0_to_final_skip,
     }
 
     if model_type in ("mlp-residual", "mlp-residual-sum"):
@@ -730,6 +736,7 @@ def get_aggregate_config(
         output_num_experts=arch_params.output_num_experts,
         expert_names=expert_names,
         informed_moe_fusion_factor=arch_params.informed_moe_fusion_factor,
+        use_fc0_to_final_skip=arch_params.use_fc0_to_final_skip,
     )
     output_configs = get_output_configs(
         output_head=output_head,

@@ -100,10 +100,12 @@ class CustomConfig:
         Weight of the adversarial loss term. Higher values enforce stronger
         disentanglement between genotype and tabular features.
 
-    :param use_tabular_to_output_skips:
-        When ``True`` (default), the tabular encoder output is cached and
-        sent via tensor broker to output heads. Set to ``False`` to disable
-        this skip connection while still using tabular data in the fusion.
+    :param use_fc0_to_final_skip:
+        When ``True``, the fc_0 layer output is cached and sent via tensor
+        broker to the absolute final output identity layer using
+        ``lcl+mlp_residual`` projection with ``sum`` fusion. For informed
+        MoE, routes each expert's fc_0 to its corresponding output group's
+        ``output_identity``.
 
     :param channel_exp_base:
         Base exponent for the number of channels in the genome-local-net.
@@ -130,7 +132,7 @@ class CustomConfig:
     informed_moe_fusion_factor: int = 1
     adversarial_enabled: bool = True
     adversarial_lambda: float = 0.5
-    use_tabular_to_output_skips: bool = True
+    use_fc0_to_final_skip: bool = False
     channel_exp_base: int = 3
 
     def __post_init__(self) -> None:

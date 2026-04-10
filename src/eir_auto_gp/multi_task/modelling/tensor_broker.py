@@ -45,6 +45,7 @@ def generate_tb_base_config(
     tabular_cache_dropout_p: float = 0.00,
     # only checked for is not None, kept as int for possible per-expert routing later
     output_num_experts: int | None = None,
+    use_fc0_to_final_skip: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
     base_cache_names = _get_staggered_cache_names(
         use_fc0_to_fusion_skips=use_fc0_to_fusion_skips,
@@ -169,6 +170,18 @@ def generate_tb_base_config(
                         "cache_dropout_p": tabular_cache_dropout_p,
                     }
                 )
+            if use_fc0_to_final_skip:
+                message_configs.append(
+                    {
+                        "name": f"fc0_to_final_{group_name}",
+                        "layer_path": f"output_modules.eir_auto_gp_{group_name}"
+                        f".output_identity",
+                        "use_from_cache": ["fc_0_output"],
+                        "projection_type": "lcl+mlp_residual",
+                        "cache_fusion_type": "sum",
+                        "kernel_width_divisible_by": 12,
+                    }
+                )
 
     return {"message_configs": message_configs}
 
@@ -186,6 +199,7 @@ def generate_tb_mgmoe_config(
     include_tabular: bool = True,
     tabular_cache_dropout_p: float = 0.00,
     output_num_experts: int | None = None,
+    use_fc0_to_final_skip: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
     message_configs: list[dict[str, Any]] = []
 
@@ -287,6 +301,18 @@ def generate_tb_mgmoe_config(
                         "cache_dropout_p": tabular_cache_dropout_p,
                     }
                 )
+            if use_fc0_to_final_skip:
+                message_configs.append(
+                    {
+                        "name": f"fc0_to_final_{group_name}",
+                        "layer_path": f"output_modules.eir_auto_gp_{group_name}"
+                        f".output_identity",
+                        "use_from_cache": ["fc_0_output"],
+                        "projection_type": "lcl+mlp_residual",
+                        "cache_fusion_type": "sum",
+                        "kernel_width_divisible_by": 12,
+                    }
+                )
 
     return {"message_configs": message_configs}
 
@@ -330,6 +356,7 @@ def generate_tb_informed_mgmoe_config(
     tabular_cache_dropout_p: float = 0.00,
     output_num_experts: int | None = None,
     use_fc0_output_skips: bool = True,
+    use_fc0_to_final_skip: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
     message_configs: list[dict[str, Any]] = []
 
@@ -384,6 +411,18 @@ def generate_tb_informed_mgmoe_config(
                 }
             )
 
+        if use_fc0_to_final_skip:
+            message_configs.append(
+                {
+                    "name": f"expert_{name}_fc0_to_final",
+                    "layer_path": f"output_modules.eir_auto_gp_{name}.output_identity",
+                    "use_from_cache": [f"expert_{name}_fc_0"],
+                    "projection_type": "lcl+mlp_residual",
+                    "cache_fusion_type": "sum",
+                    "kernel_width_divisible_by": 12,
+                }
+            )
+
     return {"message_configs": message_configs}
 
 
@@ -395,6 +434,7 @@ def generate_tb_informed_moe_config(
     use_fc0_output_skips: bool = True,
     num_fusion_layers: int | None = None,
     tb_block_frequency: int = 1,
+    use_fc0_to_final_skip: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
     message_configs: list[dict[str, Any]] = []
 
@@ -444,6 +484,18 @@ def generate_tb_informed_moe_config(
                     "projection_type": "mlp_residual",
                     "cache_fusion_type": "additive",
                     "cache_dropout_p": tabular_cache_dropout_p,
+                }
+            )
+
+        if use_fc0_to_final_skip:
+            message_configs.append(
+                {
+                    "name": f"expert_{name}_fc0_to_final",
+                    "layer_path": f"output_modules.eir_auto_gp_{name}.output_identity",
+                    "use_from_cache": [f"expert_{name}_fc_0"],
+                    "projection_type": "lcl+mlp_residual",
+                    "cache_fusion_type": "sum",
+                    "kernel_width_divisible_by": 12,
                 }
             )
 
