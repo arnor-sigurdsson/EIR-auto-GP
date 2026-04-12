@@ -16,9 +16,7 @@ from eir_auto_gp.multi_task.modelling.output_configs import (
 )
 from eir_auto_gp.multi_task.modelling.tensor_broker import (
     generate_tb_base_config,
-    generate_tb_informed_mgmoe_config,
     generate_tb_informed_moe_config,
-    generate_tb_mgmoe_config,
 )
 from eir_auto_gp.utils.utils import get_logger
 
@@ -39,11 +37,9 @@ class ArchitectureParams:
     use_fc0_to_fusion_skips: bool
     use_lcl_to_output_skips: bool | str
     fusion_model_type: str
-    mgmoe_num_experts: int
     output_num_experts: int | None
     channel_exp_base: int = 3
     expert_groups_file: str | None = None
-    informed_moe_fusion_factor: int = 1
     use_fc0_to_final_skip: bool = False
 
     @classmethod
@@ -61,11 +57,9 @@ class ArchitectureParams:
             use_fc0_to_fusion_skips=config["use_fc0_to_fusion_skips"],
             use_lcl_to_output_skips=config["use_lcl_to_output_skips"],
             fusion_model_type=config["fusion_model_type"],
-            mgmoe_num_experts=config["mgmoe_num_experts"],
             output_num_experts=config.get("output_num_experts"),
             channel_exp_base=config.get("channel_exp_base", 3),
             expert_groups_file=config.get("expert_groups_file"),
-            informed_moe_fusion_factor=config.get("informed_moe_fusion_factor", 1),
             use_fc0_to_final_skip=config.get("use_fc0_to_final_skip", False),
         )
 
@@ -390,10 +384,8 @@ def get_base_fusion_config(
     use_lcl_to_output_skips: bool | str = False,
     include_tabular: bool = True,
     tabular_cache_dropout_p: float = 0.00,
-    mgmoe_num_experts: int = 8,
     output_num_experts: int | None = None,
     expert_names: list[str] | None = None,
-    informed_moe_fusion_factor: int = 1,
     use_fc0_to_final_skip: bool = False,
 ) -> dict[str, Any]:
     if n_fusion_layers is not None:
@@ -417,37 +409,17 @@ def get_base_fusion_config(
 
     modalities_to_skip = ["eir_tabular"] if include_tabular else None
 
-    # note early exit from this function if expert names are passed in
     if expert_names is not None:
-        if model_type == "mgmoe" and use_fc0_to_fusion_skips:
-            config_base["mg_num_experts"] = mgmoe_num_experts
-            config_base["fc_task_dim"] = fmsp.fc_dim // 4
-            tb_config = generate_tb_informed_mgmoe_config(
-                expert_names=expert_names,
-                num_fusion_layers=fmsp.n_layers,
-                tb_block_frequency=fmsp.tb_block_frequency,
-                num_mgmoe_experts=mgmoe_num_experts,
-                fusion_factor=informed_moe_fusion_factor,
-                include_tabular=include_tabular,
-                tabular_cache_dropout_p=tabular_cache_dropout_p,
-                output_num_experts=output_num_experts,
-                use_fc0_output_skips=use_fc0_to_output_skips,
-                use_fc0_to_final_skip=use_fc0_to_final_skip,
-            )
-        else:
-            tb_config = generate_tb_informed_moe_config(
-                expert_names=expert_names,
-                include_tabular=include_tabular,
-                tabular_cache_dropout_p=tabular_cache_dropout_p,
-                output_num_experts=output_num_experts,
-                use_fc0_output_skips=use_fc0_to_output_skips,
-                num_fusion_layers=fmsp.n_layers if use_fc0_to_fusion_skips else None,
-                tb_block_frequency=fmsp.tb_block_frequency,
-                use_fc0_to_final_skip=use_fc0_to_final_skip,
-            )
-            if model_type == "mgmoe":
-                config_base["mg_num_experts"] = mgmoe_num_experts
-                config_base["fc_task_dim"] = fmsp.fc_dim // 4
+        tb_config = generate_tb_informed_moe_config(
+            expert_names=expert_names,
+            include_tabular=include_tabular,
+            tabular_cache_dropout_p=tabular_cache_dropout_p,
+            output_num_experts=output_num_experts,
+            use_fc0_output_skips=use_fc0_to_output_skips,
+            num_fusion_layers=fmsp.n_layers if use_fc0_to_fusion_skips else None,
+            tb_block_frequency=fmsp.tb_block_frequency,
+            use_fc0_to_final_skip=use_fc0_to_final_skip,
+        )
 
         base = {
             "model_config": config_base,
@@ -485,19 +457,6 @@ def get_base_fusion_config(
 
         if modalities_to_skip:
             base["modalities_to_skip"] = modalities_to_skip
-
-    elif model_type == "mgmoe":
-        config_base["mg_num_experts"] = mgmoe_num_experts
-        config_base["fc_task_dim"] = fmsp.fc_dim // 4
-        tb_config = generate_tb_mgmoe_config(
-            num_experts=mgmoe_num_experts,
-            **tb_kwargs,
-        )
-        base = {
-            "model_config": config_base,
-            "model_type": "mgmoe",
-            "tensor_broker_config": tb_config,
-        }
     else:
         raise ValueError(f"Unknown fusion model type: {model_type!r}")
 
@@ -705,10 +664,8 @@ def get_aggregate_config(
         use_lcl_to_output_skips=arch_params.use_lcl_to_output_skips,
         include_tabular=tabular_params.enabled,
         tabular_cache_dropout_p=tabular_params.cache_dropout_p,
-        mgmoe_num_experts=arch_params.mgmoe_num_experts,
         output_num_experts=arch_params.output_num_experts,
         expert_names=expert_names,
-        informed_moe_fusion_factor=arch_params.informed_moe_fusion_factor,
         use_fc0_to_final_skip=arch_params.use_fc0_to_final_skip,
     )
     output_configs = get_output_configs(

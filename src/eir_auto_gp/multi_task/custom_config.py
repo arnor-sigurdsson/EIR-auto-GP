@@ -76,11 +76,6 @@ class CustomConfig:
     :param fusion_model_type:
         Fusion module architecture type.
         ``"mlp-residual-sum"`` uses a standard MLP-residual fusion.
-        ``"mgmoe"`` uses Multi-Gate Mixture of Experts fusion.
-
-    :param mgmoe_num_experts:
-        Number of experts when ``fusion_model_type`` is ``"mgmoe"``.
-        Ignored for other fusion model types.
 
     :param output_num_experts:
         If set, splits the shared branch in ``shared_mlp_residual`` output
@@ -123,13 +118,11 @@ class CustomConfig:
     fusion_dim: int | None = None
     skip_to_every_n_fusion_layers: int | None = None
     n_output_layers: int | None = None
-    output_dim: int | str | None = None
+    output_dim: int | None = None
     batch_size: int | None = None
     fusion_model_type: str = "mlp-residual-sum"
-    mgmoe_num_experts: int = 8
     output_num_experts: int | None = None
     expert_groups_file: str | None = None
-    informed_moe_fusion_factor: int = 1
     adversarial_enabled: bool = True
     adversarial_lambda: float = 0.5
     use_fc0_to_final_skip: bool = False
@@ -160,52 +153,17 @@ class CustomConfig:
                 f"got {self.modelling_data_format!r}"
             )
 
-        valid_fusion_types = ("mlp-residual-sum", "mgmoe")
+        valid_fusion_types = ("mlp-residual-sum",)
         if self.fusion_model_type not in valid_fusion_types:
             raise ValueError(
                 f"fusion_model_type must be one of {valid_fusion_types}, "
                 f"got {self.fusion_model_type!r}"
             )
 
-        if (
-            self.fusion_model_type == "mgmoe"
-            and self.use_fc0_to_fusion_skips
-            and self.expert_groups_file is None
-        ):
-            raise ValueError(
-                "use_fc0_to_fusion_skips=True with fusion_model_type='mgmoe' "
-                "is only supported when expert_groups_file is set (informed "
-                "MoE input). Without expert groups, use "
-                "fusion_model_type='mlp-residual-sum' instead."
-            )
-
-        if self.output_dim is not None:
-            if isinstance(self.output_dim, str) and self.output_dim != "auto":
-                raise ValueError(
-                    f"output_dim must be an integer, 'auto', or None, "
-                    f"got {self.output_dim!r}"
-                )
-            if isinstance(self.output_dim, int | float) and not isinstance(
-                self.output_dim, bool
-            ):
-                if int(self.output_dim) < 1:
-                    raise ValueError(f"output_dim must be >= 1, got {self.output_dim}")
-
-        if self.mgmoe_num_experts < 1:
-            raise ValueError(
-                f"mgmoe_num_experts must be >= 1, got {self.mgmoe_num_experts}"
-            )
-
         if self.output_num_experts is not None and self.output_num_experts < 1:
             raise ValueError(
                 f"output_num_experts must be >= 1 or None, "
                 f"got {self.output_num_experts}"
-            )
-
-        if self.informed_moe_fusion_factor < 1:
-            raise ValueError(
-                f"informed_moe_fusion_factor must be >= 1, "
-                f"got {self.informed_moe_fusion_factor}"
             )
 
         if self.adversarial_lambda < 0:
