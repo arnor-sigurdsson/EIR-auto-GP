@@ -34,7 +34,7 @@ class ArchitectureParams:
     fusion_dim: int | None
     skip_to_every_n_fusion_layers: int | None
     n_output_layers: int | None
-    output_dim: int | str | None
+    output_dim: int | None
     use_fc0_to_output_skips: bool
     use_fc0_to_fusion_skips: bool
     use_lcl_to_output_skips: bool | str
@@ -249,10 +249,6 @@ def _get_informed_moe_input_genotype_config(
     nearest_power_of_2 = 2 ** (cutoff_per_expert - 1).bit_length()
     adjusted_cutoff = max(128, nearest_power_of_2)
 
-    stub_experts = False
-    if use_fc0_to_output_skips and not use_fc0_to_fusion_skips:
-        stub_experts = True
-
     needs_fc0_cache = use_fc0_to_output_skips or use_fc0_to_fusion_skips
     for name in expert_names:
         if needs_fc0_cache:
@@ -290,7 +286,7 @@ def _get_informed_moe_input_genotype_config(
                 "l1": 0.0,
                 "cutoff": adjusted_cutoff,
                 "attention_inclusion_cutoff": 0,
-                "stub_experts": stub_experts,
+                "expert_output_dim": 128,
             },
         },
         "tensor_broker_config": {
@@ -455,7 +451,7 @@ def get_base_fusion_config(
 
         base = {
             "model_config": config_base,
-            "model_type": model_type,
+            "model_type": "identity-per-group",
             "tensor_broker_config": tb_config,
         }
 
@@ -529,7 +525,6 @@ def get_fusion_model_size_params(model_size: str) -> FusionModelSizeParams:
 
 
 def _get_adversarial_configs(
-    output_groups: dict[str, list[str]],
     adversarial_lambda: float = 0.1,
     adversarial_hidden_dim: int = 256,
     adversarial_layers: list[int] | None = None,
@@ -537,27 +532,21 @@ def _get_adversarial_configs(
     if adversarial_layers is None:
         adversarial_layers = [2]
 
-    adversarial_configs = []
-
-    for group_name in output_groups.keys():
-        adversarial_configs.append(
-            {
-                "name": f"{group_name}_vs_covariates",
-                "enabled": True,
-                "embedding_layer_path": f"output_modules."
-                f"eir_auto_gp_{group_name}.shared_branch.1",
-                "target_layer_path": "input_modules.eir_tabular.layer",
-                "lambda_adv": adversarial_lambda,
-                "warmup_steps": 5000,
-                "fc_dim": adversarial_hidden_dim,
-                "layers": adversarial_layers,
-                "projection_type": "mlp_residual",
-                "dropout_p": 0.1,
-                "target_cache_target": "input",
-            }
-        )
-
-    return adversarial_configs
+    return [
+        {
+            "name": "genotype_vs_covariates",
+            "enabled": True,
+            "embedding_layer_path": "output_modules.eir_auto_gp.input_identity",
+            "target_layer_path": "input_modules.eir_tabular.layer",
+            "lambda_adv": adversarial_lambda,
+            "warmup_steps": 5000,
+            "fc_dim": adversarial_hidden_dim,
+            "layers": adversarial_layers,
+            "projection_type": "mlp_residual",
+            "dropout_p": 0.1,
+            "target_cache_target": "input",
+        }
+    ]
 
 
 def _get_manifold_mixup_layer_groups_informed_moe(
@@ -680,31 +669,15 @@ def get_aggregate_config(
         built_output_groups = None
 
     adversarial_configs = None
-    if (
-        tabular_params.enabled
-        and adversarial_params.enabled
-        and built_output_groups is not None
-    ):
+    if tabular_params.enabled and adversarial_params.enabled:
         adversarial_configs = _get_adversarial_configs(
-            output_groups=built_output_groups,
             adversarial_lambda=adversarial_params.lambda_,
             adversarial_hidden_dim=adversarial_params.hidden_dim,
             adversarial_layers=adversarial_params.layers,
         )
 
-    manifold_mixup_layer_groups = None
-    if expert_names is not None:
-        manifold_mixup_layer_groups = _get_manifold_mixup_layer_groups_informed_moe(
-            expert_names=expert_names,
-        )
-    elif built_output_groups is not None:
-        manifold_mixup_layer_groups = _get_manifold_mixup_layer_groups_base(
-            output_groups=built_output_groups,
-        )
-
     global_config = get_base_global_config(
         adversarial_configs=adversarial_configs,
-        manifold_mixup_layer_groups=manifold_mixup_layer_groups,
     )
     input_genotype_config = get_base_input_genotype_config(
         use_fc0_to_output_skips=arch_params.use_fc0_to_output_skips,
@@ -746,7 +719,6 @@ def get_aggregate_config(
         model_size=arch_params.model_size,
         n_output_layers=arch_params.n_output_layers,
         output_dim=arch_params.output_dim,
-        output_num_experts=arch_params.output_num_experts,
         categorical_as_survival=categorical_as_survival,
     )
 

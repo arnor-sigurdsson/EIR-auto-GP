@@ -31,13 +31,6 @@ def get_shared_mlp_residual_model_size_params(
     return param_dict[model_size]
 
 
-def _get_auto_output_dim(n_targets: int) -> int:
-    if n_targets <= 20:
-        return 512
-    else:
-        return 1024
-
-
 def get_output_configs(
     output_groups: dict[str, list[str]] | None,
     output_cat_columns: list[str],
@@ -45,24 +38,15 @@ def get_output_configs(
     model_size: str,
     output_head: str = "mlp",
     n_output_layers: int | None = None,
-    output_dim: int | str | None = None,
-    output_num_experts: int | None = None,
+    output_dim: int | None = None,
     categorical_as_survival: bool = False,
 ) -> list[dict[str, Any]]:
-    auto_scale = isinstance(output_dim, str) and output_dim == "auto"
-
     if n_output_layers is not None:
-        if auto_scale:
-            shared_mlp_params = SharedMLPResidualModelSizeParams(
-                n_layers=n_output_layers,
-                fc_dim=0,
-            )
-        else:
-            assert output_dim is not None
-            shared_mlp_params = SharedMLPResidualModelSizeParams(
-                n_layers=n_output_layers,
-                fc_dim=output_dim,
-            )
+        assert output_dim is not None
+        shared_mlp_params = SharedMLPResidualModelSizeParams(
+            n_layers=n_output_layers,
+            fc_dim=output_dim,
+        )
     else:
         shared_mlp_params = get_shared_mlp_residual_model_size_params(
             model_size=model_size
@@ -91,7 +75,6 @@ def get_output_configs(
                 "rb_do": 0.10,
                 "fc_do": 0.10,
                 "stochastic_depth_p": 0.10,
-                **({"num_experts": output_num_experts} if output_num_experts else {}),
             },
         },
     }
@@ -109,12 +92,11 @@ def get_output_configs(
             categorical_as_survival=categorical_as_survival,
         )
     elif output_head == "shared_mlp_residual":
-        return create_shared_mlp_configs(
+        return create_shared_mlp_config(
             head_config=head_config,
             output_groups=output_groups,
             output_cat_columns=output_cat_columns,
             output_con_columns=output_con_columns,
-            auto_scale_output_dim=auto_scale,
             categorical_as_survival=categorical_as_survival,
         )
     else:
@@ -201,25 +183,27 @@ def create_survival_config(
     }
 
 
-def create_shared_mlp_configs(
+def create_shared_mlp_config(
     head_config: dict[str, Any],
     output_groups: dict[str, list[str]] | None,
     output_cat_columns: list[str],
     output_con_columns: list[str],
-    auto_scale_output_dim: bool = False,
     categorical_as_survival: bool = False,
 ) -> list[dict[str, Any]]:
     if output_groups is None:
         raise ValueError("output_groups must be provided for shared_mlp_residual")
 
+    if categorical_as_survival:
+        raise ValueError(
+            "categorical_as_survival is not supported with grouped (batched) output."
+        )
+
     all_output_columns = set(output_cat_columns) | set(output_con_columns)
-    parsed_configs = []
+    expert_groups: dict[str, list[str]] = {}
 
     for group_name, group_columns in output_groups.items():
-        cur_cat_columns = [col for col in output_cat_columns if col in group_columns]
-        cur_con_columns = [col for col in output_con_columns if col in group_columns]
-
-        if not cur_cat_columns and not cur_con_columns:
+        cur_columns = [col for col in group_columns if col in all_output_columns]
+        if not cur_columns:
             unmodelled = [c for c in group_columns if c not in all_output_columns]
             raise ValueError(
                 f"Output group '{group_name}' has no matching output columns. "
@@ -229,51 +213,18 @@ def create_shared_mlp_configs(
                 f"Either remove this group from the output groups file or "
                 f"add its traits to the model outputs."
             )
+        expert_groups[group_name] = cur_columns
 
-        if auto_scale_output_dim:
-            n_targets = len(cur_cat_columns) + len(cur_con_columns)
-            auto_dim = _get_auto_output_dim(n_targets=n_targets)
-            group_head_config = copy.deepcopy(head_config)
-            group_head_config["model_init_config"]["fc_task_dim"] = auto_dim
-            logger.info(
-                "Auto output_dim for '%s': %d targets -> %d dim",
-                group_name,
-                n_targets,
-                auto_dim,
-            )
-        else:
-            group_head_config = head_config
+    final_head_config = copy.deepcopy(head_config)
+    final_head_config["model_init_config"]["expert_groups"] = expert_groups
 
-        output_name = f"eir_auto_gp_{group_name}"
-
-        if categorical_as_survival and cur_cat_columns:
-            parsed_configs.append(
-                create_survival_config(
-                    head_config=group_head_config,
-                    event_columns=cur_cat_columns,
-                    output_name=output_name,
-                )
-            )
-            if cur_con_columns:
-                parsed_configs.append(
-                    create_base_config(
-                        head_config=group_head_config,
-                        output_cat_columns=[],
-                        output_con_columns=cur_con_columns,
-                        output_name=f"{output_name}_tabular",
-                    )
-                )
-        else:
-            parsed_configs.append(
-                create_base_config(
-                    head_config=group_head_config,
-                    output_cat_columns=cur_cat_columns,
-                    output_con_columns=cur_con_columns,
-                    output_name=output_name,
-                )
-            )
-
-    return parsed_configs
+    return [
+        create_base_config(
+            head_config=final_head_config,
+            output_cat_columns=output_cat_columns,
+            output_con_columns=output_con_columns,
+        )
+    ]
 
 
 def _build_output_groups(
