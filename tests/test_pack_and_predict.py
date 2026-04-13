@@ -428,7 +428,7 @@ def _build_expert_groups_file(
             "traits": ["phenotype"],
         },
         "group_con": {
-            "snps": all_snps[mid:],
+            "snps": all_snps[:6] + all_snps[mid:],
             "traits": ["CON_COMPUTED"],
         },
     }
@@ -470,8 +470,12 @@ def test_pack_predict_with_tabular_train_genotype_predict_with_experts(
     cl_args.global_output_folder = str(tmp_path)
     custom_config = CustomConfig(
         expert_groups_file=str(expert_groups_path),
-        use_fc0_to_output_skips=True,
+        use_fc0_to_output_skips=False,
+        use_fc0_to_final_skip=False,
+        use_fc0_to_fusion_skips=False,
         fusion_model_type="mlp-residual-sum",
+        adversarial_enabled=False,
+        modelling_data_format="memory",
     )
 
     store_experiment_config(cl_args=cl_args, custom_config=custom_config)

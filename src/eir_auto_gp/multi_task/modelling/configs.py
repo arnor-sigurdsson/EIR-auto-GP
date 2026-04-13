@@ -488,9 +488,30 @@ def _get_adversarial_configs(
     adversarial_lambda: float = 0.1,
     adversarial_hidden_dim: int = 256,
     adversarial_layers: list[int] | None = None,
+    expert_names: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     if adversarial_layers is None:
         adversarial_layers = [2]
+
+    if expert_names is not None:
+        return [
+            {
+                "name": f"{name}_vs_covariates",
+                "enabled": True,
+                "embedding_layer_path": (
+                    f"input_modules.genotype.expert_projections.{name}"
+                ),
+                "target_layer_path": "input_modules.eir_tabular.layer",
+                "lambda_adv": adversarial_lambda,
+                "warmup_steps": 5000,
+                "fc_dim": adversarial_hidden_dim,
+                "layers": adversarial_layers,
+                "projection_type": "mlp_residual",
+                "dropout_p": 0.1,
+                "target_cache_target": "input",
+            }
+            for name in expert_names
+        ]
 
     return [
         {
@@ -634,6 +655,7 @@ def get_aggregate_config(
             adversarial_lambda=adversarial_params.lambda_,
             adversarial_hidden_dim=adversarial_params.hidden_dim,
             adversarial_layers=adversarial_params.layers,
+            expert_names=expert_names,
         )
 
     global_config = get_base_global_config(
@@ -678,6 +700,7 @@ def get_aggregate_config(
         n_output_layers=arch_params.n_output_layers,
         output_dim=arch_params.output_dim,
         categorical_as_survival=categorical_as_survival,
+        expert_names=expert_names,
     )
 
     return AggregateConfig(

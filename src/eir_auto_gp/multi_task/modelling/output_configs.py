@@ -40,6 +40,7 @@ def get_output_configs(
     n_output_layers: int | None = None,
     output_dim: int | None = None,
     categorical_as_survival: bool = False,
+    expert_names: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     if n_output_layers is not None:
         assert output_dim is not None
@@ -98,6 +99,7 @@ def get_output_configs(
             output_cat_columns=output_cat_columns,
             output_con_columns=output_con_columns,
             categorical_as_survival=categorical_as_survival,
+            use_expert_groups=expert_names is not None,
         )
     else:
         raise ValueError(f"Output head {output_head} not recognized.")
@@ -189,6 +191,7 @@ def create_shared_mlp_config(
     output_cat_columns: list[str],
     output_con_columns: list[str],
     categorical_as_survival: bool = False,
+    use_expert_groups: bool = False,
 ) -> list[dict[str, Any]]:
     if output_groups is None:
         raise ValueError("output_groups must be provided for shared_mlp_residual")
@@ -199,7 +202,7 @@ def create_shared_mlp_config(
         )
 
     all_output_columns = set(output_cat_columns) | set(output_con_columns)
-    expert_groups: dict[str, list[str]] = {}
+    validated_groups: dict[str, list[str]] = {}
 
     for group_name, group_columns in output_groups.items():
         cur_columns = [col for col in group_columns if col in all_output_columns]
@@ -213,10 +216,11 @@ def create_shared_mlp_config(
                 f"Either remove this group from the output groups file or "
                 f"add its traits to the model outputs."
             )
-        expert_groups[group_name] = cur_columns
+        validated_groups[group_name] = cur_columns
 
     final_head_config = copy.deepcopy(head_config)
-    final_head_config["model_init_config"]["expert_groups"] = expert_groups
+    if use_expert_groups:
+        final_head_config["model_init_config"]["expert_groups"] = validated_groups
 
     return [
         create_base_config(
