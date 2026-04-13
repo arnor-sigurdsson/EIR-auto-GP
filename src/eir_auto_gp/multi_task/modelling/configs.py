@@ -164,13 +164,18 @@ def get_base_input_genotype_config(
     use_lcl_to_output_skips: bool | str = False,
     expert_names: list[str] | None = None,
     channel_exp_base: int = 3,
+    fusion_dim: int | None = None,
 ) -> dict[str, Any]:
     if expert_names is not None:
+        assert fusion_dim is not None, (
+            "fusion_dim must be provided when expert_names is set"
+        )
         return _get_informed_moe_input_genotype_config(
             expert_names=expert_names,
             use_fc0_to_output_skips=use_fc0_to_output_skips,
             use_fc0_to_fusion_skips=use_fc0_to_fusion_skips,
             channel_exp_base=channel_exp_base,
+            fusion_dim=fusion_dim,
         )
 
     message_configs = []
@@ -232,16 +237,14 @@ def get_base_input_genotype_config(
 
 def _get_informed_moe_input_genotype_config(
     expert_names: list[str],
+    fusion_dim: int,
     use_fc0_to_output_skips: bool = True,
     use_fc0_to_fusion_skips: bool = True,
     channel_exp_base: int = 3,
 ) -> dict[str, Any]:
     message_configs = []
 
-    base_cutoff = 4096
-    cutoff_per_expert = base_cutoff // len(expert_names)
-    nearest_power_of_2 = 2 ** (cutoff_per_expert - 1).bit_length()
-    adjusted_cutoff = max(128, nearest_power_of_2)
+    adjusted_cutoff = max(128, 2 ** (fusion_dim - 1).bit_length())
 
     needs_fc0_cache = use_fc0_to_output_skips or use_fc0_to_fusion_skips
     for name in expert_names:
@@ -280,7 +283,7 @@ def _get_informed_moe_input_genotype_config(
                 "l1": 0.0,
                 "cutoff": adjusted_cutoff,
                 "attention_inclusion_cutoff": 0,
-                "expert_output_dim": 256,
+                "expert_output_dim": fusion_dim,
                 "auto_scale_fc0_kernel": False,
             },
         },
@@ -661,12 +664,21 @@ def get_aggregate_config(
     global_config = get_base_global_config(
         adversarial_configs=adversarial_configs,
     )
+    if arch_params.n_fusion_layers is not None:
+        effective_fusion_dim = arch_params.fusion_dim
+        assert effective_fusion_dim is not None
+    else:
+        effective_fusion_dim = get_fusion_model_size_params(
+            model_size=arch_params.model_size
+        ).fc_dim
+
     input_genotype_config = get_base_input_genotype_config(
         use_fc0_to_output_skips=arch_params.use_fc0_to_output_skips,
         use_fc0_to_fusion_skips=arch_params.use_fc0_to_fusion_skips,
         use_lcl_to_output_skips=arch_params.use_lcl_to_output_skips,
         expert_names=expert_names,
         channel_exp_base=arch_params.channel_exp_base,
+        fusion_dim=effective_fusion_dim,
     )
     input_tabular_config = get_base_tabular_input_config(
         cache_for_output_heads=tabular_params.enabled,
