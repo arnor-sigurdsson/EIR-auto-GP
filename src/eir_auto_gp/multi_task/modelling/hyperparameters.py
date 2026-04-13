@@ -65,7 +65,7 @@ def _get_checkpoint_interval(
     return final_interval
 
 
-def _get_learning_rate(n_snps: int) -> float:
+def _get_learning_rate(n_snps: int, batch_size: int) -> float:
     if n_snps < 1_000:
         lr = 1e-03
     elif n_snps < 10_000:
@@ -79,7 +79,19 @@ def _get_learning_rate(n_snps: int) -> float:
     else:
         lr = 1e-05
 
-    logger.info("Setting learning rate to %f due to %d SNPs.", lr, n_snps)
+    base_bs = 64
+    max_lr = 1e-03
+    min_lr = 1e-05
+
+    lr = lr * (batch_size / base_bs)
+    lr = max(min_lr, min(max_lr, lr))
+
+    logger.info(
+        "Setting learning rate to %f (n_snps=%d, batch_size=%d).",
+        lr,
+        n_snps,
+        batch_size,
+    )
 
     return lr
 

@@ -569,7 +569,7 @@ def _get_global_injections(
     early_stopping_buffer = min(5000, iter_per_epoch * 5)
     early_stopping_buffer = max(early_stopping_buffer, 1000)
     sample_interval = min(1000, iter_per_epoch)
-    lr = _get_learning_rate(n_snps=n_snps)
+    lr = _get_learning_rate(n_snps=n_snps, batch_size=batch_size)
 
     injections = {
         "basic_experiment": {
@@ -758,7 +758,7 @@ def get_num_iter_per_epoch(
     return iter_per_epoch
 
 
-def _get_learning_rate(n_snps: int) -> float:
+def _get_learning_rate(n_snps: int, batch_size: int) -> float:
     if n_snps < 1_000:
         lr = 1e-03
     elif n_snps < 10_000:
@@ -772,7 +772,15 @@ def _get_learning_rate(n_snps: int) -> float:
     else:
         lr = 1e-05
 
-    logger.info("Setting learning rate to %f based on %d SNPs.", lr, n_snps)
+    lr = lr * (batch_size / 64)
+    lr = max(1e-6, min(1e-2, lr))
+
+    logger.info(
+        "Setting learning rate to %f (n_snps=%d, batch_size=%d).",
+        lr,
+        n_snps,
+        batch_size,
+    )
     return lr
 
 

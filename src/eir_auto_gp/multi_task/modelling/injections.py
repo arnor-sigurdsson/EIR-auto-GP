@@ -197,7 +197,7 @@ def _get_global_injections(
         iter_per_epoch,
     )
 
-    lr = _get_learning_rate(n_snps=n_snps)
+    lr = _get_learning_rate(n_snps=n_snps, batch_size=batch_size)
     precision = _get_resolved_precision(mixed_precision=mixed_precision)
     compile_model = _get_resolved_compile_model(compile_model=compile_model)
 
