@@ -284,7 +284,7 @@ def _get_informed_moe_input_genotype_config(
                 "cutoff": adjusted_cutoff,
                 "attention_inclusion_cutoff": 0,
                 "expert_output_dim": fusion_dim,
-                "auto_scale_fc0_kernel": False,
+                "auto_scale_fc0_kernel": True,
             },
         },
         "tensor_broker_config": {

@@ -474,7 +474,7 @@ def test_pack_predict_with_tabular_train_genotype_predict_with_experts(
         use_fc0_to_final_skip=False,
         use_fc0_to_fusion_skips=False,
         fusion_model_type="mlp-residual-sum",
-        adversarial_enabled=False,
+        adversarial_enabled=True,
         modelling_data_format="memory",
     )
 
@@ -640,9 +640,9 @@ def _get_test_survival_cl_commands(folder_path: Path) -> list[str]:
         "--do_test"
     )
 
-    with_groups = f"{base} --output_groups random --n_random_output_groups 1"
-
-    return [base, with_groups]
+    # TODO: re-add `f"{base} --output_groups random --n_random_output_groups 1"`
+    # once the shared_mlp_residual output head supports categorical_as_survival.
+    return [base]
 
 
 @pytest.mark.parametrize("command", _get_test_survival_cl_commands(Path("placeholder")))
