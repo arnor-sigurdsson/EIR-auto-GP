@@ -880,7 +880,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aislib", specifier = ">=0.3.0" },
-    { name = "eir-dl", git = "https://github.com/arnor-sigurdsson/EIR?rev=606b3e" },
+    { name = "eir-dl", git = "https://github.com/arnor-sigurdsson/EIR?rev=85af0b5" },
     { name = "networkx", specifier = ">=3.3" },
     { name = "pandas", specifier = ">=2.2.2,<3" },
     { name = "plink-pipelines", git = "https://github.com/arnor-sigurdsson/plink_pipelines?rev=a023cc6" },
@@ -916,7 +916,7 @@ dev = [
 [[package]]
 name = "eir-dl"
 version = "0.23.0"
-source = { git = "https://github.com/arnor-sigurdsson/EIR?rev=606b3e#606b3ede8c5f5a4360d68a5c5d6c7a10ebebb6f7" }
+source = { git = "https://github.com/arnor-sigurdsson/EIR?rev=85af0b5#85af0b54c11b3c6e304b9b6084fa03d8d590a328" }
 dependencies = [
     { name = "adabelief-pytorch" },
     { name = "aislib" },
