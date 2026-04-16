@@ -299,7 +299,7 @@ def _get_informed_moe_input_genotype_config(
                 "first_kernel_expansion": "FILL",
                 "l1": 0.0,
                 "cutoff": adjusted_cutoff,
-                "attention_inclusion_cutoff": 0,
+                "attention_inclusion_cutoff": None,
                 "expert_output_dim": fusion_dim,
                 "auto_scale_fc0_kernel": auto_scale_fc0_kernel,
                 "cross_expert_attention_heads": cross_expert_attention_heads,
