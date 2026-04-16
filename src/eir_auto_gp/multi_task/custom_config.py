@@ -105,6 +105,18 @@ class CustomConfig:
     :param channel_exp_base:
         Base exponent for the number of channels in the genome-local-net.
         The number of channel feature sets is ``2**channel_exp_base``.
+
+    :param auto_scale_fc0_kernel:
+        When ``True``, automatically scales the fc_0 kernel size in the
+        genome-local-net informed MoE model.
+
+    :param cross_expert_attention_heads:
+        Number of attention heads for cross-expert attention in the
+        genome-local-net informed MoE model.
+
+    :param cross_expert_attention_enabled:
+        When ``True``, enables cross-expert attention layers in the
+        genome-local-net informed MoE model.
     """
 
     use_lcl_to_output_skips: bool | str = False
@@ -127,6 +139,9 @@ class CustomConfig:
     adversarial_lambda: float = 0.5
     use_fc0_to_final_skip: bool = False
     channel_exp_base: int = 3
+    auto_scale_fc0_kernel: bool = False
+    cross_expert_attention_heads: int = 8
+    cross_expert_attention_enabled: bool = True
 
     def __post_init__(self) -> None:
         valid_skip_values = (True, False, "fc_1_only")
@@ -174,6 +189,12 @@ class CustomConfig:
         if self.channel_exp_base < 1:
             raise ValueError(
                 f"channel_exp_base must be >= 1, got {self.channel_exp_base}"
+            )
+
+        if self.cross_expert_attention_heads < 1:
+            raise ValueError(
+                f"cross_expert_attention_heads must be >= 1, "
+                f"got {self.cross_expert_attention_heads}"
             )
 
     @classmethod

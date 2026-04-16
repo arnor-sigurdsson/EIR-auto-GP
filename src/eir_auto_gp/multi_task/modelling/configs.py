@@ -41,6 +41,9 @@ class ArchitectureParams:
     channel_exp_base: int = 3
     expert_groups_file: str | None = None
     use_fc0_to_final_skip: bool = False
+    auto_scale_fc0_kernel: bool = False
+    cross_expert_attention_heads: int = 8
+    cross_expert_attention_enabled: bool = True
 
     @classmethod
     def from_modelling_config(cls, config: dict[str, Any]) -> "ArchitectureParams":
@@ -61,6 +64,11 @@ class ArchitectureParams:
             channel_exp_base=config.get("channel_exp_base", 3),
             expert_groups_file=config.get("expert_groups_file"),
             use_fc0_to_final_skip=config.get("use_fc0_to_final_skip", False),
+            auto_scale_fc0_kernel=config.get("auto_scale_fc0_kernel", False),
+            cross_expert_attention_heads=config.get("cross_expert_attention_heads", 8),
+            cross_expert_attention_enabled=config.get(
+                "cross_expert_attention_enabled", True
+            ),
         )
 
 
@@ -165,6 +173,9 @@ def get_base_input_genotype_config(
     expert_names: list[str] | None = None,
     channel_exp_base: int = 3,
     fusion_dim: int | None = None,
+    auto_scale_fc0_kernel: bool = False,
+    cross_expert_attention_heads: int = 8,
+    cross_expert_attention_enabled: bool = True,
 ) -> dict[str, Any]:
     if expert_names is not None:
         assert fusion_dim is not None, (
@@ -176,6 +187,9 @@ def get_base_input_genotype_config(
             use_fc0_to_fusion_skips=use_fc0_to_fusion_skips,
             channel_exp_base=channel_exp_base,
             fusion_dim=fusion_dim,
+            auto_scale_fc0_kernel=auto_scale_fc0_kernel,
+            cross_expert_attention_heads=cross_expert_attention_heads,
+            cross_expert_attention_enabled=cross_expert_attention_enabled,
         )
 
     message_configs = []
@@ -241,6 +255,9 @@ def _get_informed_moe_input_genotype_config(
     use_fc0_to_output_skips: bool = True,
     use_fc0_to_fusion_skips: bool = True,
     channel_exp_base: int = 3,
+    auto_scale_fc0_kernel: bool = False,
+    cross_expert_attention_heads: int = 8,
+    cross_expert_attention_enabled: bool = True,
 ) -> dict[str, Any]:
     message_configs = []
 
@@ -284,9 +301,12 @@ def _get_informed_moe_input_genotype_config(
                 "cutoff": adjusted_cutoff,
                 "attention_inclusion_cutoff": 0,
                 "expert_output_dim": fusion_dim,
-                "auto_scale_fc0_kernel": False,
-                "cross_expert_attention_heads": 8,
-                "cross_expert_attention_layers": 1,
+                "auto_scale_fc0_kernel": auto_scale_fc0_kernel,
+                "cross_expert_attention_heads": cross_expert_attention_heads,
+                "cross_expert_attention_layers": 1
+                if cross_expert_attention_enabled
+                else 0,
+                "cross_expert_attention_type": "entmax15",
             },
         },
         "tensor_broker_config": {
@@ -655,6 +675,9 @@ def get_aggregate_config(
         expert_names=expert_names,
         channel_exp_base=arch_params.channel_exp_base,
         fusion_dim=effective_fusion_dim,
+        auto_scale_fc0_kernel=arch_params.auto_scale_fc0_kernel,
+        cross_expert_attention_heads=arch_params.cross_expert_attention_heads,
+        cross_expert_attention_enabled=arch_params.cross_expert_attention_enabled,
     )
     input_tabular_config = get_base_tabular_input_config(
         cache_for_output_heads=tabular_params.enabled,
