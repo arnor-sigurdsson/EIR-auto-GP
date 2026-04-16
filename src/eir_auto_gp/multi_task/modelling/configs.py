@@ -307,6 +307,7 @@ def _get_informed_moe_input_genotype_config(
                 if cross_expert_attention_enabled
                 else 0,
                 "cross_expert_attention_type": "entmax15",
+                "expert_batching": True,
             },
         },
         "tensor_broker_config": {
