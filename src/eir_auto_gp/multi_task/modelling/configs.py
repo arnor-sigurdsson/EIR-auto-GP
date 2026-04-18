@@ -261,8 +261,6 @@ def _get_informed_moe_input_genotype_config(
 ) -> dict[str, Any]:
     message_configs = []
 
-    adjusted_cutoff = max(128, 2 ** (fusion_dim - 1).bit_length())
-
     needs_fc0_cache = use_fc0_to_output_skips or use_fc0_to_fusion_skips
     for name in expert_names:
         if needs_fc0_cache:
@@ -298,7 +296,7 @@ def _get_informed_moe_input_genotype_config(
                 "kernel_width": "FILL",
                 "first_kernel_expansion": "FILL",
                 "l1": 0.0,
-                "cutoff": adjusted_cutoff,
+                "cutoff": 4096,
                 "attention_inclusion_cutoff": None,
                 "expert_output_dim": fusion_dim,
                 "auto_scale_fc0_kernel": auto_scale_fc0_kernel,
