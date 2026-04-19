@@ -273,6 +273,8 @@ def _get_informed_moe_input_genotype_config(
                 }
             )
 
+    cross_expert_attention_layers = 1 if cross_expert_attention_enabled else 0
+
     return {
         "input_info": {
             "input_source": "FILL",
@@ -301,11 +303,10 @@ def _get_informed_moe_input_genotype_config(
                 "expert_output_dim": fusion_dim,
                 "auto_scale_fc0_kernel": auto_scale_fc0_kernel,
                 "cross_expert_attention_heads": cross_expert_attention_heads,
-                "cross_expert_attention_layers": 1
-                if cross_expert_attention_enabled
-                else 0,
+                "cross_expert_attention_layers": cross_expert_attention_layers,
                 "cross_expert_attention_type": "sparsemax",
                 "expert_batching": True,
+                "fc0_highway": True,
             },
         },
         "tensor_broker_config": {

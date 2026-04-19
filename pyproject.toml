@@ -83,4 +83,4 @@ exclude = ["misc", "tests", ".venv", ".tox", "docs"]
 
 [tool.uv.sources]
 plink-pipelines = { git = "https://github.com/arnor-sigurdsson/plink_pipelines", rev = "a023cc6" }
-eir-dl = { git = "https://github.com/arnor-sigurdsson/EIR", rev = "9c29c0" }
+eir-dl = { git = "https://github.com/arnor-sigurdsson/EIR", rev = "b245b9" }
