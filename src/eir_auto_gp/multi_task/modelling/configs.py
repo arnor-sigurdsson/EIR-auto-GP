@@ -274,6 +274,7 @@ def _get_informed_moe_input_genotype_config(
             )
 
     cross_expert_attention_layers = 1 if cross_expert_attention_enabled else 0
+    adjusted_cutoff = max(128, 2 ** (fusion_dim - 1).bit_length())
 
     return {
         "input_info": {
@@ -298,7 +299,7 @@ def _get_informed_moe_input_genotype_config(
                 "kernel_width": "FILL",
                 "first_kernel_expansion": "FILL",
                 "l1": 0.0,
-                "cutoff": 4096,
+                "cutoff": adjusted_cutoff,
                 "attention_inclusion_cutoff": None,
                 "expert_output_dim": fusion_dim,
                 "auto_scale_fc0_kernel": auto_scale_fc0_kernel,
