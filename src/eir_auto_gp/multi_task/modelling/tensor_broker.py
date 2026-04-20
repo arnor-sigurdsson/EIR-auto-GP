@@ -139,16 +139,30 @@ def generate_tb_base_config(
                 )
     elif output_head == "shared_mlp_residual":
         if include_tabular:
-            message_configs.append(
-                {
-                    "name": "tabular_to_output",
-                    "layer_path": "output_modules.eir_auto_gp.output_identity",
-                    "use_from_cache": ["tabular_output"],
-                    "projection_type": "mlp_residual",
-                    "cache_fusion_type": "additive",
-                    "cache_dropout_p": tabular_cache_dropout_p,
-                }
-            )
+            if output_groups:
+                for group_name in sorted(output_groups.keys()):
+                    message_configs.append(
+                        {
+                            "name": f"tabular_to_{group_name}",
+                            "layer_path": f"output_modules.eir_auto_gp."
+                            f"{group_name}_output",
+                            "use_from_cache": ["tabular_output"],
+                            "projection_type": "mlp_residual",
+                            "cache_fusion_type": "additive",
+                            "cache_dropout_p": tabular_cache_dropout_p,
+                        }
+                    )
+            else:
+                message_configs.append(
+                    {
+                        "name": "tabular_to_output",
+                        "layer_path": "output_modules.eir_auto_gp.output_identity",
+                        "use_from_cache": ["tabular_output"],
+                        "projection_type": "mlp_residual",
+                        "cache_fusion_type": "additive",
+                        "cache_dropout_p": tabular_cache_dropout_p,
+                    }
+                )
 
     return {"message_configs": message_configs}
 
@@ -197,15 +211,28 @@ def generate_tb_informed_moe_config(
             )
 
     if include_tabular:
-        message_configs.append(
-            {
-                "name": "tabular_to_output",
-                "layer_path": "output_modules.eir_auto_gp.output_identity",
-                "use_from_cache": ["tabular_output"],
-                "projection_type": "mlp_residual",
-                "cache_fusion_type": "additive",
-                "cache_dropout_p": tabular_cache_dropout_p,
-            }
-        )
+        if len(expert_names) > 1:
+            for name in expert_names:
+                message_configs.append(
+                    {
+                        "name": f"tabular_to_{name}",
+                        "layer_path": f"output_modules.eir_auto_gp.{name}_output",
+                        "use_from_cache": ["tabular_output"],
+                        "projection_type": "mlp_residual",
+                        "cache_fusion_type": "additive",
+                        "cache_dropout_p": tabular_cache_dropout_p,
+                    }
+                )
+        else:
+            message_configs.append(
+                {
+                    "name": "tabular_to_output",
+                    "layer_path": "output_modules.eir_auto_gp.output_identity",
+                    "use_from_cache": ["tabular_output"],
+                    "projection_type": "mlp_residual",
+                    "cache_fusion_type": "additive",
+                    "cache_dropout_p": tabular_cache_dropout_p,
+                }
+            )
 
     return {"message_configs": message_configs}
